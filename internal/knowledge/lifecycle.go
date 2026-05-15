@@ -27,7 +27,10 @@ func (m *LifecycleManager) Transition(ctx context.Context, scopeID model.ScopeID
 	if !model.IsValidTransition(state.State, to) {
 		return fmt.Errorf("%w: %s → %s", model.ErrInvalidTransition, state.State, to)
 	}
-	return m.graph.SetScopeState(ctx, scopeID, to)
+	if err := m.graph.SetScopeState(ctx, scopeID, to); err != nil {
+		return fmt.Errorf("lifecycle transition: %w", err)
+	}
+	return nil
 }
 
 // TransitionIfValid performs a transition only if it is valid, returning

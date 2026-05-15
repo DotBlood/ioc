@@ -113,5 +113,47 @@ Changes:
 Git log:
   059fc77 fix .gitignore
   8f0a101 init
-   (working tree: Phase 0 complete, no feature code committed yet)
+   (working tree: Phase 0 + Phase 1 complete, no feature code committed yet)
+```
+
+---
+
+## 2026-05-15 — Phase 1: Physical Graph + Knowledge Layer
+
+### Scope 1.1: Physical StatefulGraph [✔] (completed in Phase 0 extension)
+
+- `graph/graph.go` — pure physical: `Node(ctx, id)`, `AddNode`, `RemoveNode`, `Edge`, `AddEdge`, `BFS`/`DFS` (bidirectional), `NodesByType`, `Snapshot` (placeholder)
+- `graph/interfaces.go` — `StoreReader` + `StoreWriter` cross-layer contracts
+- 10 tests covering CRUD, BFS/DFS, multi-edge, concurrent reads
+
+### Scope 1.2: Knowledge Runtime Layer [✔]
+
+All six components implemented + tested:
+
+| Component | File | Key Methods | Sub-tests |
+|-----------|------|-------------|-----------|
+| ScopeResolver | `scope.go` | `ResolveScope`, `IsVisibleFrom` | 5 (exact match, parent→child, sibling isolation, unrelated) |
+| RevisionManager | `revision.go` | `ResolveRevision` (latest/pinned/branch-local/ancestor), `ResolveForRetrieval`, `IsActive`, `IsSuperseded` | 5 (latest, pinned, active, superseded, not-superseded) |
+| LifecycleManager | `lifecycle.go` | `Transition`, `TransitionIfValid`, `EnforceInvariants` | 2 (valid transition, invalid, invariants) |
+| LineageTracker | `lineage.go` | `RecordLineage` (cycle detection), `RecordOwnership`, `Provenance` | 3 (lineage, cycle detection, provenance chain, ownership) |
+| ContextAssembler | `assembly.go` | `Plan` (scope-aware), `Assemble` (token-budgeted) | 1 (plan creation) |
+| PolicyEnforcer | `policy.go` | `ShouldArchive`, `DefaultRetrievalScope`, `PrunableRevisions` (placeholder) | 2 (default scope, should-archive) |
+
+18 tests, all passing.
+
+### Bug fixes
+
+- **Cycle detection**: `checkCycle` originally only traversed `EdgesOut` (one direction). Fixed to traverse both `EdgesOut` + `EdgesIn`. Now detects 2-node lineage cycles correctly.
+- **Error comparison**: lifecycle Transition compared with `err == sentinel` but `fmt.Errorf("%w")` wraps the error. Fixed to use `errors.Is`.
+
+### Current state
+
+```
+All packages:       4 (model + graph + knowledge + cmd)
+Total tests:        28 (18 model + 10 graph + 0 cmd)
+Total test suites:  3 packages, all passing
+Build + vet:        clean
+Placeholders:       graph.Snapshot() + policy.PrunableRevisions() → ErrNotImplemented
+Design docs:        7 (PDR, FRD, FSD, PAD, CODE-STYLE, METHODOLOGY, ROADMAP)
+Dev log:            this file
 ```

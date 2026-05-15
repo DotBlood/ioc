@@ -103,6 +103,9 @@ func (t *LineageTracker) checkCycle(ctx context.Context, start, target model.ID)
 			continue
 		}
 		visited[current] = true
+
+		// Traverse lineage edges in BOTH directions.
+		// EdgesOut: source=child → target=parent (forward: child points to parent).
 		edges, err := t.graph.EdgesOut(ctx, current, model.EdgeLineage)
 		if err != nil {
 			return err
@@ -110,6 +113,17 @@ func (t *LineageTracker) checkCycle(ctx context.Context, start, target model.ID)
 		for _, e := range edges {
 			if !visited[e.Target] {
 				stack = append(stack, e.Target)
+			}
+		}
+
+		// EdgesIn: source=child, target=current (reverse: current is parent of child).
+		inEdges, err := t.graph.EdgesIn(ctx, current, model.EdgeLineage)
+		if err != nil {
+			return err
+		}
+		for _, e := range inEdges {
+			if !visited[e.Source] {
+				stack = append(stack, e.Source)
 			}
 		}
 	}
@@ -121,5 +135,6 @@ type LineageStoreReader interface {
 	Node(ctx context.Context, id model.ID) (*model.Artifact, error)
 	Edge(ctx context.Context, id model.EdgeID) (*model.Edge, error)
 	EdgesOut(ctx context.Context, sourceID model.ID, edgeType model.EdgeType) ([]model.Edge, error)
+	EdgesIn(ctx context.Context, targetID model.ID, edgeType model.EdgeType) ([]model.Edge, error)
 	StoreEdge(ctx context.Context, edge *model.Edge) error
 }
