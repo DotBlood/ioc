@@ -208,9 +208,27 @@ Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplement
 - `model/temporal.go` — `MissingIDs []ID`, `Errors []string` added to `HistoricalScope`
 - 7 tests: exact anchor, with diffs, no anchor, MVCC projection, edges by node+type, missing collection, determinism
 
+## Phase 4: Embedding + Retrieval
+
+### Scope 4.1: Embedder Interface [✔]
+- `embedding/embedder.go` — `Embedder` interface, `Batch`, `Vector`, sentinel errors
+  - `Embed(ctx, texts) (*Batch, error)` — core method
+  - `Dims() int` — invariant: MUST remain constant for lifetime
+  - `Model() string` — model identifier
+  - `ErrInferenceFailed`, `ErrInvalidInput`, `InferenceError`
+  - `Vector` contains `Data []float32` + `TokenCount int` (no Text field)
+  - `Batch.CreatedAt` — for cache invalidation semantics
+- `embedding/mock.go` — `MockEmbedder` (deterministic, normalized, dimension-fixed)
+  - splitmix64 PRNG (локальный, без глобального math/rand, без lock contention)
+  - FNV-1a based hash → seed → deterministic vector generation
+  - Normalization to unit length
+  - Empty string → valid embedding (не error)
+  - Default dimension: 384, model: "mock-v1"
+- 10 tests: single text, multiple texts, determinism, normalization, empty input, empty string valid, different texts→different vectors, model name, dims constant, token count
+
 ```
-Packages:       5 (model + graph + knowledge + store + cmd)
-Total tests:    114 (18 model + 35 graph + 45 knowledge + 34 store + 0 cmd)
-Suites:         4, all passing
+Packages:       6 (model + graph + knowledge + store + embedding + cmd)
+Total tests:    124 (18 model + 35 graph + 45 knowledge + 34 store + 10 embedding + 0 cmd)
+Suites:         5, all passing
 Build + vet:    clean
 ```
