@@ -8,8 +8,8 @@ require (
 )
 
 require (
-	github.com/JLugagne/bm25 v1.0.2 // indirect
-	github.com/klauspost/compress v1.18.6 // indirect
-	github.com/tigerwill90/fastcdc v1.2.2 // indirect
+	github.com/JLugagne/bm25 v1.0.2
+	github.com/klauspost/compress v1.18.6
+	github.com/tigerwill90/fastcdc v1.2.2
 	golang.org/x/sys v0.44.0 // indirect
 )
