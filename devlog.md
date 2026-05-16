@@ -149,11 +149,53 @@ All six components implemented + tested:
 ### Current state
 
 ```
-All packages:       4 (model + graph + knowledge + cmd)
-Total tests:        28 (18 model + 10 graph + 0 cmd)
-Total test suites:  3 packages, all passing
+All packages:       5 (model + graph + knowledge + store + cmd)
+Total tests:        42 (18 model + 10 graph + 0 cmd + 14 store)
+Total test suites:  4 packages, all passing
 Build + vet:        clean
 Placeholders:       graph.Snapshot() + policy.PrunableRevisions() → ErrNotImplemented
 Design docs:        7 (PDR, FRD, FSD, PAD, CODE-STYLE, METHODOLOGY, ROADMAP)
 Dev log:            this file
+```
+
+---
+
+## 2026-05-15 — Phase 2: Storage Layer (partial)
+
+### Scope 2.1: DiskStore (bbolt) [✔]
+
+**Deliverable:**
+- `store/disk.go` — bbolt-backed persistent store
+  - 8 buckets: nodes, projections, edges, adj_out, adj_in, anchors, rev_dag, idx_type, meta
+  - SaveNode/LoadNode/DeleteNode — artifact CRUD
+  - SaveProjection/LoadProjection/ListProjectionKeys — projection CRUD
+  - SaveEdge/LoadEdge/LoadEdgesOut/LoadEdgesIn — edge CRUD with adjacency lists
+  - SaveSnapshot/LoadSnapshot — full graph snapshot roundtrip
+  - Serialization via encoding/gob
+- 7 tests: node CRUD, projection CRUD, edge CRUD, snapshot roundtrip, not-found, reopen, multiple projections
+
+### Scope 2.4: EmbeddingStore (mmap-backed, file-backed for now) [✔]
+
+**Deliverable:**
+- `store/embedding.go` — file-backed fixed-size embedding vector store
+  - `OpenEmbeddingStore(path, dims)` — create/open, header with dims check
+  - `Put(vec []float32) (EmbeddingRefID, error)` — append, 1-indexed
+  - `Get(ref EmbeddingRefID) ([]float32, error)` — retrieve by ID
+  - `Len() int` — count of stored vectors
+  - `Sync()` / `Close()` — write buffer to disk
+  - Append-only, fixed-size records (dims*4 bytes each)
+  - In-memory buffer with file sync (mmap planned for future)
+- 7 tests: put/get, multiple puts, out-of-range, wrong dims, dims mismatch, sync roundtrip, different dims
+- **Design note:** EmbeddingStore is an isolated component — no dependency on graph engine, CAS, or revision DAG. The API surface (Put/Get/Len/Close) is stable for future mmap migration.
+
+### Scope 2.2 (CAS) + Scope 2.3 (Artifact/Projection Store) — pending
+
+### Current state
+
+```
+All packages:       5 (model + graph + knowledge + store + cmd)
+Total tests:        42 (18 model + 10 graph + 0 cmd + 14 store)
+Total test suites:  4 packages, all passing
+Build + vet:        clean
+Dependencies:       bbolt, klauspost/compress, ulid
 ```

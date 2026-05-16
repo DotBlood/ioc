@@ -1,0 +1,426 @@
+package store
+
+import (
+	"encoding/binary"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"go.etcd.io/bbolt"
+
+	"github.com/DotBlood/ioc/internal/model"
+)
+
+// DiskStore persists graph state to disk using bbolt (embedded B+tree KV store).
+//
+// Bucket layout:
+//
+//	nodes        | ArtifactID.String() → gob(Artifact)
+//	projections  | ProjectionKey.String() → gob(ArtifactProjection)
+//	edges        | EdgeID.String() → gob(Edge)
+//	adj_out      | SourceID|EdgeType → gob([]AdjEntry)
+//	adj_in       | TargetID|EdgeType → gob([]AdjEntry)
+//	anchors      | AnchorID.String() → gob(Anchor)
+//	rev_dag      | ArtifactID.String() → gob(RevisionDAG)
+//	idx_type     | NodeType → gob([]ID)
+//	meta         | "version" → schema version
+type DiskStore struct {
+	mu   sync.RWMutex
+	db   *bbolt.DB
+	path string
+}
+
+// AdjEntry is a single adjacency list entry.
+type AdjEntry struct {
+	EdgeID   model.EdgeID
+	TargetID model.ID
+	SourceID model.ID
+}
+
+// Anchor is a structural snapshot of a scope.
+type Anchor struct {
+	AnchorID     model.ID
+	ScopeID      model.ScopeID
+	Revision     model.RevisionNumber
+	Timestamp    time.Time
+	ArtifactRefs []model.ID
+	EdgeSnapshot []model.Edge
+}
+
+// RevisionDAG is a serializable revision DAG.
+type RevisionDAG struct {
+	ArtifactID model.ID
+	Edges      []struct {
+		From model.RevisionNumber
+		To   model.RevisionNumber
+	}
+	BranchHeads map[string]model.RevisionNumber
+}
+
+// OpenOrCreate opens an existing bbolt database or creates a new one.
+func OpenOrCreate(path string) (*DiskStore, error) {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("open store: create dir: %w", err)
+	}
+
+	db, err := bbolt.Open(path, 0644, &bbolt.Options{Timeout: 1 * time.Second})
+	if err != nil {
+		return nil, fmt.Errorf("open store: %w", err)
+	}
+
+	s := &DiskStore{db: db, path: path}
+	if err := s.initBuckets(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("open store: init buckets: %w", err)
+	}
+	return s, nil
+}
+
+// Close closes the database.
+func (s *DiskStore) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db.Close()
+}
+
+// Path returns the database file path.
+func (s *DiskStore) Path() string { return s.path }
+
+// initBuckets creates all required buckets if they don't exist.
+func (s *DiskStore) initBuckets() error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		for _, name := range []string{
+			"nodes", "projections", "edges",
+			"adj_out", "adj_in",
+			"anchors", "rev_dag", "idx_type", "meta",
+		} {
+			if _, err := tx.CreateBucketIfNotExists([]byte(name)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// ============================================================
+// Node operations
+// ============================================================
+
+// SaveNode persists a single artifact.
+func (s *DiskStore) SaveNode(n *model.Artifact) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("nodes"))
+		key := []byte(n.ArtifactID.String())
+		val, err := encode(n)
+		if err != nil {
+			return fmt.Errorf("save node: %w", err)
+		}
+		return b.Put(key, val)
+	})
+}
+
+// LoadNode retrieves an artifact by ID.
+func (s *DiskStore) LoadNode(id model.ID) (*model.Artifact, error) {
+	var n model.Artifact
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("nodes"))
+		val := b.Get([]byte(id.String()))
+		if val == nil {
+			return model.ErrNotFound
+		}
+		return decode(val, &n)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &n, nil
+}
+
+// DeleteNode removes an artifact.
+func (s *DiskStore) DeleteNode(id model.ID) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("nodes"))
+		return b.Delete([]byte(id.String()))
+	})
+}
+
+// ============================================================
+// Projection operations
+// ============================================================
+
+// SaveProjection persists a single projection.
+func (s *DiskStore) SaveProjection(p *model.ArtifactProjection) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("projections"))
+		key := []byte(p.ProjectionKey().String())
+		val, err := encode(p)
+		if err != nil {
+			return fmt.Errorf("save projection: %w", err)
+		}
+		return b.Put(key, val)
+	})
+}
+
+// LoadProjection retrieves a projection by key.
+func (s *DiskStore) LoadProjection(key model.ProjectionKey) (*model.ArtifactProjection, error) {
+	var p model.ArtifactProjection
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("projections"))
+		val := b.Get([]byte(key.String()))
+		if val == nil {
+			return model.ErrNotFound
+		}
+		return decode(val, &p)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// ListProjectionKeys returns all projection keys for a given artifact.
+func (s *DiskStore) ListProjectionKeys(artifactID model.ID) ([]model.ProjectionKey, error) {
+	var keys []model.ProjectionKey
+	prefix := []byte(artifactID.String() + ":")
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("projections"))
+		c := b.Cursor()
+		for k, _ := c.Seek(prefix); k != nil && len(k) >= len(prefix); k, _ = c.Next() {
+			if string(k[:len(prefix)]) != string(prefix) {
+				break
+			}
+			keyStr := string(k)
+			// Parse "ArtifactID:RevisionNumber"
+			var rev model.RevisionNumber
+			if _, err := fmt.Sscanf(keyStr, artifactID.String()+":%d", &rev); err != nil {
+				continue
+			}
+			keys = append(keys, model.ProjectionKey{ArtifactID: artifactID, Revision: rev})
+		}
+		return nil
+	})
+	return keys, err
+}
+
+// ============================================================
+// Edge operations
+// ============================================================
+
+// SaveEdge persists a single edge.
+func (s *DiskStore) SaveEdge(e *model.Edge) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("edges"))
+		key := []byte(e.EdgeID.String())
+		val, err := encode(e)
+		if err != nil {
+			return fmt.Errorf("save edge: %w", err)
+		}
+		if err := b.Put(key, val); err != nil {
+			return err
+		}
+
+		// Update adjacency lists.
+		if err := appendAdj(tx, "adj_out", e.Source, e.Type, AdjEntry{
+			EdgeID: e.EdgeID, TargetID: e.Target, SourceID: e.Source,
+		}); err != nil {
+			return err
+		}
+		if err := appendAdj(tx, "adj_in", e.Target, e.Type, AdjEntry{
+			EdgeID: e.EdgeID, TargetID: e.Target, SourceID: e.Source,
+		}); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+// LoadEdge retrieves an edge by ID.
+func (s *DiskStore) LoadEdge(id model.EdgeID) (*model.Edge, error) {
+	var e model.Edge
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("edges"))
+		val := b.Get([]byte(id.String()))
+		if val == nil {
+			return model.ErrNotFound
+		}
+		return decode(val, &e)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+// LoadEdgesOut returns all outgoing edges of a given type from a node.
+func (s *DiskStore) LoadEdgesOut(sourceID model.ID, edgeType model.EdgeType) ([]model.Edge, error) {
+	return s.loadAdjEdges("adj_out", sourceID, edgeType)
+}
+
+// LoadEdgesIn returns all incoming edges of a given type to a node.
+func (s *DiskStore) LoadEdgesIn(targetID model.ID, edgeType model.EdgeType) ([]model.Edge, error) {
+	return s.loadAdjEdges("adj_in", targetID, edgeType)
+}
+
+func (s *DiskStore) loadAdjEdges(bucket string, id model.ID, edgeType model.EdgeType) ([]model.Edge, error) {
+	key := adjKey(id, edgeType)
+
+	var entries []AdjEntry
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(bucket))
+		val := b.Get(key)
+		if val == nil {
+			return nil
+		}
+		return decode(val, &entries)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+
+	edges := make([]model.Edge, 0, len(entries))
+	for _, entry := range entries {
+		e, err := s.LoadEdge(entry.EdgeID)
+		if err != nil {
+			continue // skip dangling
+		}
+		edges = append(edges, *e)
+	}
+	return edges, nil
+}
+
+// ============================================================
+// Snapshot operations
+// ============================================================
+
+// SaveSnapshot persists the full graph state to disk.
+// Reads all RAM data and writes it to bbolt.
+func (s *DiskStore) SaveSnapshot(g GraphSnapshot) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		// Nodes
+		nb := tx.Bucket([]byte("nodes"))
+		for _, n := range g.Nodes {
+			val, err := encode(n)
+			if err != nil {
+				return err
+			}
+			if err := nb.Put([]byte(n.ArtifactID.String()), val); err != nil {
+				return err
+			}
+		}
+		// Edges
+		eb := tx.Bucket([]byte("edges"))
+		for _, e := range g.Edges {
+			val, err := encode(e)
+			if err != nil {
+				return err
+			}
+			if err := eb.Put([]byte(e.EdgeID.String()), val); err != nil {
+				return err
+			}
+		}
+		// Projections
+		pb := tx.Bucket([]byte("projections"))
+		for _, p := range g.Projections {
+			val, err := encode(p)
+			if err != nil {
+				return err
+			}
+			if err := pb.Put([]byte(p.ProjectionKey().String()), val); err != nil {
+				return err
+			}
+		}
+		// Meta
+		mb := tx.Bucket([]byte("meta"))
+		if err := mb.Put([]byte("version"), []byte("1")); err != nil {
+			return err
+		}
+		ts := make([]byte, 8)
+		binary.BigEndian.PutUint64(ts, uint64(time.Now().Unix()))
+		if err := mb.Put([]byte("saved_at"), ts); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+// GraphSnapshot is a serializable snapshot of graph state.
+type GraphSnapshot struct {
+	Nodes       []*model.Artifact
+	Edges       []*model.Edge
+	Projections []*model.ArtifactProjection
+}
+
+// LoadSnapshot reads all graph state from disk.
+func (s *DiskStore) LoadSnapshot() (*GraphSnapshot, error) {
+	gs := &GraphSnapshot{}
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		// Nodes
+		nb := tx.Bucket([]byte("nodes"))
+		c := nb.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var n model.Artifact
+			if err := decode(v, &n); err != nil {
+				return err
+			}
+			gs.Nodes = append(gs.Nodes, &n)
+		}
+
+		// Edges
+		eb := tx.Bucket([]byte("edges"))
+		c2 := eb.Cursor()
+		for k, v := c2.First(); k != nil; k, v = c2.Next() {
+			var e model.Edge
+			if err := decode(v, &e); err != nil {
+				return err
+			}
+			gs.Edges = append(gs.Edges, &e)
+		}
+
+		// Projections
+		pb := tx.Bucket([]byte("projections"))
+		c3 := pb.Cursor()
+		for k, v := c3.First(); k != nil; k, v = c3.Next() {
+			var p model.ArtifactProjection
+			if err := decode(v, &p); err != nil {
+				return err
+			}
+			gs.Projections = append(gs.Projections, &p)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return gs, nil
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+
+func adjKey(id model.ID, edgeType model.EdgeType) []byte {
+	return []byte(fmt.Sprintf("%s:%d", id.String(), edgeType))
+}
+
+func appendAdj(tx *bbolt.Tx, bucket string, id model.ID, edgeType model.EdgeType, entry AdjEntry) error {
+	b := tx.Bucket([]byte(bucket))
+	key := adjKey(id, edgeType)
+	var entries []AdjEntry
+	if val := b.Get(key); val != nil {
+		if err := decode(val, &entries); err != nil {
+			return err
+		}
+	}
+	entries = append(entries, entry)
+	val, err := encode(entries)
+	if err != nil {
+		return err
+	}
+	return b.Put(key, val)
+}
