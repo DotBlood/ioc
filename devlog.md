@@ -569,3 +569,43 @@ Dependencies:   bbolt, klauspost/compress, fastcdc (MIT), ulid, JLugagne/bm25 (M
 Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplemented
 TODO(v0.2):     incremental BM25, metadata scoring, scope state reverse index, CLI integration tests
 ```
+
+---
+
+## Phase 6: Testing + Hardening
+
+### Scope 6.2: Integration Tests [✔]
+
+**Package:** `pkg/api/integration_test.go` (new)
+
+**5 new tests, 218 lines, all passing:**
+
+| Test | Description | Lines |
+|------|-------------|-------|
+| `TestE2E_FullWorkflow` | create scope → 3× add artifact → query → archive → verify `ListScopes`/`ScopeState`/CAS integrity → restore → query identity preservation | ~90 |
+| `TestE2E_Branching` | revision lineage via `DiskStore.SaveProjection`, 3 independent summaries, `LatestProjection` returns highest, convention documented as caller obligation | ~50 |
+| `TestE2E_TimeTravel` | archive → add → archive (diff) → `TimeMachine.ScopeStateAt` at 3 timestamps: `t_mid` (only A), `t_after` (A+B), `t_before` (`ErrNoHistoricalState`). Paced timestamps with `Sleep(10ms)` | ~100 |
+| `TestE2E_Dangling` | delete node+projection directly from store → query returns `err==nil`, exactly 1 surviving result, corrupt entries absent | ~55 |
+| `TestE2E_ConcurrentReads` | 5 readers × 20 iterations concurrent, 10 sequential writes interleaved, `require.Eventually` closing timing window | ~70 |
+
+**Adapters:** `timeMachineAdapter` — bridges `store.DiskStore` → `knowledge.TimeAnchorStore` / `TimeArtifactStore` / `TimeEdgeStore` (3 method name/signature mismatches).
+
+**Key decisions:**
+- Tests use real bbolt/CAS storage (no mocks)
+- Branching tested below public API (`rt.disk.SaveProjection`) — correct abstraction level
+- TimeTravel uses archive pipeline without `RestoreScope` between anchors — clean temporal reconstruction testing
+- Deterministic content (`"alpha retrieval text"`, `"beta...`", `"gamma..."`) for reproducibility
+- Post-restore identity check via `containsID(results, originalID)` — guards against accidental re-ingestion
+- Concurrent reads with sequential writes — matches v0.1 bbolt concurrency model
+
+### Project state update
+
+```
+Packages:       10 (model + graph + knowledge + store + embedding + retrieval + session + pipeline + cmd + api)
+Total tests:    218 (18 model + 35 graph + 52 knowledge + 37 store + 21 embedding + 22 retrieval + 5 session + 7 pipeline + 0 cmd + 21 api)
+Suites:         9, all passing
+Build + vet:    clean
+Dependencies:   bbolt, klauspost/compress, fastcdc (MIT), ulid, JLugagne/bm25 (MIT), cobra, testify
+Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplemented
+TODO(v0.2):     incremental BM25, metadata scoring, scope state reverse index, CLI integration tests
+```

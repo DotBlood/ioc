@@ -239,6 +239,11 @@ func (g *StatefulGraph) AddEdge(_ context.Context, e *model.Edge) error {
 	return nil
 }
 
+// StoreEdge is a thin wrapper over AddEdge, matching the knowledge.LineageStoreReader interface.
+func (g *StatefulGraph) StoreEdge(ctx context.Context, edge *model.Edge) error {
+	return g.AddEdge(ctx, edge)
+}
+
 // EdgesOut returns all outgoing edges of a given type from a node.
 func (g *StatefulGraph) EdgesOut(_ context.Context, sourceID model.ID, edgeType model.EdgeType) ([]model.Edge, error) {
 	g.mu.RLock()
@@ -380,6 +385,75 @@ func (g *StatefulGraph) PropertyIndexKeys(prop string) []string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	return g.runtime.PropertyIdx.keys(prop)
+}
+
+// Validate checks structural integrity of the graph.
+// Returns nil or first violation encountered.
+//
+// Checks:
+//   - No nil entries in nodes or edges maps
+//   - Node/edge keys match their embedded ID
+//   - Every edge Source and Target resolves to an existing node
+//   - adjOut and adjIn are consistent (bidirectional agreement)
+//   - Bloom filter has no false negatives for existing nodes
+func (g *StatefulGraph) Validate() error {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	for id, n := range g.nodes {
+		if n == nil {
+			return fmt.Errorf("graph: nil entry for node %s", id)
+		}
+		if n.ArtifactID != id {
+			return fmt.Errorf("graph: node %s has mismatched ArtifactID %s", id, n.ArtifactID)
+		}
+	}
+	for id, e := range g.edges {
+		if e == nil {
+			return fmt.Errorf("graph: nil entry for edge %s", id)
+		}
+		if e.EdgeID != id {
+			return fmt.Errorf("graph: edge %s has mismatched EdgeID %s", id, e.EdgeID)
+		}
+		if _, ok := g.nodes[e.Source]; !ok {
+			return fmt.Errorf("graph: edge %s source %s not found", id, e.Source)
+		}
+		if _, ok := g.nodes[e.Target]; !ok {
+			return fmt.Errorf("graph: edge %s target %s not found", id, e.Target)
+		}
+	}
+	for src, em := range g.adjOut {
+		for et, targets := range em {
+			for _, tgt := range targets {
+				inMap, ok := g.adjIn[tgt]
+				if !ok {
+					return fmt.Errorf("graph: adjOut[%s][%v] → %s has no adjIn entry", src, et, tgt)
+				}
+				inList, ok := inMap[et]
+				if !ok {
+					return fmt.Errorf("graph: adjIn[%s] missing type %v", tgt, et)
+				}
+				found := false
+				for _, entry := range inList {
+					if entry == src {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return fmt.Errorf("graph: adjIn[%s][%v] missing source %s", tgt, et, src)
+				}
+			}
+		}
+	}
+	if g.runtime.Bloom != nil {
+		for id := range g.nodes {
+			if !g.runtime.Bloom.Has(id) {
+				return fmt.Errorf("graph: bloom false negative for node %s", id)
+			}
+		}
+	}
+	return nil
 }
 
 // ============================================================
