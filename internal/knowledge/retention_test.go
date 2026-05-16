@@ -32,7 +32,9 @@ func (m *retentionMocks) addProj(artifactID model.ID, rev model.RevisionNumber, 
 	}
 }
 
-func (m *retentionMocks) ListAllArtifactIDs(_ context.Context) ([]model.ID, error)            { return m.artifacts, nil }
+func (m *retentionMocks) ListAllArtifactIDs(_ context.Context) ([]model.ID, error) {
+	return m.artifacts, nil
+}
 func (m *retentionMocks) ListProjections(_ context.Context, id model.ID) ([]model.ProjectionKey, error) {
 	// Return a copy to prevent aliasing with the stored slice.
 	orig := m.projections[id]
@@ -71,11 +73,13 @@ func (m *retentionMocks) DeleteProjection(key model.ProjectionKey) error {
 	}
 	return nil
 }
-func (m *retentionMocks) ListEdgeRevisions(_ context.Context) ([]model.EdgeRevisionKey, error) { return nil, nil }
+func (m *retentionMocks) ListEdgeRevisions(_ context.Context) ([]model.EdgeRevisionKey, error) {
+	return nil, nil
+}
 func (m *retentionMocks) LoadEdgeRevision(_ context.Context, _ model.EdgeRevisionKey) (*model.Edge, error) {
 	return nil, model.ErrNotFound
 }
-func (m *retentionMocks) DeleteEdgeRevision(_ model.EdgeRevisionKey) error { return nil }
+func (m *retentionMocks) DeleteEdgeRevision(_ model.EdgeRevisionKey) error  { return nil }
 func (m *retentionMocks) ListAll(_ context.Context) ([]model.Anchor, error) { return m.anchors, nil }
 
 func newPolicy(m *retentionMocks, maxVer int, ttl time.Duration) *RetentionPolicy {
@@ -187,12 +191,12 @@ func TestRetention_TTL_WithinWindow(t *testing.T) {
 	m := newRetentionMocks()
 	artID := model.NewID()
 	// 4 projections, MaxVersions=1, keep 1.
-	// Rev 1: recently expired. Rev 2,3: long expired but also recently... 
+	// Rev 1: recently expired. Rev 2,3: long expired but also recently...
 	// Actually let's test: rev 1 is within TTL, rev 2,3 are past TTL.
 	m.addProj(artID, 1, pastTime(10*time.Minute)) // within 1h TTL
-	m.addProj(artID, 2, pastTime(5*time.Hour))   // past 1h TTL
-	m.addProj(artID, 3, pastTime(5*time.Hour))   // past 1h TTL
-	m.addProj(artID, 4, pastTime(5*time.Hour))   // latest, but shouldn't affect pruning
+	m.addProj(artID, 2, pastTime(5*time.Hour))    // past 1h TTL
+	m.addProj(artID, 3, pastTime(5*time.Hour))    // past 1h TTL
+	m.addProj(artID, 4, pastTime(5*time.Hour))    // latest, but shouldn't affect pruning
 
 	p := newPolicy(m, 1, time.Hour)
 	pruned, _ := p.PruneProjections(context.Background(), artID)

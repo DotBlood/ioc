@@ -62,14 +62,14 @@ func (c *AnchorCreator) createAnchor(ctx context.Context, scopeID model.ScopeID,
 	}
 
 	anchor := &model.Anchor{
-		AnchorID:          model.AnchorID(model.NewID()),
-		ScopeID:           scopeID,
-		CreatedAt:         time.Now(),
-		ProjectionRefs:    projectionRefs,
-		EdgeRefs:          edgeIDs,
-		ArtifactCount:     len(artifactIDs),
-		EdgeCount:         len(edgeIDs),
-		ProjectionCount:   len(projectionRefs),
+		AnchorID:        model.AnchorID(model.NewID()),
+		ScopeID:         scopeID,
+		CreatedAt:       time.Now(),
+		ProjectionRefs:  projectionRefs,
+		EdgeRefs:        edgeIDs,
+		ArtifactCount:   len(artifactIDs),
+		EdgeCount:       len(edgeIDs),
+		ProjectionCount: len(projectionRefs),
 	}
 
 	if isFull {

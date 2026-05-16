@@ -147,11 +147,11 @@ func TestScopeStateAt_ExactFullAnchor(t *testing.T) {
 	artID := model.NewID()
 	m.addArtifact(artID)
 	m.addAnchor(model.Anchor{
-		AnchorID:    model.AnchorID(model.NewID()),
-		Kind:        model.AnchorFull,
-		CreatedAt:   now,
+		AnchorID:     model.AnchorID(model.NewID()),
+		Kind:         model.AnchorFull,
+		CreatedAt:    now,
 		ArtifactRefs: []model.ID{artID},
-		EdgeRefs:    nil,
+		EdgeRefs:     nil,
 	})
 
 	scope, err := tm.ScopeStateAt(context.Background(), "test", now)

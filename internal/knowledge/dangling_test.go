@@ -9,9 +9,9 @@ import (
 
 // danglingMocks implements both DanglingGraphReader and StructuralResolver.
 type danglingMocks struct {
-	exists     map[model.ID]bool
+	exists        map[model.ID]bool
 	scopeChildren map[model.ScopeID][]model.ID
-	parents    map[model.ID]model.ID // child → parent
+	parents       map[model.ID]model.ID // child → parent
 }
 
 func newDanglingMocks() *danglingMocks {
@@ -177,5 +177,3 @@ func TestOrphanScanner_FindsOrphans(t *testing.T) {
 		t.Errorf("orphan ID mismatch")
 	}
 }
-
-

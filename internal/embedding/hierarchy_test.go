@@ -10,8 +10,8 @@ import (
 
 // mockScopeReader implements ScopeHierarchy for testing.
 type mockScopeReader struct {
-	children    map[model.ScopeID][]model.ScopeID
-	artifacts   map[model.ScopeID][]model.ID
+	children  map[model.ScopeID][]model.ScopeID
+	artifacts map[model.ScopeID][]model.ID
 }
 
 func newMockScopeReader() *mockScopeReader {
@@ -142,7 +142,7 @@ func TestHierarchy_Determinism(t *testing.T) {
 
 	for _, art := range []model.ID{art1, art2} {
 		proj.projections[art] = &model.ArtifactProjection{
-			ArtifactID:   art,
+			ArtifactID: art,
 			EmbeddingRef: map[model.ID]model.EmbeddingRefID{
 				art1: 1,
 				art2: 2,

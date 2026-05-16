@@ -17,9 +17,9 @@ import (
 // Query() and Trace() over identical inputs MUST return identical SearchResult ordering.
 //
 // Stage order is deterministic:
-//   1. vector_search — query embedding + vector index search
-//   2. text_search   — BM25 keyword search
-//   3. fusion        — RRF merge of vector + text results
+//  1. vector_search — query embedding + vector index search
+//  2. text_search   — BM25 keyword search
+//  3. fusion        — RRF merge of vector + text results
 func (e *Engine) Trace(ctx context.Context, query string, opts QueryOptions) ([]SearchResult, *model.RetrievalTrace, error) {
 	if strings.TrimSpace(query) == "" {
 		return nil, nil, embedding.ErrInvalidInput

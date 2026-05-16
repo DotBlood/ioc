@@ -313,9 +313,9 @@ func TestResolveFull_AlreadyFull(t *testing.T) {
 	p := m.pipeline()
 
 	full := &model.Anchor{
-		AnchorID:      model.AnchorID(model.NewID()),
-		Kind:          model.AnchorFull,
-		ArtifactRefs:  []model.ID{model.NewID(), model.NewID()},
+		AnchorID:     model.AnchorID(model.NewID()),
+		Kind:         model.AnchorFull,
+		ArtifactRefs: []model.ID{model.NewID(), model.NewID()},
 	}
 
 	resolved := p.resolveFull(context.Background(), full)

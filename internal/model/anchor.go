@@ -18,8 +18,8 @@ const (
 // Invariants:
 //   - Kind == Full:  ArtifactRefs + EdgeRefs + ProjectionRefs = COMPLETE snapshot
 //   - Kind == Diff:  ArtifactRefs + EdgeRefs = added only,
-//                    RemovedArtifactIDs + RemovedEdgeIDs = removed only,
-//                    ProjectionRefs = changed only
+//     RemovedArtifactIDs + RemovedEdgeIDs = removed only,
+//     ProjectionRefs = changed only
 //   - Kind == Diff  => ParentAnchor != zero (must reference a previous anchor)
 //   - Kind == Full  => ParentAnchor == zero
 type Anchor struct {
@@ -46,7 +46,7 @@ type Anchor struct {
 	RemovedArtifactIDs []ID
 	RemovedEdgeIDs     []EdgeID
 
-		// TODO(v0.2): Replace EdgeRefs []EdgeID with []EdgeRevisionKey
+	// TODO(v0.2): Replace EdgeRefs []EdgeID with []EdgeRevisionKey
 	// for revision-level protection granularity in retention.
 	// v0.1 conservatively protects all revisions of any referenced edge.
 

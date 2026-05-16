@@ -20,7 +20,7 @@ jobs:
         with:
           version: latest
 
-  test:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,14 +28,4 @@ jobs:
         with:
           go-version: '1.26'
           cache: true
-      - run: go test -race -count=1 ./...
-
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
-          cache: true
-      - run: go build ./cmd/iocctl
+      - run: make ci

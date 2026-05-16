@@ -7,11 +7,11 @@ type EdgeType uint8
 
 const (
 	// System edges (immutable, DAG, cycles forbidden).
-	EdgeLineage     EdgeType = 1
-	EdgeOwnership   EdgeType = 2
+	EdgeLineage   EdgeType = 1
+	EdgeOwnership EdgeType = 2
 
 	// Retrieval edges (mutable revisions, cycles allowed).
-	EdgeRetrieval   EdgeType = 3
+	EdgeRetrieval EdgeType = 3
 
 	// Knowledge edges (mutable revisions, explicit semantics).
 	EdgeReference   EdgeType = 4
@@ -20,7 +20,7 @@ const (
 	EdgeRelatedTo   EdgeType = 7
 
 	// Sequence edges (immutable, DAG).
-	EdgeTemporal    EdgeType = 8
+	EdgeTemporal EdgeType = 8
 )
 
 func (t EdgeType) String() string {

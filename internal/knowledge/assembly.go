@@ -15,10 +15,10 @@ import (
 // focuses on: where to look, what to include, how to order, and
 // what to filter out based on scope/branch/lifecycle semantics.
 type ContextAssembler struct {
-	scope    *ScopeResolver
-	revision *RevisionManager
+	scope     *ScopeResolver
+	revision  *RevisionManager
 	lifecycle *LifecycleManager
-	reader   ContextStoreReader
+	reader    ContextStoreReader
 }
 
 // NewContextAssembler creates a new context assembler.
@@ -29,16 +29,16 @@ func NewContextAssembler(
 	reader ContextStoreReader,
 ) *ContextAssembler {
 	return &ContextAssembler{
-		scope:    scope,
-		revision: revision,
+		scope:     scope,
+		revision:  revision,
 		lifecycle: lifecycle,
-		reader:   reader,
+		reader:    reader,
 	}
 }
 
 // AssemblyPlan describes where and how to search for context.
 type AssemblyPlan struct {
-	PrimaryScope   model.ScopeID   // the main scope to search
+	PrimaryScope    model.ScopeID   // the main scope to search
 	SecondaryScopes []model.ScopeID // parent scopes (for broader context)
 	InheritFrom     []model.ScopeID // worktree-level conclusions
 	MaxDepth        int
@@ -54,22 +54,22 @@ type TimeWindow struct {
 
 // AssemblyResult is the assembled context ready for LLM consumption.
 type AssemblyResult struct {
-	PrimaryBlocks  []ContextBlock
+	PrimaryBlocks   []ContextBlock
 	SecondaryBlocks []ContextBlock
-	SummaryBlocks  []ContextBlock
-	TokenCount     int
-	AssembledAt    time.Time
+	SummaryBlocks   []ContextBlock
+	TokenCount      int
+	AssembledAt     time.Time
 }
 
 // ContextBlock is a single unit of context for the LLM.
 type ContextBlock struct {
-	SourceID    model.ID
-	Scope       model.ScopeID
-	Summary     string
-	RawContent  string
-	TokenCount  int
-	Priority    float64
-	BlockType   BlockType
+	SourceID   model.ID
+	Scope      model.ScopeID
+	Summary    string
+	RawContent string
+	TokenCount int
+	Priority   float64
+	BlockType  BlockType
 }
 
 // BlockType categorises context blocks.
@@ -85,7 +85,7 @@ const (
 // Plan creates a search plan from a query and active scope.
 func (a *ContextAssembler) Plan(ctx context.Context, query string, activeScope model.ScopeID, opts model.RetrievalOpts) (*AssemblyPlan, error) {
 	plan := &AssemblyPlan{
-		PrimaryScope:   activeScope,
+		PrimaryScope:    activeScope,
 		SecondaryScopes: nil,
 		MaxDepth:        opts.ScopeFilter.MaxDepth,
 		TokenBudget:     opts.TokenBudget,

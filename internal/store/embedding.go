@@ -21,10 +21,10 @@ type EmbeddingStore struct {
 	mu      sync.RWMutex
 	path    string
 	dims    int
-	recSize int       // dims * 4
+	recSize int // dims * 4
 	count   int
-	data    []byte    // in-memory buffer: header + records
-	dirty   bool      // unsynchronized writes
+	data    []byte // in-memory buffer: header + records
+	dirty   bool   // unsynchronized writes
 }
 
 const embHeaderSize = 16 // 8 bytes count + 4 bytes dims + 4 reserved

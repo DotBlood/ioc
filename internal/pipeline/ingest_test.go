@@ -298,5 +298,3 @@ func TestPipeline_EmptyContent(t *testing.T) {
 		t.Error("empty projection missing ReadinessIndexed")
 	}
 }
-
-

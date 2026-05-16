@@ -276,5 +276,3 @@ func cloneAnchor(a *model.Anchor) *model.Anchor {
 	c.ProjectionRefs = append([]model.ProjectionKey(nil), a.ProjectionRefs...)
 	return &c
 }
-
-

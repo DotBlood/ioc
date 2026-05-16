@@ -5,15 +5,15 @@ import "time"
 // ArtifactProjection contains mutable metadata for an Artifact.
 // Each mutation creates a new revision.
 type ArtifactProjection struct {
-	ArtifactID   ID              // FK → Artifact.ArtifactID
-	Revision     RevisionNumber  // monotonic per ArtifactID
+	ArtifactID   ID             // FK → Artifact.ArtifactID
+	Revision     RevisionNumber // monotonic per ArtifactID
 	Summary      string
-	EmbeddingRef EmbeddingRefID  // FK → EmbeddingStore (zero = not computed)
+	EmbeddingRef EmbeddingRefID // FK → EmbeddingStore (zero = not computed)
 	Keywords     []string
-	ModelVersion string          // embedding model name + version
-	Readiness    Readiness       // current readiness level
+	ModelVersion string    // embedding model name + version
+	Readiness    Readiness // current readiness level
 	ValidFrom    time.Time
-	ValidTo      *time.Time      // nil = currently valid
+	ValidTo      *time.Time // nil = currently valid
 	GeneratedAt  time.Time
 }
 

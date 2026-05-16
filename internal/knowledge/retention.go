@@ -13,12 +13,13 @@ import (
 // RetentionConfig controls how historical data is pruned.
 //
 // MaxVersions semantics:
-//   0 = keep only the latest revision
-//   N = keep the latest N revisions
+//
+//	0 = keep only the latest revision
+//	N = keep the latest N revisions
 type RetentionConfig struct {
-	MaxVersions    int           // max projections per artifact (default 100)
-	RetentionTTL   time.Duration // keep revisions that became invalid within this window (default 90d)
-	KeepAnchors    bool          // never delete anchors (default true)
+	MaxVersions  int           // max projections per artifact (default 100)
+	RetentionTTL time.Duration // keep revisions that became invalid within this window (default 90d)
+	KeepAnchors  bool          // never delete anchors (default true)
 }
 
 // DefaultRetentionConfig returns sensible defaults for v0.1.
@@ -54,7 +55,8 @@ type RetentionResult struct {
 //
 // TODO(v0.2): switch Anchor.EdgeRefs to []EdgeRevisionKey.
 // TODO(v0.2): Build reverse revision reachability index:
-//   ProjectionKey -> []AnchorID
+//
+//	ProjectionKey -> []AnchorID
 type RetentionPolicy struct {
 	config        RetentionConfig
 	artifactStore RetentionArtifactStore

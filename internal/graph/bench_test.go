@@ -22,7 +22,7 @@ func BenchmarkGraphTraversal_100KNodes(b *testing.B) {
 		ctx := context.Background()
 		count := 100000
 
-			g := NewStatefulGraph()
+		g := NewStatefulGraph()
 		nodes := make([]model.ID, count)
 		for i := range count {
 			id := model.NewID()
@@ -64,7 +64,7 @@ func BenchmarkGraphTraversal_100KNodes(b *testing.B) {
 		ctx := context.Background()
 		count := 100000
 
-			g := NewStatefulGraph()
+		g := NewStatefulGraph()
 		root := model.NewID()
 		err := g.AddNode(ctx, &model.Artifact{ArtifactID: root, NodeType: model.NodeTypeArtifact})
 		if err != nil {
@@ -114,7 +114,7 @@ func BenchmarkGraphTraversal_DeepDepth(b *testing.B) {
 	b.Run(fmt.Sprintf("DFS/Unlimited_%d", n), func(b *testing.B) {
 		ctx := context.Background()
 
-			g := NewStatefulGraph()
+		g := NewStatefulGraph()
 		nodes := make([]model.ID, n)
 		for i := range n {
 			id := model.NewID()
@@ -156,7 +156,7 @@ func BenchmarkGraphTraversal_DeepDepth(b *testing.B) {
 	b.Run(fmt.Sprintf("DFS/Depth100_%d", n), func(b *testing.B) {
 		ctx := context.Background()
 
-			g := NewStatefulGraph()
+		g := NewStatefulGraph()
 		nodes := make([]model.ID, n)
 		for i := range n {
 			id := model.NewID()
@@ -197,7 +197,7 @@ func BenchmarkGraphTraversal_DeepDepth(b *testing.B) {
 	b.Run(fmt.Sprintf("BFS/Unlimited_%d", n), func(b *testing.B) {
 		ctx := context.Background()
 
-			g := NewStatefulGraph()
+		g := NewStatefulGraph()
 		nodes := make([]model.ID, n)
 		for i := range n {
 			id := model.NewID()

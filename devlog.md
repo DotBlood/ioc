@@ -609,3 +609,103 @@ Dependencies:   bbolt, klauspost/compress, fastcdc (MIT), ulid, JLugagne/bm25 (M
 Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplemented
 TODO(v0.2):     incremental BM25, metadata scoring, scope state reverse index, CLI integration tests
 ```
+
+---
+
+### Scope 6.3: Performance Benchmarks [✔]
+
+**4 new files, ~230 lines, all passing:**
+
+| File | Lines | Benchmarks |
+|------|-------|------------|
+| `internal/graph/bench_test.go` | 233 | BFS Chain/Star 100K, DFS Unlimited/Depth100 10K, BFS 10K |
+| `internal/embedding/bench_test.go` | 28 | MockEmbedder 100 texts |
+| `internal/retrieval/bench_test.go` | 108 | Coarse 10K×384, Full/Full_NoEmbed/OnlyVector 1K |
+| `internal/store/bench_test.go` | 97 | CAS Store 1MB/1KB, CAS Open 1MB |
+
+**Key results (GOMAXPROCS=1, 5 iter median):**
+
+| Benchmark | Latency | Allocations |
+|-----------|---------|-------------|
+| BFS Chain 100K | 57ms | 16.9MB, 100K allocs |
+| BFS Star 100K | 32ms | 22.6MB, 585 allocs |
+| DFS Unlimited 10K | 3.1ms | 1.3MB, 98 allocs |
+| DFS Depth100 10K | 25µs | 8.5KB, 17 allocs |
+| MockEmbedder 100 texts | 184µs | 157KB, 102 allocs |
+| BruteForce 10K×384d | 5.3µs | 1.6KB, 30 allocs |
+| Full pipeline 1K | 605µs | 68KB, 462 allocs |
+| Full_NoEmbed 1K | 596µs | 66KB, 458 allocs |
+| OnlyVector 1K | 333µs | 6.8KB, 112 allocs |
+| CAS Store 1MB | 1.0ms, ~1GB/s | 2.2MB, 31 allocs |
+| CAS Store 1KB | 24µs, ~42MB/s | 3KB, 11 allocs |
+| CAS Open 1MB | 1.0ms, ~1GB/s | 1.4MB, 32 allocs |
+
+**Key conventions:**
+- No `require.*` in hot path — only `b.Fatal`/`b.Fatalf` to avoid testify overhead in measurement
+- Deterministic RNG per benchmark (`rand.New(rand.NewPCG(1, 2))`) — no shared global state across sub-benchmarks
+- Semi-compressible CAS payload (4 cyclic paragraphs) — realistic compression ratio
+- `io.Copy(io.Discard)` for CAS Open — zero-allocation read path
+- Retrieval decomposition via Engine (`Full`) vs direct index+text+fusion (`Full_NoEmbed`) vs vector only (`OnlyVector`)
+- BFS 100K ~45% slower under multi-core (memory contention) — single-core baseline is canonical
+
+**Report filed at:** `docs/benchmarks/v0.1.md`
+
+---
+
+### Scope 6.4: Documentation [✔]
+
+**5 deliverables, all completed:**
+
+| Item | Description |
+|------|-------------|
+| `README.md` | Quick start, architecture overview, CLI reference table, library usage snippet, development guide, known limitations section |
+| `pkg/api/doc.go` | GoDoc package comment for the public API |
+| `examples/quickstart.sh` + `quickstart.ps1` | Full roundtrip: init → create → add → query → archive → list → restore → verify |
+| Docs updated | `FSD.md` §11 (`RuntimeState` → `SessionState`), `PAD.md` (package statuses), `ROADMAP.md` (Phase 6 [✔]), `devlog.md` (this entry) |
+| Verified clean | `PDR.md`, `FRD.md`, `CODE-STYLE.md`, `METHODOLOGY.md` — no stale content |
+
+**Doc fixes:**
+- `FSD.md` Section 11: struct name `RuntimeState` → `SessionState` to match `session/state.go`
+- `PAD.md`: `pipeline/`, `runtime/`, `api/` package statuses updated from "pending" to [✔]
+- `ROADMAP.md`: Scopes 6.1-6.4 marked [✔], P6 summary row [✅], totals updated
+
+### Project state update
+
+```
+Packages:       10 (model + graph + knowledge + store + embedding + retrieval + session + pipeline + cmd + api)
+Total tests:    218 (18 model + 35 graph + 52 knowledge + 37 store + 21 embedding + 22 retrieval + 5 session + 7 pipeline + 0 cmd + 21 api)
+Benchmark files: 4 (graph + embedding + retrieval + store)
+Doc files:      14 (README + PDR + FRD + FSD + PAD + CODE-STYLE + METHODOLOGY + ROADMAP + Phase5 + Phase6 + devlog + benchmarks + AGENTS + LICENSE)
+Suites:         9, all passing
+Build + vet:    clean
+Dependencies:   bbolt, klauspost/compress, fastcdc (MIT), ulid, JLugagne/bm25 (MIT), cobra, testify
+Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplemented
+TODO(v0.2):     incremental BM25, metadata scoring, scope state reverse index, CLI integration tests
+```
+
+### Makefile overhaul
+
+Complete rewrite — 123 lines, 22 targets, sectioned with `##` headers:
+
+| Category | Targets |
+|----------|---------|
+| Combined | `all`, `dev`, `ci` |
+| Build | `build`, `build-all`, `build-linux`, `build-darwin`, `build-windows` |
+| Test | `test`, `test-race`, `test-short`, `test-coverage` |
+| Benchmark | `bench`, `bench-short` |
+| Quality | `lint`, `vet`, `fmt`, `tidy` |
+| Release | `release` (build-all + SHA256SUMS) |
+| Utility | `install`, `clean`, `help` |
+
+**Key changes:**
+- Removed `win`/`linux` dummy targets — replaced with `$(MAKE)` recursion + `PLATFORMS` filter
+- `test` without `-race` by default (works everywhere); `test-race` for CI with `RACE_PKGS := ./internal/... ./pkg/...`
+- `bench` (`GOMAXPROCS=1`, 5 iter) + `bench-short` (1 iter) — не надо помнить флаги
+- `build-all` — shell loop по `PLATFORMS` (6 платформ), layout `dist/iocctl-{os}-{arch}{.exe}`
+- `release` — build-all + SHA256 checksums
+- `help` — auto-generated from `##` comments via `grep`+`sed`+`awk`
+- `-count=1` во всех test/bench targets
+- Version injection via `git describe` → `-X main.version`
+- `$(SHA256)` — auto-detects `sha256sum` / `shasum`
+- `cd . &&` prefix on `mkdir`/`rm` recipes — forces shell mode on Windows (GNU Make bypass)
+```

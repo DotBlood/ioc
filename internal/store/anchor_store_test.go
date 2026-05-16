@@ -13,11 +13,11 @@ func TestAnchorStore_CreateLoad(t *testing.T) {
 	ctx := context.Background()
 
 	anchor := &model.Anchor{
-		AnchorID: model.AnchorID(model.NewID()),
-		Kind:     model.AnchorFull,
-		ScopeID:  "test:scope",
-		Revision: 1,
-		ArtifactRefs: []model.ID{model.NewID(), model.NewID()},
+		AnchorID:      model.AnchorID(model.NewID()),
+		Kind:          model.AnchorFull,
+		ScopeID:       "test:scope",
+		Revision:      1,
+		ArtifactRefs:  []model.ID{model.NewID(), model.NewID()},
 		ArtifactCount: 2,
 	}
 

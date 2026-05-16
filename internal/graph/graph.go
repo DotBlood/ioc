@@ -52,14 +52,14 @@ type StatefulGraph struct {
 	mu sync.RWMutex
 
 	// Persistent truth (canonical state, serialized to disk).
-	nodes   map[model.ID]*model.Artifact
-	edges   map[model.EdgeID]*model.Edge
-	adjOut  map[model.ID]map[model.EdgeType][]model.ID
-	adjIn   map[model.ID]map[model.EdgeType][]model.ID
+	nodes  map[model.ID]*model.Artifact
+	edges  map[model.EdgeID]*model.Edge
+	adjOut map[model.ID]map[model.EdgeType][]model.ID
+	adjIn  map[model.ID]map[model.EdgeType][]model.ID
 
 	// Materialized runtime structures (rebuilt on load, not persisted).
-	runtime     RuntimeIndexes
-	runtimeCfg  RuntimeConfig
+	runtime    RuntimeIndexes
+	runtimeCfg RuntimeConfig
 
 	// Scope-level freeze locks for archive isolation.
 	scopeLocks   map[model.ScopeID]*scopeLock
@@ -74,12 +74,12 @@ func NewStatefulGraph() *StatefulGraph {
 // NewStatefulGraphWithConfig creates an empty physical graph with the given config.
 func NewStatefulGraphWithConfig(cfg RuntimeConfig) *StatefulGraph {
 	g := &StatefulGraph{
-		nodes:       make(map[model.ID]*model.Artifact),
-		edges:       make(map[model.EdgeID]*model.Edge),
-		adjOut:      make(map[model.ID]map[model.EdgeType][]model.ID),
-		adjIn:       make(map[model.ID]map[model.EdgeType][]model.ID),
-		runtimeCfg:  cfg,
-		scopeLocks:  make(map[model.ScopeID]*scopeLock),
+		nodes:      make(map[model.ID]*model.Artifact),
+		edges:      make(map[model.EdgeID]*model.Edge),
+		adjOut:     make(map[model.ID]map[model.EdgeType][]model.ID),
+		adjIn:      make(map[model.ID]map[model.EdgeType][]model.ID),
+		runtimeCfg: cfg,
+		scopeLocks: make(map[model.ScopeID]*scopeLock),
 	}
 	g.RebuildRuntimeState()
 	return g
@@ -613,4 +613,3 @@ func fnv128(data []byte) (uint64, uint64) {
 }
 
 var byteOrder = binary.LittleEndian
-

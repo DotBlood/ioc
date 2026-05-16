@@ -11,29 +11,29 @@ import (
 
 // stubStore implements all the knowledge store reader interfaces for testing.
 type stubStore struct {
-	nodes       map[model.ID]*model.Artifact
-	projections map[model.ProjectionKey]*model.ArtifactProjection
-	edges       map[model.EdgeID]*model.Edge
-	adjOut      map[model.ID]map[model.EdgeType][]model.ID
-	adjIn       map[model.ID]map[model.EdgeType][]model.ID
-	scopeState  map[model.ScopeID]*model.ScopeState
+	nodes         map[model.ID]*model.Artifact
+	projections   map[model.ProjectionKey]*model.ArtifactProjection
+	edges         map[model.EdgeID]*model.Edge
+	adjOut        map[model.ID]map[model.EdgeType][]model.ID
+	adjIn         map[model.ID]map[model.EdgeType][]model.ID
+	scopeState    map[model.ScopeID]*model.ScopeState
 	scopeChildren map[model.ScopeID][]model.ScopeID
-	activeHeads map[model.BranchName]map[model.ID]model.RevisionNumber
-	revChildren map[model.ID]map[model.RevisionNumber][]model.RevisionNumber
-	anchors     []model.Anchor
+	activeHeads   map[model.BranchName]map[model.ID]model.RevisionNumber
+	revChildren   map[model.ID]map[model.RevisionNumber][]model.RevisionNumber
+	anchors       []model.Anchor
 }
 
 func newStubStore() *stubStore {
 	return &stubStore{
-		nodes:       make(map[model.ID]*model.Artifact),
-		projections: make(map[model.ProjectionKey]*model.ArtifactProjection),
-		edges:       make(map[model.EdgeID]*model.Edge),
-		adjOut:      make(map[model.ID]map[model.EdgeType][]model.ID),
-		adjIn:       make(map[model.ID]map[model.EdgeType][]model.ID),
-		scopeState:  make(map[model.ScopeID]*model.ScopeState),
+		nodes:         make(map[model.ID]*model.Artifact),
+		projections:   make(map[model.ProjectionKey]*model.ArtifactProjection),
+		edges:         make(map[model.EdgeID]*model.Edge),
+		adjOut:        make(map[model.ID]map[model.EdgeType][]model.ID),
+		adjIn:         make(map[model.ID]map[model.EdgeType][]model.ID),
+		scopeState:    make(map[model.ScopeID]*model.ScopeState),
 		scopeChildren: make(map[model.ScopeID][]model.ScopeID),
-		activeHeads: make(map[model.BranchName]map[model.ID]model.RevisionNumber),
-		revChildren: make(map[model.ID]map[model.RevisionNumber][]model.RevisionNumber),
+		activeHeads:   make(map[model.BranchName]map[model.ID]model.RevisionNumber),
+		revChildren:   make(map[model.ID]map[model.RevisionNumber][]model.RevisionNumber),
 	}
 }
 

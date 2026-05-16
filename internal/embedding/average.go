@@ -8,8 +8,9 @@ import (
 // WeightedAverage computes the length-weighted centroid of embedding vectors.
 //
 // Formula: E = Σ(w_i × v_i) / Σ(w_i)
-//   where w_i = token count of child i
-//         v_i = embedding vector of child i
+//
+//	where w_i = token count of child i
+//	      v_i = embedding vector of child i
 //
 // Output is normalized to unit length (MUST for cosine retrieval stability).
 //

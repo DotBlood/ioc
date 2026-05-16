@@ -24,9 +24,9 @@ import (
 type HTTPEmbedder struct {
 	client  *http.Client
 	socket  string
-	model   string          // model name from latest successful response
-	dims    atomic.Int32    // runtime-discovered, 0 until first success
-	modelMu atomic.Value    // stores string, updated on each successful response
+	model   string       // model name from latest successful response
+	dims    atomic.Int32 // runtime-discovered, 0 until first success
+	modelMu atomic.Value // stores string, updated on each successful response
 }
 
 // NewHTTPEmbedder creates a new HTTP embedder over Unix socket.

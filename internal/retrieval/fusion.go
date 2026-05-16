@@ -7,7 +7,8 @@ import (
 )
 
 // RRF implements Reciprocal Rank Fusion.
-//   score(doc) = Σ 1/(k + rank(doc, source))
+//
+//	score(doc) = Σ 1/(k + rank(doc, source))
 //
 // Default k = 60 (proven effective in TREC experiments).
 type RRF struct {

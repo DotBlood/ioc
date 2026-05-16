@@ -119,5 +119,3 @@ func mapStageName(internal string) string {
 		return internal
 	}
 }
-
-

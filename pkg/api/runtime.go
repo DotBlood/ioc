@@ -36,8 +36,8 @@ type Runtime struct {
 	cas      *store.CAS
 	embStore *store.EmbeddingStore
 
-	emb       embedding.Embedder
-	embedMu   sync.Mutex
+	emb     embedding.Embedder
+	embedMu sync.Mutex
 }
 
 // Open opens an IOC repository and returns a Runtime handle.

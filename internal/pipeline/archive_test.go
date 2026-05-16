@@ -19,8 +19,9 @@ func (s *stubFreezer) UnfreezeScope(_ model.ScopeID)     {}
 
 type stubInstaller struct{}
 
-func (s *stubInstaller) InstallSnapshot(_ map[model.ID]*model.Artifact, _ map[model.EdgeID]*model.Edge) {}
-func (s *stubInstaller) RebuildRuntimeState()                                                           {}
+func (s *stubInstaller) InstallSnapshot(_ map[model.ID]*model.Artifact, _ map[model.EdgeID]*model.Edge) {
+}
+func (s *stubInstaller) RebuildRuntimeState() {}
 
 type stubGraphReader struct{}
 

@@ -171,7 +171,7 @@ func TestWeightedAverage_InfVector(t *testing.T) {
 func TestWeightedAverage_DimensionMismatchEarly(t *testing.T) {
 	vectors := [][]float32{
 		{1, 2, 3},
-		{4, 5},      // wrong dim
+		{4, 5}, // wrong dim
 	}
 	weights := []int{1, 1}
 	_, err := WeightedAverage(vectors, weights)

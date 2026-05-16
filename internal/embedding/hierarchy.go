@@ -57,12 +57,13 @@ type ProjectionLoader interface {
 // Hierarchy computes aggregated embeddings at each level of the scope tree.
 //
 // Algorithm:
-//   For each artifact in scope:
-//     load chunk embeddings
-//     WeightedAverage → artifact centroid (via caller, not stored)
-//   For each session:
-//     collect artifact centroids in that session
-//     WeightedAverage → session centroid
+//
+//	For each artifact in scope:
+//	  load chunk embeddings
+//	  WeightedAverage → artifact centroid (via caller, not stored)
+//	For each session:
+//	  collect artifact centroids in that session
+//	  WeightedAverage → session centroid
 //
 // Hierarchy does NOT do inference — it only reads existing embeddings.
 type Hierarchy struct {

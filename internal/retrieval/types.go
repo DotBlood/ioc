@@ -47,7 +47,7 @@ type IndexEntry struct {
 type SearchOptions struct {
 	TopK     int     // must be > 0
 	MinScore float64 // cosine threshold [-1, 1]. For normalized embeddings practical range [0, 1].
-	                 // 0 = no minimum.
+	// 0 = no minimum.
 }
 
 // SearchResult is a single vector retrieval result.
@@ -102,7 +102,7 @@ type FusionOptions struct {
 
 // QueryOptions configures a hybrid query.
 type QueryOptions struct {
-	TopK     int // final result count
+	TopK       int // final result count
 	VectorTopK int // candidate count from vector search
 	TextTopK   int // candidate count from text search
 }
