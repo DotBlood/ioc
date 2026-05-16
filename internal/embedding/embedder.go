@@ -45,8 +45,10 @@ type Vector struct {
 
 // Sentinel errors.
 var (
-	ErrInferenceFailed = errors.New("embedding inference failed")
-	ErrInvalidInput    = errors.New("invalid input: empty text batch")
+	ErrInferenceFailed    = errors.New("embedding inference failed")
+	ErrInvalidInput       = errors.New("invalid input: empty text batch")
+	ErrDimensionMismatch  = errors.New("embedding dimension mismatch")
+	ErrVectorCountMismatch = errors.New("embedding vector count mismatch")
 )
 
 // InferenceError carries details about a failed inference.

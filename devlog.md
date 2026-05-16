@@ -212,6 +212,23 @@ Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplement
 
 ### Scope 4.1: Embedder Interface [✔]
 - `embedding/embedder.go` — `Embedder` interface, `Batch`, `Vector`, sentinel errors
+- `embedding/mock.go` — `MockEmbedder` (deterministic, normalized, splitmix64 PRNG)
+- 10 tests
+
+### Scope 4.2: External Embedder Service (HTTP + Unix Socket) [✔]
+- `embedding/http.go` — `HTTPEmbedder` (implements `Embedder` interface)
+  - HTTP over Unix socket transport (not gRPC, not TCP localhost)
+  - Dimension runtime-discovery via `atomic.Int32` — 0 until first success
+  - `ErrDimensionMismatch` — если сервер возвращает другую dimension после первой
+  - `ErrVectorCountMismatch` — если `len(vectors) ≠ len(texts)`
+  - `Model()` returns "" until first successful Embed call
+  - `http.Client{Timeout: 30 * time.Second}`
+  - `TODO(v0.3)`: binary float32 transport + versioned protocol
+- `embedding/embedder.go` — + `ErrDimensionMismatch`, `ErrVectorCountMismatch`
+- `embedding/http_test.go` — `//go:build integration` (6 tests: dimension discovery, empty input, vector count, dimension mismatch, model empty, server error)
+- `py/embed_server.py` — FastAPI service, single-model (`bge-small-en-v1.5`), `GET /health`, `POST /embed`
+- `py/requirements.txt` — sentence-transformers, fastapi, uvicorn, numpy
+- `embedding/embedder.go` — `Embedder` interface, `Batch`, `Vector`, sentinel errors
   - `Embed(ctx, texts) (*Batch, error)` — core method
   - `Dims() int` — invariant: MUST remain constant for lifetime
   - `Model() string` — model identifier
