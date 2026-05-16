@@ -45,4 +45,6 @@ type HistoricalScope struct {
 	Projections []*ArtifactProjection
 	Edges       []*Edge
 	FromAnchor  AnchorID
+	MissingIDs  []ID     // artifact IDs referenced in anchor but not found in store
+	Errors      []string // non-fatal warnings during reconstruction
 }

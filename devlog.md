@@ -192,9 +192,25 @@ Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplement
 
 **Bug fixed:** Go slice aliasing in retention test: mock `ListProjections` returned original slice, causing underlying array mutation during iteration. Fixed by returning a copy.
 
+### Scope 3.4: Time-Travel Queries [✔]
+- `knowledge/time_machine.go` — `TimeMachine`, `ScopeStateAt`, `ProjectionAt`, `EdgesAt`
+  - `HistoricalState` — internal replay scratch structure (NOT in model/)
+  - `anchorToHistoricalState` — full anchor → initial state
+  - `applyDiff` — diff anchor patch (add+remove semantics, `map[ArtifactID]ProjectionKey` for replacement)
+  - `filterEdgesAt` — temporal validity filter using `EdgeValidAt`
+  - Reconstruction starts from `LatestFullAnchorBefore` (never from diff)
+  - Diff replay by `Revision` order (deterministic), temporal selection by `CreatedAt`
+  - MVCC semantics: latest valid projection at T
+  - Missing artifacts collected explicitly (`MissingIDs`), not silently skipped
+  - No dependency on current graph state — only anchors + store
+- `store/anchor_store.go` — `LatestFullAnchorBefore(ctx, scopeID, at)`, `LatestAnchorsAfter(ctx, scopeID, after, to)`
+- `store/disk.go` — `LoadArtifactsByIDs(ctx, ids) ([]*Artifact, []ID, error)` — batch, one bbolt View()
+- `model/temporal.go` — `MissingIDs []ID`, `Errors []string` added to `HistoricalScope`
+- 7 tests: exact anchor, with diffs, no anchor, MVCC projection, edges by node+type, missing collection, determinism
+
 ```
 Packages:       5 (model + graph + knowledge + store + cmd)
-Total tests:    107 (18 model + 35 graph + 38 knowledge + 34 store + 0 cmd)
+Total tests:    114 (18 model + 35 graph + 45 knowledge + 34 store + 0 cmd)
 Suites:         4, all passing
 Build + vet:    clean
 ```

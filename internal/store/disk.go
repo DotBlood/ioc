@@ -509,6 +509,30 @@ func (s *DiskStore) ListEdgeRevisions(ctx context.Context) ([]model.EdgeRevision
 	return keys, err
 }
 
+// LoadArtifactsByIDs loads multiple artifacts by ID in a single transaction.
+// Returns loaded artifacts + IDs of artifacts not found (missing).
+func (s *DiskStore) LoadArtifactsByIDs(ctx context.Context, ids []model.ID) ([]*model.Artifact, []model.ID, error) {
+	var artifacts []*model.Artifact
+	var missing []model.ID
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("nodes"))
+		for _, id := range ids {
+			val := b.Get([]byte(id.String()))
+			if val == nil {
+				missing = append(missing, id)
+				continue
+			}
+			var art model.Artifact
+			if err := decode(val, &art); err != nil {
+				return err
+			}
+			artifacts = append(artifacts, &art)
+		}
+		return nil
+	})
+	return artifacts, missing, err
+}
+
 // ============================================================
 // Type index
 // ============================================================
