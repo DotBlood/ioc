@@ -27,7 +27,7 @@ func (h *WriteHandle) Done() {
 // scopeLock serializes writes to a scope and supports freeze for archival.
 type scopeLock struct {
 	mu       sync.RWMutex
-	freezing bool
+	freezing atomic.Bool
 	pending  atomic.Int32
 }
 
@@ -36,11 +36,19 @@ type scopeLock struct {
 //  2. Drains pending writes
 //  3. Returns when scope is safe to snapshot
 //
+// Returns ErrScopeFrozen if the scope is already frozen.
 // Must be paired with UnfreezeScope.
+// TODO(v0.2): Add freeze lease / watchdog timeout to prevent permanent frozen scopes.
 func (g *StatefulGraph) freezeScope(scopeID model.ScopeID) error {
 	lock := g.getOrCreateLock(scopeID)
 	lock.mu.Lock()
-	lock.freezing = true
+
+	if lock.freezing.Load() {
+		lock.mu.Unlock()
+		return model.ErrScopeFrozen
+	}
+
+	lock.freezing.Store(true)
 	for lock.pending.Load() > 0 {
 		lock.mu.Unlock()
 		time.Sleep(time.Millisecond) // TODO(v0.2): replace with sync.Cond
@@ -53,17 +61,16 @@ func (g *StatefulGraph) freezeScope(scopeID model.ScopeID) error {
 // unfreezeScope re-enables writes to a previously frozen scope.
 func (g *StatefulGraph) unfreezeScope(scopeID model.ScopeID) {
 	lock := g.getOrCreateLock(scopeID)
-	lock.mu.Lock()
-	lock.freezing = false
-	lock.mu.Unlock()
+	lock.freezing.Store(false)
 }
 
 // beginWrite acquires a write lease for the given scope.
 // Returns ErrReadOnly if the scope is being frozen.
 func (g *StatefulGraph) beginWrite(scopeID model.ScopeID) (*WriteHandle, error) {
 	lock := g.getOrCreateLock(scopeID)
+	// ReadLock blocks during freeze — гарантирует отсутствие TOCTOU.
 	lock.mu.RLock()
-	if lock.freezing {
+	if lock.freezing.Load() {
 		lock.mu.RUnlock()
 		return nil, model.ErrReadOnly
 	}
@@ -74,18 +81,32 @@ func (g *StatefulGraph) beginWrite(scopeID model.ScopeID) (*WriteHandle, error) 
 
 // endWrite releases a write lease. Called automatically by WriteHandle.Done().
 func (g *StatefulGraph) endWrite(scopeID model.ScopeID) {
-	if lock, ok := g.scopeLocks[scopeID]; ok {
-		lock.pending.Add(-1)
+	lock, ok := g.scopeLocks[scopeID]
+	if !ok {
+		return
 	}
+	lock.pending.Add(-1)
 }
 
 // getOrCreateLock lazily creates a scope lock.
-// Only called from beginWrite/freezeScope which already hold mu or RLock.
+// Thread-safe — защищён отдельным scopeLocksMu.
 func (g *StatefulGraph) getOrCreateLock(scopeID model.ScopeID) *scopeLock {
+	g.scopeLocksMu.RLock()
+	lock, ok := g.scopeLocks[scopeID]
+	g.scopeLocksMu.RUnlock()
+	if ok {
+		return lock
+	}
+
+	g.scopeLocksMu.Lock()
+	defer g.scopeLocksMu.Unlock()
+
+	// Double-check после upgrade.
 	if lock, ok := g.scopeLocks[scopeID]; ok {
 		return lock
 	}
-	lock := &scopeLock{}
+
+	lock = &scopeLock{}
 	g.scopeLocks[scopeID] = lock
 	return lock
 }

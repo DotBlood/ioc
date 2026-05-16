@@ -27,6 +27,21 @@ type StoreReader interface {
 	Snapshot() ([]byte, error)
 }
 
-// Compile-time check: *StatefulGraph implements StoreReader and StoreWriter.
+// ScopeFreezer manages write-freeze for a scope during snapshot/archive.
+type ScopeFreezer interface {
+	FreezeScope(scopeID model.ScopeID) error
+	UnfreezeScope(scopeID model.ScopeID)
+}
+
+// SnapshotInstaller installs a fully-resolved graph state into the engine.
+// Used by knowledge/ during restore.
+type SnapshotInstaller interface {
+	InstallSnapshot(nodes map[model.ID]*model.Artifact, edges map[model.EdgeID]*model.Edge)
+	RebuildRuntimeState()
+}
+
+// Compile-time check: *StatefulGraph implements all interfaces.
 var _ StoreReader = (*StatefulGraph)(nil)
 var _ StoreWriter = (*StatefulGraph)(nil)
+var _ ScopeFreezer = (*StatefulGraph)(nil)
+var _ SnapshotInstaller = (*StatefulGraph)(nil)

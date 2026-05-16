@@ -20,6 +20,7 @@ type stubStore struct {
 	scopeChildren map[model.ScopeID][]model.ScopeID
 	activeHeads map[model.BranchName]map[model.ID]model.RevisionNumber
 	revChildren map[model.ID]map[model.RevisionNumber][]model.RevisionNumber
+	anchors     []model.Anchor
 }
 
 func newStubStore() *stubStore {
@@ -152,6 +153,27 @@ func (s *stubStore) ProjectionRevisions(_ context.Context, _ model.ID) ([]model.
 
 func (s *stubStore) NodeScope(_ context.Context, _ model.ID) (model.ScopeID, error) {
 	return "", model.ErrNotImplemented
+}
+
+// SnapshotGraphReader methods.
+func (s *stubStore) NodesByType(_ context.Context, nodeType model.NodeType) ([]model.ID, error) {
+	var ids []model.ID
+	for _, n := range s.nodes {
+		if n.NodeType == nodeType {
+			ids = append(ids, n.ArtifactID)
+		}
+	}
+	return ids, nil
+}
+
+// AnchorStoreWriter methods.
+func (s *stubStore) List(_ context.Context, _ model.ScopeID) ([]model.Anchor, error) {
+	return s.anchors, nil
+}
+
+func (s *stubStore) Create(_ context.Context, anchor *model.Anchor) error {
+	s.anchors = append(s.anchors, *anchor)
+	return nil
 }
 
 func TestScopeResolver_ResolveScope(t *testing.T) {
@@ -476,6 +498,72 @@ func TestPolicyEnforcer_DefaultRetrievalScope(t *testing.T) {
 	}
 	if scope.MaxDepth != 3 {
 		t.Errorf("expected max depth 3, got %d", scope.MaxDepth)
+	}
+}
+
+func TestAnchorCreator_FullSnapshot(t *testing.T) {
+	s := newStubStore()
+	ac := NewAnchorCreator(s, s)
+	ctx := context.Background()
+
+	art1 := &model.Artifact{ArtifactID: model.NewID(), NodeType: model.NodeTypeArtifact, Scope: "test:scope"}
+	art2 := &model.Artifact{ArtifactID: model.NewID(), NodeType: model.NodeTypeArtifact, Scope: "test:scope"}
+	s.nodes[art1.ArtifactID] = art1
+	s.nodes[art2.ArtifactID] = art2
+
+	anchor, err := ac.CreateSnapshot(ctx, "test:scope")
+	if err != nil {
+		t.Fatalf("CreateSnapshot: %v", err)
+	}
+	if anchor.Kind != model.AnchorFull {
+		t.Errorf("first anchor should be Full, got %v", anchor.Kind)
+	}
+	if anchor.ArtifactCount != 2 {
+		t.Errorf("ArtifactCount = %d, want 2", anchor.ArtifactCount)
+	}
+}
+
+func TestAnchorCreator_DiffSnapshot(t *testing.T) {
+	s := newStubStore()
+	ac := NewAnchorCreator(s, s)
+	ctx := context.Background()
+
+	art := &model.Artifact{ArtifactID: model.NewID(), NodeType: model.NodeTypeArtifact, Scope: "diff:scope"}
+	s.nodes[art.ArtifactID] = art
+
+	// First snapshot → full.
+	first, err := ac.CreateSnapshot(ctx, "diff:scope")
+	if err != nil {
+		t.Fatalf("CreateSnapshot 1: %v", err)
+	}
+	if first.Kind != model.AnchorFull {
+		t.Errorf("first anchor should be Full")
+	}
+
+	// Second snapshot → diff (not enough revisions for full interval).
+	second, err := ac.CreateSnapshot(ctx, "diff:scope")
+	if err != nil {
+		t.Fatalf("CreateSnapshot 2: %v", err)
+	}
+	if second.Kind != model.AnchorDiff {
+		t.Errorf("second anchor should be Diff, got Full")
+	}
+	if second.ParentAnchor != first.AnchorID {
+		t.Errorf("ParentAnchor mismatch")
+	}
+}
+
+func TestAnchorCreator_EmptyScope(t *testing.T) {
+	s := newStubStore()
+	ac := NewAnchorCreator(s, s)
+	ctx := context.Background()
+
+	anchor, err := ac.CreateSnapshot(ctx, "empty:scope")
+	if err != nil {
+		t.Fatalf("CreateSnapshot empty: %v", err)
+	}
+	if anchor.ArtifactCount != 0 {
+		t.Errorf("expected 0 artifacts, got %d", anchor.ArtifactCount)
 	}
 }
 

@@ -10,6 +10,7 @@ const (
 	NodeTypeWorkspace NodeType = 2
 	NodeTypeSession   NodeType = 3
 	NodeTypeArtifact  NodeType = 4
+	NodeTypeSummary   NodeType = 5 // archive summary artifact
 )
 
 func (t NodeType) String() string {
@@ -22,6 +23,8 @@ func (t NodeType) String() string {
 		return "session"
 	case NodeTypeArtifact:
 		return "artifact"
+	case NodeTypeSummary:
+		return "summary"
 	default:
 		return "unknown"
 	}

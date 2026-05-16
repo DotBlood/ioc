@@ -115,6 +115,21 @@ func (e *Edge) IsValidAt(t time.Time) bool {
 	return true
 }
 
+// TargetKind identifies the type of entity an edge points to.
+type TargetKind uint8
+
+const (
+	TargetArtifact TargetKind = 1
+	TargetAnchor   TargetKind = 2
+)
+
+// EdgeTarget is a generalized reference target.
+// TODO(v0.2): Replace string ID with strongly typed target identifiers.
+type EdgeTarget struct {
+	Kind TargetKind
+	ID   string
+}
+
 // EdgeConstraints specifies what is allowed for a given edge type.
 type EdgeConstraints struct {
 	Type            EdgeType

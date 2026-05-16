@@ -8,15 +8,17 @@ import (
 
 // Sentinel errors.
 var (
-	ErrNotFound         = errors.New("entity not found")
-	ErrInvalidState     = errors.New("invalid lifecycle state")
-	ErrCycleDetected    = errors.New("cycle detected in lineage")
-	ErrReadOnly         = errors.New("entity is read-only")
-	ErrDanglingRef      = errors.New("reference target not found")
-	ErrInvalidArgument  = errors.New("invalid argument")
-	ErrDuplicate        = errors.New("entity already exists")
+	ErrNotFound          = errors.New("entity not found")
+	ErrInvalidState      = errors.New("invalid lifecycle state")
+	ErrCycleDetected     = errors.New("cycle detected in lineage")
+	ErrReadOnly          = errors.New("entity is read-only")
+	ErrDanglingRef       = errors.New("reference target not found")
+	ErrInvalidArgument   = errors.New("invalid argument")
+	ErrDuplicate         = errors.New("entity already exists")
 	ErrInvalidTransition = errors.New("invalid lifecycle transition")
-	ErrNotImplemented   = errors.New("not implemented")
+	ErrNotImplemented    = errors.New("not implemented")
+	ErrScopeFrozen       = errors.New("scope already frozen")
+	ErrScopeExists       = errors.New("scope already active")
 )
 
 // RetrieveError wraps a non-fatal error during retrieval.

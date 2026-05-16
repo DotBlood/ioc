@@ -147,3 +147,39 @@ Build + vet:    clean
 Dependencies:   bbolt, klauspost/compress, fastcdc (MIT), ulid
 Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplemented
 ```
+
+## Phase 3: Temporal + Archive (Scope 3.1: Structural Snapshots)
+
+### Scope 3.1: Structural Snapshots [✔]
+- `model/anchor.go` — `Anchor` (full+diff hybrid), `AnchorKind`, `AnchorID`
+- `model/temporal.go` — `EdgeValidAt`, `ProjectionValidAt`, `ErrNoHistoricalState`, `HistoricalScope`
+- `graph/freeze.go` — `scopeLock` (RWMutex + atomic.Bool), `WriteHandle`, `FreezeScope`/`UnfreezeScope`/`BeginWrite`/`EndWrite`, race-free via `scopeLocksMu`
+- `store/anchor_store.go` — `AnchorStore` (Create/Load/List/ListRange/Delete)
+- `store/disk.go` — `LoadEdgesByIDs` (sorted cursor), `DeleteProjection`, `DeleteEdgeRevision`
+- `knowledge/snapshot.go` — `AnchorCreator` (full+diff logic, diff computation)
+- 13 new tests (5 freeze + 5 anchor store + 3 creator)
+
+**Bug fixes:** scopeLocks race (double-check locking), AnchorCreator not persisting to store.
+
+### Scope 3.2: Archive Pipeline [✔]
+- `knowledge/archive.go` — `ArchivePipeline`, `ArchiveStage` (monotonic FSM), `ArchiveResult`
+  - `Archive()` — freeze → anchor → summary → lifecycle transition
+  - `Restore()` — freeze → resolve anchor → install → rebuild → transition
+  - `buildSummary()` — deterministic structured summary (no LLM)
+  - Orphan anchor policy: allowed, retention may prune in future
+- `graph/interfaces.go` — `ScopeFreezer`, `SnapshotInstaller` interfaces
+- `graph/graph.go` — exported `FreezeScope` (+ `ErrScopeFrozen`), `UnfreezeScope`, `InstallSnapshot`
+- `graph/freeze.go` — double-freeze guard check
+- `model/artifact.go` — `NodeTypeSummary = 5`
+- `model/edge.go` — `TargetKind`, `EdgeTarget`
+- `model/retrieval.go` — `ErrScopeFrozen`, `ErrScopeExists`
+- 9 new tests: full cycle, freeze failure, anchor failure, transition failure, defer, restore, summary, resolve full, kind string
+
+**Bug fixes:** mockLifecycle didn't enforce state transitions
+
+```
+Packages:       5 (model + graph + knowledge + store + cmd)
+Total tests:    99 (18 model + 35 graph + 30 knowledge + 34 store + 0 cmd)
+Suites:         4, all passing
+Build + vet:    clean
+```

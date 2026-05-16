@@ -62,7 +62,8 @@ type StatefulGraph struct {
 	runtimeCfg  RuntimeConfig
 
 	// Scope-level freeze locks for archive isolation.
-	scopeLocks map[model.ScopeID]*scopeLock
+	scopeLocks   map[model.ScopeID]*scopeLock
+	scopeLocksMu sync.RWMutex
 }
 
 // NewStatefulGraph creates an empty physical graph with default config.
@@ -151,6 +152,44 @@ func (g *StatefulGraph) RemoveNode(_ context.Context, id model.ID) error {
 	delete(g.nodes, id)
 	g.runtime.PropertyIdx.remove(id, indexableProps(n)...)
 	return nil
+}
+
+// FreezeScope freezes a scope, blocking new writes and draining pending.
+// Returns ErrScopeFrozen if the scope is already frozen.
+// TODO(v0.2): Add freeze lease / watchdog timeout to prevent permanent frozen scopes.
+func (g *StatefulGraph) FreezeScope(scopeID model.ScopeID) error {
+	return g.freezeScope(scopeID)
+}
+
+// UnfreezeScope re-enables writes to a previously frozen scope.
+func (g *StatefulGraph) UnfreezeScope(scopeID model.ScopeID) {
+	g.unfreezeScope(scopeID)
+}
+
+// InstallSnapshot installs a fully-resolved graph state into canonical maps.
+// Rebuilds adjacency lists from edges. Does NOT update runtime structures —
+// call RebuildRuntimeState() separately.
+func (g *StatefulGraph) InstallSnapshot(nodes map[model.ID]*model.Artifact, edges map[model.EdgeID]*model.Edge) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.nodes = nodes
+	g.edges = edges
+
+	// Rebuild adjacency lists.
+	g.adjOut = make(map[model.ID]map[model.EdgeType][]model.ID)
+	g.adjIn = make(map[model.ID]map[model.EdgeType][]model.ID)
+	for _, e := range edges {
+		if g.adjOut[e.Source] == nil {
+			g.adjOut[e.Source] = make(map[model.EdgeType][]model.ID)
+		}
+		g.adjOut[e.Source][e.Type] = append(g.adjOut[e.Source][e.Type], e.Target)
+
+		if g.adjIn[e.Target] == nil {
+			g.adjIn[e.Target] = make(map[model.EdgeType][]model.ID)
+		}
+		g.adjIn[e.Target][e.Type] = append(g.adjIn[e.Target][e.Type], e.Source)
+	}
 }
 
 // ProbablyHas returns true if the ID probably exists in the graph.
