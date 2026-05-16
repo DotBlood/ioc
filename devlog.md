@@ -349,3 +349,170 @@ Total tests:    135 (18 model + 35 graph + 45 knowledge + 34 store + 21 embeddin
 Suites:         5, all passing
 Build + vet:    clean
 ```
+
+---
+
+## Phase 5: Runtime + CLI
+
+### Scope 5.1: Session State [✔]
+
+**Package:** `internal/session/`
+
+**Deliverable:**
+- `session/doc.go` — package doc with explicit deterministic boundary:
+  > Session data MUST NOT affect graph correctness, revision semantics, retrieval determinism, or archival behavior.
+- `session/cache.go` — `SessionCache` with TTL-based expiration, background sweep goroutine
+  - `closed atomic.Bool` for idempotent Close + no-op after close
+  - `sync.WaitGroup` for deterministic goroutine shutdown
+  - `CachePut`/`CacheGet` with `sync.RWMutex` (no deletion under RLock — lazy-expire only)
+  - `Close()` — `CompareAndSwap(false, true)` → `close(stop)` → `wg.Wait()`
+  - `sweep()` via `maps.DeleteFunc`
+  - Cache values MUST be immutable or externally synchronized
+- `session/state.go` — `SessionState` struct
+  - `mu sync.RWMutex` — future-proof for concurrent access
+  - `ActivePrompt`, `PromptHistory` (capped by `defaultMaxHistory=100`, oldest dropped first)
+  - `LastResults []retrieval.SearchResult`, `RetrievalTrace *model.RetrievalTrace`
+  - `ReasoningStack` — LIFO, empty strings ignored
+  - `SessionCache *SessionCache` — replaced on `Clear()` (swap before close, zero window)
+  - `Clear()` — resets all fields, installs new cache, closes old one
+  - `NewSessionState()`, `NewSessionStateWithCache(cache)` — DI hook for tests
+- 5 tests: cache TTL, cache Close (idempotent, no-op after close), concurrent access, reasoning stack (LIFO, empty ignored), clear behavior
+
+### Scope 5.2: Pipeline Orchestrators [✔]
+
+**Package:** `internal/pipeline/`
+
+**IngestionPipeline:**
+- 6 capability interfaces (not concrete store types):
+  - `CASWriter` — `Store`, `Open`
+  - `ArtifactWriter` — `SaveArtifact`, `SaveProjection`, `LoadProjection`, `LatestProjection`, `ListArtifactsByType`, `LoadArtifact`
+  - `EmbeddingWriter` — `SaveEmbedding(ctx, artifactID, Vector) → EmbeddingRefID`
+  - `OwnershipWriter` — `AddOwnership(ctx, parent, child) error`
+  - `ScopeResolver` — `ResolveScope(ctx, ScopeID) → ID`
+  - `embedding.Embedder` + `retrieval.TextIndex`
+- `Process(content, scopeID, summary) → ID` — full synchronous lifecycle:
+  1. SHA-256 hash → ContentHash
+  2. CAS.Store (dedup) → ContentHash
+  3. SaveArtifact (immutable)
+  4. ScopeResolver.ResolveScope → ScopeNodeID → AddOwnership(scopeNodeID, artifactID)
+  5. SaveProjection(Revision=1, Readiness=Stored)
+  6. embedder.Embed → batch (empty batch guard)
+  7. SaveEmbedding → EmbeddingRefID
+  8. Update projection: Readiness+=Embedded
+  9. Load all indexable docs from store → BM25.Index (full rebuild, O(N), v0.1)
+  10. Update projection: Readiness+=Indexed
+- `Process` is progressively committing — earlier stages NOT rolled back on later failure
+- `loadAllIndexableDocuments()` — fail-fast, skips empty content
+- BM25 rebuild skipped when no indexable documents (empty corpus valid)
+- `NewIngestionPipelineFromStore()` — factory wrapping concrete store types
+- 5 tests: roundtrip (explicit Readiness: Stored && Embedded && Indexed), CAS dedup, embedding stored, BM25 indexed, empty content
+
+**ArchivePipeline:**
+- Thin orchestration wrapper over `knowledge.ArchivePipeline`
+- `NewArchivePipeline(...)` — wires dependencies (ScopeFreezer, SnapshotInstaller, etc.)
+- `Archive(ctx, scopeID) → *AnchorID` — pure delegation
+- `Restore(ctx, anchorID) error` — pure delegation
+- Exists as: stable operational boundary, composition root, future extension point
+- 2 tests: archive empty scope, restore not found
+
+### Scope 5.3a: Core CLI [✔]
+
+**Package:** `cmd/iocctl/`
+
+**Library:** `github.com/spf13/cobra`
+
+**Pre-requisite: ScopeStateStore (`store/disk.go` additions)**
+- New bbolt buckets: `scope_state` (ScopeID → gob ScopeState), `scope_children` (key-based: `parent:child → "1"`)
+- Methods: `SaveScopeState`, `ScopeState`, `ListAllScopeStates`, `SetScopeState`, `SaveScopeChild`, `ScopeChildren`, `NodeType`, `GetMeta`, `SetMeta`
+- Key-based scope_children: single put, natural dedup, cursor prefix iteration
+- 3 new tests: CRUD, children (idempotent create, unrelated parent), SetScopeState transition
+
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `iocctl init [--dir]` | Create ~/.ioc/ + db + cas + emb, set meta "ioc_version" |
+| `iocctl scope create <type>` | Create worktree/workspace/session with auto-nesting, parent type validation |
+| `iocctl scope list` | Table output (or `--json`), sorted by ScopeID, children count |
+| `iocctl artifact add <scope>` | stdin pipe / `--text` / `--file`, validates scope exists, pipeline ingest |
+| `iocctl artifact get <id>` | Show artifact + latest projection + content |
+| `iocctl artifact revisions <id>` | List projection revisions with readiness state |
+
+**Architecture:**
+- `appState` struct with lazy singletons (`Embedder`, `ArtifactStore`, `AnchorStore`)
+- `ensureInitialized()` — checks db + emb + cas before any command
+- `requiresStore()` — skips store for `init` command
+- `PersistentPreRunE`/`PersistentPostRunE` — open/close per command
+- `current_*` meta keys documented as CLI convenience pointers, NOT authoritative graph state
+- Flat `ScopeID` — no string hierarchy, topology via ownership edges + scope_children bucket
+- Ownership direction: parent → child (`Source: parentID, Target: childID`)
+- Automatic nesting: worktree (root) → workspace (parent=current_worktree) → session (parent=current_workspace)
+- JSON output via `--json` flag, stable machine-readable format
+- 0 CLI tests (manual in v0.1)
+
+**Key architectural decisions (retrospective):**
+1. `scope_children` as key-index (`parent:child → "1"`) instead of gob `[]ScopeID` — avoids slice rewrite, race, O(N) mutation
+2. Flat `ScopeID` (not hierarchical path) — topology lives in edges, not string prefixes
+3. CLI without `LoadSnapshot()` — direct DiskStore ops, no full graph rebuild per command
+4. stdin/--text/--file for artifact content — unix-friendly, no positional text args
+5. Singleton embedder in `appState` — swap to HTTPEmbedder later without API change
+6. Scope creation progressively committing — partial state valid on failure
+
+---
+
+### Scope 5.3b: Operations CLI [✔]
+
+**Package:** `cmd/iocctl/`
+
+**Files:** `cmd_retrieval.go`, `cmd_archive.go`, `cmd_retention.go` — 3 new, 3 modified
+
+**New commands:**
+
+| Command | Description |
+|---------|-------------|
+| `iocctl retrieval query <text> [--topk]` | Hybrid search (vector + BM25 + fusion), O(N) rebuild per invocation |
+| `iocctl retrieval trace <text> [--topk]` | Search with full pipeline trace output |
+| `iocctl scope archive <scope-id>` | Archive scope (freeze → snapshot → lifecycle transition) |
+| `iocctl scope restore <anchor-id>` | Restore scope from anchor |
+| `iocctl archive list [--scope <id>]` | List anchors (all or by exact ScopeID) |
+| `iocctl archive show <anchor-id>` | Show detailed anchor info |
+| `iocctl retention run` | Run retention sweep |
+
+**Architecture:**
+- `appState.RetrievalEngine(ctx)` — O(N) helper that loads all embeddings + documents from store, rebuilds BruteForceIndex + BM25Index + RRF, returns Engine.
+  Documented invariant:
+  > Retrieval indexes are process-local and rebuilt per CLI invocation in v0.1.
+- `appState.BuildGraph(ctx)` — `LoadSnapshot()` → `NewStatefulGraph()` → `AddNode`/`AddEdge` → `RebuildRuntimeState()`.
+- `appState.ArchivePipeline(ctx)` — wires `BuildGraph` + `AnchorCreator` + pipeline + adapters.
+  Documented invariant:
+  > Archive operations rebuild an in-memory graph snapshot per invocation in v0.1.
+- CLI-level adapters (4 total, ~15 lines each): `archiveArtifactCreator`, `diskLifecycleAdapter`, `retentionArtifactAdapter`, `retentionEdgeAdapter`.
+- `archive list --scope <id>` — exact ScopeID match only, no hierarchy/prefix resolution.
+- `retrieval query/trace` — `--topk` (default 10), `--vector-topk` (default 50), `--text-topk` (default 50).
+
+**Key decisions:**
+1. O(N) index rebuild per retrieval query — acceptable for v0.1 small corpora
+2. Full graph rebuild per archive command — archive operations are infrequent
+3. Archive/restore go under `scope` subcommand (user-facing grouping)
+4. `archive list` uses `--scope` flag (not positional) — extensible for `--state`, `--limit`, `--before` later
+5. All adapters in CLI package — zero changes to store/knowledge layer
+6. Retention adapters handle ctx mismatches between DiskStore and knowledge interfaces
+
+---
+
+## Project state
+
+```
+Git log:
+  059fc77 fix .gitignore
+  8f0a101 init
+  (working tree: Phases 0-5 done, no code committed yet)
+
+Packages:       9 (model + graph + knowledge + store + embedding + retrieval + session + pipeline + cmd)
+Total tests:    197 (18 model + 35 graph + 52 knowledge + 37 store + 21 embedding + 22 retrieval + 5 session + 7 pipeline + 0 cmd)
+Suites:         8, all passing
+Build + vet:    clean
+Dependencies:   bbolt, klauspost/compress, fastcdc (MIT), ulid, JLugagne/bm25 (MIT), cobra
+Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplemented
+TODO(v0.2):     incremental BM25, metadata scoring, scope state reverse index, CLI integration tests
+```

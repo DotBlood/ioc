@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -98,6 +99,7 @@ func (s *DiskStore) initBuckets() error {
 			"nodes", "projections", "edges",
 			"adj_out", "adj_in",
 			"anchors", "rev_dag", "idx_type", "meta",
+			"scope_state", "scope_children",
 		} {
 			if _, err := tx.CreateBucketIfNotExists([]byte(name)); err != nil {
 				return err
@@ -633,6 +635,170 @@ func (s *DiskStore) loadRevisionDAG(artifactID model.ID) (*RevisionDAG, error) {
 		return nil, err
 	}
 	return &dag, nil
+}
+
+// ============================================================
+// ScopeState operations
+// ============================================================
+
+// SaveScopeState persists a scope state. Idempotent — overwrites existing.
+func (s *DiskStore) SaveScopeState(state *model.ScopeState) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("scope_state"))
+		val, err := encode(state)
+		if err != nil {
+			return fmt.Errorf("save scope state: %w", err)
+		}
+		return b.Put([]byte(string(state.ScopeID)), val)
+	})
+}
+
+// ScopeState retrieves a scope state by ID. Implements LifecycleStoreWriter.
+func (s *DiskStore) ScopeState(_ context.Context, scopeID model.ScopeID) (*model.ScopeState, error) {
+	var state model.ScopeState
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("scope_state"))
+		val := b.Get([]byte(string(scopeID)))
+		if val == nil {
+			return model.ErrNotFound
+		}
+		return decode(val, &state)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &state, nil
+}
+
+// ListAllScopeStates returns all scope states.
+func (s *DiskStore) ListAllScopeStates() ([]model.ScopeState, error) {
+	var states []model.ScopeState
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("scope_state"))
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var state model.ScopeState
+			if err := decode(v, &state); err != nil {
+				return err
+			}
+			states = append(states, state)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return states, nil
+}
+
+// SetScopeState updates the lifecycle state of an existing scope.
+// Implements LifecycleStoreWriter.
+func (s *DiskStore) SetScopeState(_ context.Context, scopeID model.ScopeID, state model.LifecycleState) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("scope_state"))
+		val := b.Get([]byte(string(scopeID)))
+		if val == nil {
+			return model.ErrNotFound
+		}
+		var ss model.ScopeState
+		if err := decode(val, &ss); err != nil {
+			return err
+		}
+		ss.State = state
+		newVal, err := encode(&ss)
+		if err != nil {
+			return err
+		}
+		return b.Put([]byte(string(scopeID)), newVal)
+	})
+}
+
+// SaveScopeChild registers a child scope under a parent.
+// Idempotent — existing parent/child mappings are overwritten.
+func (s *DiskStore) SaveScopeChild(parent, child model.ScopeID) error {
+	key := string(parent) + ":" + string(child)
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("scope_children"))
+		return b.Put([]byte(key), []byte("1"))
+	})
+}
+
+// ScopeChildren returns all child scope IDs for a given parent.
+// Implements LifecycleStoreWriter.
+func (s *DiskStore) ScopeChildren(_ context.Context, scopeID model.ScopeID) ([]model.ScopeID, error) {
+	var children []model.ScopeID
+	prefix := []byte(string(scopeID) + ":")
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("scope_children"))
+		c := b.Cursor()
+		for k, _ := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
+			childStr := string(k[len(prefix):])
+			children = append(children, model.ScopeID(childStr))
+		}
+		return nil
+	})
+	return children, err
+}
+
+// NodeType returns the NodeType for a given artifact ID.
+func (s *DiskStore) NodeType(id model.ID) (model.NodeType, error) {
+	var n model.Artifact
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("nodes"))
+		val := b.Get([]byte(id.String()))
+		if val == nil {
+			return model.ErrNotFound
+		}
+		return decode(val, &n)
+	})
+	if err != nil {
+		return 0, err
+	}
+	return n.NodeType, nil
+}
+
+// GetMeta retrieves a metadata value by key.
+func (s *DiskStore) GetMeta(key string) (string, error) {
+	var val string
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("meta"))
+		v := b.Get([]byte(key))
+		if v == nil {
+			return model.ErrNotFound
+		}
+		val = string(v)
+		return nil
+	})
+	return val, err
+}
+
+// SetMeta stores a metadata value by key.
+func (s *DiskStore) SetMeta(key, value string) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("meta"))
+		return b.Put([]byte(key), []byte(value))
+	})
+}
+
+// ScopeIDForNode resolves the ScopeID for a given artifact/node ID.
+func (s *DiskStore) ScopeIDForNode(id model.ID) (model.ScopeID, error) {
+	idStr := id.String()
+	var found model.ScopeID
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("scope_state"))
+		c := b.Cursor()
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			if string(k) == idStr {
+				found = model.ScopeID(idStr)
+				return nil
+			}
+		}
+		return model.ErrNotFound
+	})
+	if err != nil {
+		return "", err
+	}
+	return found, nil
 }
 
 // ============================================================

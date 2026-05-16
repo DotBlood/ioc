@@ -8,6 +8,12 @@ require (
 )
 
 require (
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/spf13/cobra v1.10.2 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
+)
+
+require (
 	github.com/JLugagne/bm25 v1.0.2
 	github.com/klauspost/compress v1.18.6
 	github.com/tigerwill90/fastcdc v1.2.2

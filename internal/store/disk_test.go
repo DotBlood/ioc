@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -223,5 +224,126 @@ func TestDiskStore_ProjectionMultiple(t *testing.T) {
 	}
 	if len(keys) != 5 {
 		t.Errorf("expected 5 projection keys, got %d", len(keys))
+	}
+}
+
+func TestScopeState_CRUD(t *testing.T) {
+	s := tempDB(t)
+
+	scopeID := model.ScopeID(model.NewID().String())
+	state := &model.ScopeState{
+		ScopeID: scopeID,
+		Type:    model.NodeTypeWorktree,
+		State:   model.LifecycleDraft,
+	}
+
+	if err := s.SaveScopeState(state); err != nil {
+		t.Fatalf("SaveScopeState: %v", err)
+	}
+
+	got, err := s.ScopeState(context.Background(), scopeID)
+	if err != nil {
+		t.Fatalf("ScopeState: %v", err)
+	}
+	if got.ScopeID != scopeID {
+		t.Errorf("ScopeID = %q, want %q", got.ScopeID, scopeID)
+	}
+	if got.Type != model.NodeTypeWorktree {
+		t.Errorf("Type = %v, want worktree", got.Type)
+	}
+	if got.State != model.LifecycleDraft {
+		t.Errorf("State = %v, want draft", got.State)
+	}
+
+	// ListAll.
+	all, err := s.ListAllScopeStates()
+	if err != nil {
+		t.Fatalf("ListAllScopeStates: %v", err)
+	}
+	if len(all) != 1 {
+		t.Errorf("ListAll: got %d, want 1", len(all))
+	}
+
+	// NotFound.
+	_, err = s.ScopeState(context.Background(), "nonexistent")
+	if err == nil {
+		t.Error("ScopeState: expected error for missing scope")
+	}
+}
+
+func TestScopeState_Children(t *testing.T) {
+	s := tempDB(t)
+
+	parentID := model.ScopeID(model.NewID().String())
+	childID := model.ScopeID(model.NewID().String())
+
+	if err := s.SaveScopeChild(parentID, childID); err != nil {
+		t.Fatalf("SaveScopeChild: %v", err)
+	}
+
+	children, err := s.ScopeChildren(context.Background(), parentID)
+	if err != nil {
+		t.Fatalf("ScopeChildren: %v", err)
+	}
+	if len(children) != 1 {
+		t.Fatalf("expected 1 child, got %d", len(children))
+	}
+	if children[0] != childID {
+		t.Errorf("child = %q, want %q", children[0], childID)
+	}
+
+	// Idempotent — second save does not duplicate.
+	if err := s.SaveScopeChild(parentID, childID); err != nil {
+		t.Fatalf("SaveScopeChild (dup): %v", err)
+	}
+	children, err = s.ScopeChildren(context.Background(), parentID)
+	if err != nil {
+		t.Fatalf("ScopeChildren after dup: %v", err)
+	}
+	if len(children) != 1 {
+		t.Errorf("expected 1 child (idempotent), got %d", len(children))
+	}
+
+	// Unrelated parent has no children.
+	other := model.ScopeID(model.NewID().String())
+	children, err = s.ScopeChildren(context.Background(), other)
+	if err != nil {
+		t.Fatalf("ScopeChildren other: %v", err)
+	}
+	if len(children) != 0 {
+		t.Errorf("expected 0 children for unrelated parent, got %d", len(children))
+	}
+}
+
+func TestDiskStore_SetScopeState(t *testing.T) {
+	s := tempDB(t)
+
+	scopeID := model.ScopeID(model.NewID().String())
+	state := &model.ScopeState{
+		ScopeID: scopeID,
+		Type:    model.NodeTypeWorkspace,
+		State:   model.LifecycleDraft,
+	}
+	if err := s.SaveScopeState(state); err != nil {
+		t.Fatalf("SaveScopeState: %v", err)
+	}
+
+	// Transition.
+	if err := s.SetScopeState(context.Background(), scopeID, model.LifecycleActive); err != nil {
+		t.Fatalf("SetScopeState: %v", err)
+	}
+
+	got, err := s.ScopeState(context.Background(), scopeID)
+	if err != nil {
+		t.Fatalf("ScopeState: %v", err)
+	}
+	if got.State != model.LifecycleActive {
+		t.Errorf("State = %v, want active", got.State)
+	}
+
+	// SetScopeState on missing scope returns error.
+	err = s.SetScopeState(context.Background(), "missing", model.LifecycleActive)
+	if err == nil {
+		t.Error("SetScopeState: expected error for missing scope")
 	}
 }
