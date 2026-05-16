@@ -244,6 +244,26 @@ Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplement
 - 10 tests: single text, multiple texts, determinism, normalization, empty input, empty string valid, different texts→different vectors, model name, dims constant, token count
 
 ### Scope 4.3: Hierarchical Embedding Averaging [✔]
+- `embedding/average.go` — `WeightedAverage` (length-weighted, normalized, NaN/Inf check, pre-allocation dim check)
+- `embedding/hierarchy.go` — `AggregationLevel`, `AggregatedEmbedding`, `ScopeHierarchy`, `Hierarchy`, `ComputeAggregate`
+- 11 new tests. New sentinel: `ErrCorruptedEmbedding`
+
+### Scope 4.4: Retrieval Engine [✔]
+- `retrieval/types.go` — `RetrievalIndex` interface (pluggable), `IndexEntry` (single-mode, no VectorRef),
+  `SearchResult` (no Vector), `SearchOptions` (TopK>0, MinScore)
+- `retrieval/brute_force.go` — `BruteForceIndex` (map-based, dot product with dim check,
+  min-heap top-K, tie-break ordering, Count under RLock, Delete idempotent)
+- `retrieval/engine.go` — `Engine` (embedder + index only, empty query check,
+  TODO(v0.2): hierarchy retrieval, metadata scoring, reranking)
+- 9 tests: search, upsert, delete, dimension mismatch, count under lock,
+  query, empty index, empty query, search ordering (tie-break)
+
+```
+Packages:       7 (model + graph + knowledge + store + embedding + retrieval + cmd)
+Total tests:    144 (18 model + 35 graph + 45 knowledge + 34 store + 21 embedding + 9 retrieval + 0 cmd)
+Suites:         6, all passing
+Build + vet:    clean
+```
 - `embedding/average.go` — `WeightedAverage(vectors, weights)` pure function
   - Length-weighted centroid: Σ(w_i × v_i) / Σ(w_i), normalized to unit length
   - float64 accumulation for numerical stability, float32 output for storage
