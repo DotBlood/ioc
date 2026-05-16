@@ -243,9 +243,24 @@ Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplement
   - Default dimension: 384, model: "mock-v1"
 - 10 tests: single text, multiple texts, determinism, normalization, empty input, empty string valid, different texts→different vectors, model name, dims constant, token count
 
+### Scope 4.3: Hierarchical Embedding Averaging [✔]
+- `embedding/average.go` — `WeightedAverage(vectors, weights)` pure function
+  - Length-weighted centroid: Σ(w_i × v_i) / Σ(w_i), normalized to unit length
+  - float64 accumulation for numerical stability, float32 output for storage
+  - Input validation: empty vectors, dimension mismatch, negative weights
+  - Deterministic: same inputs → identical result
+- `embedding/hierarchy.go` — `AggregationLevel` (Chunk/Artifact/Session), `AggregatedEmbedding` (runtime type, no GeneratedAt, no Revision)
+  - `ScopeHierarchy` interface — Children + ArtifactsInScope (stable lexical ordering enforced via sort)
+  - `Hierarchy` struct — depends on `EmbeddingReader` + `ProjectionLoader` + `ScopeHierarchy` (NOT Embedder)
+  - `ComputeAggregate(ctx, scopeID)` — computes session-level centroids, no recursive traversal
+  - Invariants documented: aggregation acyclic, aggregates recomputable, cache advisory
+- 11 new tests (12 WeightedAverage + 3 Hierarchy): added NaN/Inf validation, pre-allocation dimension check
+- New sentinel error: `ErrCorruptedEmbedding`
+- Embedding package now has 18 unit tests total
+
 ```
 Packages:       6 (model + graph + knowledge + store + embedding + cmd)
-Total tests:    124 (18 model + 35 graph + 45 knowledge + 34 store + 10 embedding + 0 cmd)
+Total tests:    135 (18 model + 35 graph + 45 knowledge + 34 store + 21 embedding + 0 cmd)
 Suites:         5, all passing
 Build + vet:    clean
 ```
