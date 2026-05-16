@@ -43,16 +43,66 @@ type IndexEntry struct {
 	Vector []float32 // pre-normalized; dimension must match index dimension
 }
 
-// SearchOptions controls search behavior.
+// SearchOptions controls vector search behavior.
 type SearchOptions struct {
 	TopK     int     // must be > 0
 	MinScore float64 // cosine threshold [-1, 1]. For normalized embeddings practical range [0, 1].
 	                 // 0 = no minimum.
 }
 
-// SearchResult is a single retrieval result.
+// SearchResult is a single vector retrieval result.
 // Higher Score = more similar.
 type SearchResult struct {
 	ID    model.ID
 	Score float64 // cosine similarity
+}
+
+// TextIndex is a lexical (keyword-based) search index.
+type TextIndex interface {
+	// Search returns top-K results for a text query.
+	Search(ctx context.Context, query string, opts TextSearchOptions) ([]TextResult, error)
+
+	// Index adds or updates documents. Full rebuild on each call (v0.1).
+	Index(ctx context.Context, docs []TextDocument) error
+
+	// Delete removes documents by ID. Idempotent.
+	Delete(ctx context.Context, ids []model.ID) error
+
+	// Count returns the number of indexed documents.
+	Count() int
+}
+
+// TextDocument is a document for lexical indexing.
+type TextDocument struct {
+	ID      model.ID
+	Content string // raw text for BM25 indexing
+}
+
+// TextSearchOptions controls text search behavior.
+type TextSearchOptions struct {
+	TopK int // must be > 0
+}
+
+// TextResult is a single text search result.
+type TextResult struct {
+	ID    model.ID
+	Score float64 // BM25 score (higher = more relevant)
+}
+
+// Fusion merges results from multiple search sources.
+// Implementations must be deterministic.
+type Fusion interface {
+	Merge(vector []SearchResult, text []TextResult, opts FusionOptions) []SearchResult
+}
+
+// FusionOptions controls merge behavior.
+type FusionOptions struct {
+	TopK int // final top-K after fusion
+}
+
+// QueryOptions configures a hybrid query.
+type QueryOptions struct {
+	TopK     int // final result count
+	VectorTopK int // candidate count from vector search
+	TextTopK   int // candidate count from text search
 }

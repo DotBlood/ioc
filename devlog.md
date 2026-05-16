@@ -249,6 +249,71 @@ Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplement
 - 11 new tests. New sentinel: `ErrCorruptedEmbedding`
 
 ### Scope 4.4: Retrieval Engine [✔]
+- `retrieval/types.go` — `RetrievalIndex` interface, `IndexEntry`, `SearchResult`, `SearchOptions`
+- `retrieval/brute_force.go` — `BruteForceIndex` (map-based, dot product, min-heap, dim checks, tie-break)
+- `retrieval/engine.go` — `Engine` (embedder + index, empty query check)
+- 9 tests
+
+### Scope 4.7: Dangling + Orphan Handling [✔]
+- `knowledge/dangling.go` — `DanglingChecker` (cached, hybrid traversal-time + lazy cache)
+  - `ExistsReference(ctx, target) → (model.ReferenceState, error)` — uses existing `model.ReferenceState`
+  - `DanglingGraphReader.Exists(ctx, id) (bool, error)` — lightweight check, no full node load
+  - Lazy cache with `InvalidateCache(ids)` / `InvalidateCache(nil)`
+  - Returns: `RefActive`, `RefDangling`, `RefUnresolvedRemote`
+  - Invariant: eventually consistent. Cache not source of truth.
+- `knowledge/dangling.go` — `OrphanScanner` (structural traversal, no string prefix)
+  - `StructuralResolver` interface: `Parent`, `Exists`, `Children`
+  - `ScanOrphans(ctx, scopeID) → ([]model.ID, error)` — flat scope scan
+  - Orphan = missing structural parent. NOT lifecycle-detached/archived
+  - Invariant: validates structural containment only. Not lifecycle/permissions/retrieval
+- 7 new tests (5 DanglingChecker + 2 OrphanScanner)
+
+**End of Phase 4 — all 7 scopes completed.**
+
+```
+Packages:       7 (model + graph + knowledge + store + embedding + retrieval + cmd)
+Total tests:    167 (18 model + 35 graph + 52 knowledge + 34 store + 21 embedding + 22 retrieval + 0 cmd)
+Suites:         6, all passing
+Build + vet:    clean
+Dependencies:   bbolt, klauspost/compress, fastcdc (MIT), ulid, JLugagne/bm25 (MIT)
+```
+- `retrieval/engine.go` — refactored: `runVectorStage`, `runTextStage`, `runFusionStage`, `runPipeline`, `fallbackMerge`
+  - `Query()` and `Trace()` share the same pipeline → identical SearchResult ordering
+  - `Query()` returns errors if all sources fail (`errors.Join`)
+- `retrieval/trace.go` — `Engine.Trace()` method
+  - 3 deterministic stages: vector_search, text_search, fusion
+  - Stage timing + error collection
+  - `newContentHash(query)` — stable content hash for trace
+  - `FinalSelection` preserves final fused ranking order
+- `retrieval/trace_json.go` — `TraceAsJSON(t *RetrievalTrace) (string, error)` — indented JSON
+- 6 new tests: stages present, errors collected, embedder failure, duration, query hash, JSON validity
+
+```
+Packages:       7 (model + graph + knowledge + store + embedding + retrieval + cmd)
+Total tests:    160 (18 model + 35 graph + 45 knowledge + 34 store + 21 embedding + 22 retrieval + 0 cmd)
+Suites:         6, all passing
+Build + vet:    clean
+```
+- `retrieval/types.go` — `TextIndex` interface, `TextDocument`, `TextSearchOptions`, `TextResult`, `Fusion` interface, `QueryOptions`
+- `retrieval/bm25.go` — `BM25Index` (wraps `github.com/JLugagne/bm25`, pure Go, SIMD)
+  - Full rebuild on each Index() call (v0.1), immutable between calls
+  - Top-K via min-heap + deterministic tie-break by ID
+  - Dependencies: JLugagne/bm25 (MIT, pure Go, 93× faster than Python)
+- `retrieval/fusion.go` — `RRF` (Reciprocal Rank Fusion, k=60), deterministic with lexical ID tie-break
+  - `buildRankMap`, `buildTextRankMap`, `collectAllIDs`
+- `retrieval/engine.go` — Enhanced Engine (vector + text + fusion coordinator)
+  - Always calls fusion when configured (stable ranking semantics)
+  - Graceful fallback when one source is empty
+- 7 new tests (BM25 search, empty, reindex; RRF determinism, tie-break; Engine hybrid, fallback)
+- No Python, no gRPC, no HTTP service
+
+```
+Packages:       7 (model + graph + knowledge + store + embedding + retrieval + cmd)
+Total tests:    154 (18 model + 35 graph + 45 knowledge + 34 store + 21 embedding + 16 retrieval + 0 cmd)
+Suites:         6, all passing
+Build + vet:    clean
+Dependencies:   bbolt, klauspost/compress, fastcdc (MIT), ulid, JLugagne/bm25 (MIT)
+```
 - `retrieval/types.go` — `RetrievalIndex` interface (pluggable), `IndexEntry` (single-mode, no VectorRef),
   `SearchResult` (no Vector), `SearchOptions` (TopK>0, MinScore)
 - `retrieval/brute_force.go` — `BruteForceIndex` (map-based, dot product with dim check,
