@@ -130,6 +130,12 @@ type EdgeTarget struct {
 	ID   string
 }
 
+// EdgeRevisionKey identifies a specific revision of an edge.
+type EdgeRevisionKey struct {
+	EdgeID   EdgeID
+	Revision RevisionNumber
+}
+
 // EdgeConstraints specifies what is allowed for a given edge type.
 type EdgeConstraints struct {
 	Type            EdgeType

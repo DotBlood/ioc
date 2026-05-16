@@ -177,9 +177,24 @@ Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplement
 
 **Bug fixes:** mockLifecycle didn't enforce state transitions
 
+### Scope 3.3: Retention & Cleanup [✔]
+- `knowledge/retention.go` — `RetentionPolicy`, `Run`, `RunScheduler` (overlap protection via atomic.Bool + defer)
+  - `PruneProjections` — mark-and-sweep with protected revision sets
+  - `PruneEdgeRevisions` — conservative protection (all revisions of anchor-referenced edges)
+  - TTL check by `ValidTo` (not `ValidFrom`)
+  - Invariant: latest revision never pruned (`MaxVersions < 1` → `keepAtLeast=1`)
+  - `protectedRevisions` — O(all anchors × all refs), TODO(v0.2) reverse index
+- `model/edge.go` — `EdgeRevisionKey{EdgeID, Revision}` struct
+- `model/anchor.go` — TODO(v0.2) for EdgeRefs → EdgeRevisionKey
+- `store/disk.go` — `ListAllArtifactIDs`, `ListEdgeRevisions`, `DeleteEdgeRevision(EdgeRevisionKey)`, `LoadEdgeRevision`
+- `store/anchor_store.go` — `ListAll()` (no sentinel scopeID)
+- 8 new tests
+
+**Bug fixed:** Go slice aliasing in retention test: mock `ListProjections` returned original slice, causing underlying array mutation during iteration. Fixed by returning a copy.
+
 ```
 Packages:       5 (model + graph + knowledge + store + cmd)
-Total tests:    99 (18 model + 35 graph + 30 knowledge + 34 store + 0 cmd)
+Total tests:    107 (18 model + 35 graph + 38 knowledge + 34 store + 0 cmd)
 Suites:         4, all passing
 Build + vet:    clean
 ```

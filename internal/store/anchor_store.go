@@ -97,6 +97,24 @@ func (s *AnchorStore) ListRange(ctx context.Context, scopeID model.ScopeID, from
 	return matched, nil
 }
 
+// ListAll returns ALL anchors across all scopes.
+func (s *AnchorStore) ListAll(ctx context.Context) ([]model.Anchor, error) {
+	var anchors []model.Anchor
+	err := s.disk.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("anchors"))
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var a model.Anchor
+			if err := decode(v, &a); err != nil {
+				return err
+			}
+			anchors = append(anchors, a)
+		}
+		return nil
+	})
+	return anchors, err
+}
+
 // Delete removes an anchor by ID.
 func (s *AnchorStore) Delete(ctx context.Context, id model.AnchorID) error {
 	return s.disk.db.Update(func(tx *bbolt.Tx) error {

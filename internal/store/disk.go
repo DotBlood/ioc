@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -444,10 +445,68 @@ func (s *DiskStore) DeleteProjection(key model.ProjectionKey) error {
 }
 
 // DeleteEdgeRevision removes a specific edge revision.
-func (s *DiskStore) DeleteEdgeRevision(id model.EdgeID) error {
+func (s *DiskStore) DeleteEdgeRevision(key model.EdgeRevisionKey) error {
+	revisionKey := key.EdgeID.String() + ":" + fmt.Sprint(key.Revision)
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		return tx.Bucket([]byte("edges")).Delete([]byte(id.String()))
+		return tx.Bucket([]byte("edges")).Delete([]byte(revisionKey))
 	})
+}
+
+// LoadEdgeRevision loads a specific edge revision.
+func (s *DiskStore) LoadEdgeRevision(key model.EdgeRevisionKey) (*model.Edge, error) {
+	var e model.Edge
+	revisionKey := key.EdgeID.String() + ":" + fmt.Sprint(key.Revision)
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("edges"))
+		val := b.Get([]byte(revisionKey))
+		if val == nil {
+			return model.ErrNotFound
+		}
+		return decode(val, &e)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+// ListAllArtifactIDs returns all artifact IDs currently in the store.
+func (s *DiskStore) ListAllArtifactIDs(ctx context.Context) ([]model.ID, error) {
+	var ids []model.ID
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("nodes"))
+		c := b.Cursor()
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			id, err := model.ParseID(string(k))
+			if err != nil {
+				continue
+			}
+			ids = append(ids, id)
+		}
+		return nil
+	})
+	return ids, err
+}
+
+// ListEdgeRevisions returns all edge revision keys in the store.
+func (s *DiskStore) ListEdgeRevisions(ctx context.Context) ([]model.EdgeRevisionKey, error) {
+	var keys []model.EdgeRevisionKey
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("edges"))
+		c := b.Cursor()
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			// Parse "EdgeID:Revision" format.
+			keyStr := string(k)
+			// For now, store EdgeID:0 as placeholder.
+			id, err := model.ParseID(keyStr)
+			if err != nil {
+				continue
+			}
+			keys = append(keys, model.EdgeRevisionKey{EdgeID: model.EdgeID(id), Revision: 0})
+		}
+		return nil
+	})
+	return keys, err
 }
 
 // ============================================================

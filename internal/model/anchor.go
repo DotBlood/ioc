@@ -46,6 +46,10 @@ type Anchor struct {
 	RemovedArtifactIDs []ID
 	RemovedEdgeIDs     []EdgeID
 
+		// TODO(v0.2): Replace EdgeRefs []EdgeID with []EdgeRevisionKey
+	// for revision-level protection granularity in retention.
+	// v0.1 conservatively protects all revisions of any referenced edge.
+
 	// Reference to separately stored embeddings manifest.
 	EmbeddingManifestRef ContentHash
 
