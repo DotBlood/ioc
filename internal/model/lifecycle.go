@@ -65,6 +65,7 @@ type ScopeState struct {
 	Type       NodeType
 	State      LifecycleState
 	ParentID   ID
+	CreatedAt  time.Time
 	ArchivedAt *time.Time
 }
 

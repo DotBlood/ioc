@@ -500,6 +500,59 @@ Build + vet:    clean
 
 ---
 
+### Scope 5.4: Retrieval API (library) [✔]
+
+**Package:** `pkg/api/`
+
+**Files:** 6 created, 2 modified
+
+| File | Action | Lines |
+|------|--------|-------|
+| `pkg/api/types.go` | Create — DTOs | 46 |
+| `pkg/api/errors.go` | Create — 5 stable sentinels | 12 |
+| `pkg/api/runtime.go` | Create — Runtime, Open/Close, lazy embedder, retrievalEngine, archivePipeline, adapters | 151 |
+| `pkg/api/retrieval.go` | Create — Query/Trace with input validation + stage name mapping | 94 |
+| `pkg/api/admin.go` | Create — CreateScope/ListScopes/ArchiveScope/RestoreScope/AddArtifact | 183 |
+| `pkg/api/api_test.go` | Create — 16 sub-tests | 194 |
+| `internal/model/lifecycle.go` | Modify — add `CreatedAt time.Time` to `ScopeState` | +1 |
+| `cmd/iocctl/cmd_scope.go` | Modify — set `CreatedAt: time.Now()` | +1 |
+
+**Architecture:**
+- `api.Runtime` is an explicit runtime object (no globals, no package-level state)
+- `api.Open(ctx, Config{RootDir})` with `ensureInitialized` → returns `ErrNotInitialized` if repo missing
+- All internal/model types translated to stable DTOs at the boundary
+- Internal retrieval stage names mapped to public names:
+  - `vector_search` → `"dense_search"`
+  - `text_search` → `"sparse_search"`
+  - `fusion` → `"rerank"`
+- `api.ErrNotFound` ≠ `model.ErrNotFound` — fully decoupled
+
+**Design decisions (from review + user feedback):**
+1. Explicit parent semantics in API (no auto-nesting) — CLI keeps auto-nesting via meta keys
+2. `CreateScopeRequest.ParentID` — required for workspace/session, empty for worktree
+3. `Runtime` doc comment explicitly states v0.1 concurrency limits (reads OK, mutations not concurrent-safe)
+4. `AddArtifact` is the minimal ingestion entrypoint — without it the API would only administrate empty scopes
+5. Input validation at boundary (empty query → `ErrInvalidInput`, topK clamped to 1000)
+6. Integration test does full roundtrip: CreateScope → AddArtifact → Query → Archive → Restore → Query
+
+**Public API surface:**
+
+```go
+func Open(ctx context.Context, cfg Config) (*Runtime, error)
+func (r *Runtime) Close() error
+func (r *Runtime) Query(ctx context.Context, query string, topK int) ([]QueryResult, error)
+func (r *Runtime) Trace(ctx context.Context, query string, topK int) (*TraceResult, error)
+func (r *Runtime) CreateScope(ctx context.Context, req CreateScopeRequest) (*ScopeInfo, error)
+func (r *Runtime) ListScopes(ctx context.Context) ([]ScopeInfo, error)
+func (r *Runtime) ArchiveScope(ctx context.Context, scopeID string) (string, error)
+func (r *Runtime) RestoreScope(ctx context.Context, anchorID string) error
+func (r *Runtime) AddArtifact(ctx context.Context, scopeID string, content []byte, summary string) (string, error)
+```
+
+**16 tests, all passing:** OpenClose, NotInitialized, CreateScope (worktree, explicit parent, invalid type, wrong parent, worktree+parent rejected), ListScopes, AddArtifact+Query, Trace (stage names), EmptyInput, ArchiveRestoreRoundtrip, EmptyContent, NonexistentScope, NonexistentArchive.
+
+---
+
 ## Project state
 
 ```
@@ -508,11 +561,11 @@ Git log:
   8f0a101 init
   (working tree: Phases 0-5 done, no code committed yet)
 
-Packages:       9 (model + graph + knowledge + store + embedding + retrieval + session + pipeline + cmd)
-Total tests:    197 (18 model + 35 graph + 52 knowledge + 37 store + 21 embedding + 22 retrieval + 5 session + 7 pipeline + 0 cmd)
-Suites:         8, all passing
+Packages:       10 (model + graph + knowledge + store + embedding + retrieval + session + pipeline + cmd + api)
+Total tests:    213 (18 model + 35 graph + 52 knowledge + 37 store + 21 embedding + 22 retrieval + 5 session + 7 pipeline + 0 cmd + 16 api)
+Suites:         9, all passing
 Build + vet:    clean
-Dependencies:   bbolt, klauspost/compress, fastcdc (MIT), ulid, JLugagne/bm25 (MIT), cobra
+Dependencies:   bbolt, klauspost/compress, fastcdc (MIT), ulid, JLugagne/bm25 (MIT), cobra, testify
 Placeholders:   graph.Snapshot(), policy.PrunableRevisions() → ErrNotImplemented
 TODO(v0.2):     incremental BM25, metadata scoring, scope state reverse index, CLI integration tests
 ```

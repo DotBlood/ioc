@@ -89,10 +89,11 @@ Partial scope state may exist after failures — valid for v0.1.`,
 			}
 
 			scopeState := &model.ScopeState{
-				ScopeID:  scopeID,
-				Type:     nodeType,
-				State:    model.LifecycleDraft,
-				ParentID: parentID,
+				ScopeID:   scopeID,
+				Type:      nodeType,
+				State:     model.LifecycleDraft,
+				ParentID:  parentID,
+				CreatedAt: time.Now(),
 			}
 			if err := state.disk.SaveScopeState(scopeState); err != nil {
 				return fmt.Errorf("save scope state: %w", err)
