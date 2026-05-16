@@ -14,4 +14,9 @@ Permission is granted only for viewing the source code for
 reference and evaluation purposes unless otherwise specified
 in individual subdirectory licenses.
 
+Third-Party ComponentsThis
+software contains third-party open-source components licensed under the Apache License, Version 2.0 (the "Apache License").
+You may obtain a copy of the Apache License at apache.org.
+These third-party components are provided "as is" and are governed solely by the terms of their respective license, which takes precedence over this proprietary license strictly in relation to those specific components.
+
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.

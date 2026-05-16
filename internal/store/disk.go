@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -398,6 +399,157 @@ func (s *DiskStore) LoadSnapshot() (*GraphSnapshot, error) {
 		return nil, err
 	}
 	return gs, nil
+}
+
+// ============================================================
+// Batch edge loading
+// ============================================================
+
+// LoadEdgesByIDs loads multiple edges by ID in a single transaction.
+// IDs are sorted before traversal for efficient bbolt cursor access.
+func (s *DiskStore) LoadEdgesByIDs(ids []model.EdgeID) ([]*model.Edge, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	sorted := make([]model.EdgeID, len(ids))
+	copy(sorted, ids)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].String() < sorted[j].String()
+	})
+
+	var edges []*model.Edge
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("edges"))
+		for _, id := range sorted {
+			val := b.Get([]byte(id.String()))
+			if val == nil {
+				continue // skip dangling
+			}
+			var e model.Edge
+			if err := decode(val, &e); err != nil {
+				return err
+			}
+			edges = append(edges, &e)
+		}
+		return nil
+	})
+	return edges, err
+}
+
+// DeleteProjection removes a specific projection revision.
+func (s *DiskStore) DeleteProjection(key model.ProjectionKey) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		return tx.Bucket([]byte("projections")).Delete([]byte(key.String()))
+	})
+}
+
+// DeleteEdgeRevision removes a specific edge revision.
+func (s *DiskStore) DeleteEdgeRevision(id model.EdgeID) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		return tx.Bucket([]byte("edges")).Delete([]byte(id.String()))
+	})
+}
+
+// ============================================================
+// Type index
+// ============================================================
+
+func (s *DiskStore) addToTypeIndex(nodeType model.NodeType, id model.ID) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("idx_type"))
+		key := []byte{byte(nodeType)}
+		var ids []model.ID
+		if val := b.Get(key); val != nil {
+			if err := decode(val, &ids); err != nil {
+				return err
+			}
+			for _, existing := range ids {
+				if existing == id {
+					return nil // already indexed
+				}
+			}
+		}
+		ids = append(ids, id)
+		val, err := encode(ids)
+		if err != nil {
+			return err
+		}
+		return b.Put(key, val)
+	})
+}
+
+func (s *DiskStore) removeFromTypeIndex(nodeType model.NodeType, id model.ID) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("idx_type"))
+		key := []byte{byte(nodeType)}
+		val := b.Get(key)
+		if val == nil {
+			return nil
+		}
+		var ids []model.ID
+		if err := decode(val, &ids); err != nil {
+			return err
+		}
+		filtered := ids[:0]
+		for _, existing := range ids {
+			if existing != id {
+				filtered = append(filtered, existing)
+			}
+		}
+		if len(filtered) == 0 {
+			return b.Delete(key)
+		}
+		newVal, err := encode(filtered)
+		if err != nil {
+			return err
+		}
+		return b.Put(key, newVal)
+	})
+}
+
+func (s *DiskStore) listTypeIndex(nodeType model.NodeType) ([]model.ID, error) {
+	var ids []model.ID
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("idx_type"))
+		key := []byte{byte(nodeType)}
+		val := b.Get(key)
+		if val == nil {
+			return nil
+		}
+		return decode(val, &ids)
+	})
+	return ids, err
+}
+
+// ============================================================
+// Revision DAG
+// ============================================================
+
+func (s *DiskStore) saveRevisionDAG(artifactID model.ID, dag *RevisionDAG) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("rev_dag"))
+		val, err := encode(dag)
+		if err != nil {
+			return err
+		}
+		return b.Put([]byte(artifactID.String()), val)
+	})
+}
+
+func (s *DiskStore) loadRevisionDAG(artifactID model.ID) (*RevisionDAG, error) {
+	var dag RevisionDAG
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("rev_dag"))
+		val := b.Get([]byte(artifactID.String()))
+		if val == nil {
+			return model.ErrNotFound
+		}
+		return decode(val, &dag)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &dag, nil
 }
 
 // ============================================================
