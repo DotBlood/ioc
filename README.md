@@ -1,7 +1,9 @@
-# IOC — Stateful Knowledge Graph Runtime
+# IOC — Stateful Knowledge Graph Runtime 
 
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8)](https://go.dev)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![License](https://img.shields.io/badge/license-Non_Commercial-blue)](LICENSE)
+
+Version: v0.1.0
 
 IOC is a hybrid cognitive storage system that combines a **static knowledge graph** (disk-persisted facts, files, chat logs) with **stateful runtime state** (active graph, embeddings, summaries) and **temporal versioning** (anchor/delta snapshots with time-travel queries).
 
@@ -167,10 +169,12 @@ $env:GOMAXPROCS='1'; go test -bench=. -benchmem -count=5 ./internal/graph/ ./int
 
 ---
 
-
+## Docs
+[Devlog](devlog.md)   |   [Benchmarks](docs/benchmarks/v0.1.md)   |   [Methodology](docs/METHODOLOGY.md)   |   [Code style](docs/CODE-STYLE.md)
 
 ---
 
 ## License
 
-CLOSE — see [LICENSE](LICENSE).
+Non-commercial open source — see [LICENSE](LICENSE) for details.
+Commercial use requires permission.

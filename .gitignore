@@ -16,5 +16,5 @@ go.work.sum
 .idea/
 .vscode/
 AGENTS.md
-bin/*
+bin/
 close/

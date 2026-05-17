@@ -1,22 +1,56 @@
-Copyright (c) 2026 DotBlood
-All Rights Reserved.
+Copyright (c) 2026 DotBlood.
+Licensed under the IOC Non-Commercial License.
 
-This source code and all associated files, documentation,
-assets, configurations, prompts, architectures, and related
-materials are proprietary and confidential.
+----------------------------------------------------------------------
+| IOC — Stateful Knowledge Graph Runtime License                     |
+| Custom Non-Commercial License                                       |
+----------------------------------------------------------------------
 
-Unauthorized copying, modification, distribution, sublicensing,
-public display, public use, reverse engineering, or commercial
-exploitation of this software, in whole or in part, is strictly prohibited
-without explicit prior written permission from the copyright holder.
+== 1. Definitions ==
 
-Permission is granted only for viewing the source code for
-reference and evaluation purposes unless otherwise specified
-in individual subdirectory licenses.
+"Non-Commercial Use" means use for personal, educational, or
+academic research purposes only, by a natural person or non-profit
+organization. Any use by a for-profit entity, or any use in a
+commercial context (including internal business tools, consulting,
+SaaS, or embedded products), is Commercial Use.
 
-Third-Party ComponentsThis
-software contains third-party open-source components licensed under the Apache License, Version 2.0 (the "Apache License").
-You may obtain a copy of the Apache License at apache.org.
-These third-party components are provided "as is" and are governed solely by the terms of their respective license, which takes precedence over this proprietary license strictly in relation to those specific components.
+== 2. Grant (Non-Commercial) ==
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+Permission is granted to use, copy, modify, and distribute this
+software for Non-Commercial Use, provided this copyright notice
+is preserved in all copies and derivative works.
+
+== 3. Commercial Use ==
+
+Any Commercial Use requires prior written permission from the
+copyright holder.
+
+Contact for commercial inquiries:
+
+  Email:     [EMAIL]
+  Telegram:  [TELEGRAM]
+  Issues:    [GITHUB_ISSUES_LINK]
+
+== 4. Contributions ==
+
+Contributions are welcome. By submitting code, you agree that your
+contribution is licensed under these same terms. No separate CLA is
+required for non-commercial contributions.
+
+== 5. No Warranty ==
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+== 6. Third-Party Components ==
+
+This software contains third-party open-source components licensed
+under Apache 2.0, MIT, and other permissive licenses. These components
+are governed solely by their respective licenses, which take precedence
+over this license for those specific components. See go.mod and go.sum
+for the complete dependency list.
