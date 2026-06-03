@@ -56,8 +56,10 @@ summaries; IOC embeds, stores, and serves them.
 - `ioc_query` returns `query_id` (inspect with `ioc_trace` / `ioc_list_traces`) and `weak_match`.
   **If `weak_match` is true (top cosine score below ~0.45), there is no specific stored artifact** —
   don't present the returned general context as a precise answer; say you don't have it, or push it.
-- Retrieval is semantic (vector) by default; it disambiguates near-duplicate entries well. (A hybrid
-  vector+BM25 mode exists but is experimental — it degraded ranking in scale tests.)
+- Retrieval is semantic (vector) by default. **At scale (many artifacts), split into sub-scopes,
+  `ioc_rollup` each, and query the parent with `hierarchical=true`** — this runs a coarse rollup
+  rank then a hybrid (vector+BM25) fine search and recovers recall (≈0.94 vs 0.33 vector-only at
+  180 artifacts on bge-small). Tune `coarsek` (~6) if needed.
 
 ## Setup (operator)
 

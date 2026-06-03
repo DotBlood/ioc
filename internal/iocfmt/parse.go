@@ -93,8 +93,12 @@ func ParseModeSpec(s string) (core.QueryMode, bool) {
 	switch strings.ToLower(s) {
 	case "hybrid":
 		return core.ModeHybrid, false
-	case "hierarchical":
-		return core.ModeVector, true
+	case "hierarchical", "hierarchical-hybrid", "hybrid-hierarchical":
+		// coarse(rollups) + HYBRID fine — the configuration that works at scale
+		// (recall 0.94 vs 0.33 for vector-only at 180 artifacts).
+		return core.ModeHybrid, true
+	case "hierarchical-vector":
+		return core.ModeVector, true // coarse + vector fine (weak; for comparison)
 	default:
 		return core.ModeVector, false
 	}

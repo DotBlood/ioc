@@ -32,10 +32,15 @@ go run ./cmd/ioc embed-ping -embed http://127.0.0.1:8088
 Embedder `-embed`: empty = deterministic mock (pipeline only, not real wall numbers);
 `http://host:port` (TCP, Windows-ok) or `unix:/path` = external `py/embed_server.py`.
 
-Retrieval modes (`-mode` / `Query.Mode`+`Hierarchical`): `vector` (default), `hybrid`
-(vector+BM25 via RRF — helps at scale, can hurt at small N), `hierarchical` (coarse rank scope
-rollups → fine search within top scopes; needs `RollupScope`). `query` returns `query_id`,
-`weak_match` (per-embedder `core.ConfidenceFloor`, ~0.68 for bge-small), `top_score`, `margin`.
+Retrieval modes (`-mode` / `Query.Mode`+`Hierarchical`+`CoarseK`):
+- `vector` (default) — cosine; best at small scale.
+- `hybrid` — vector+BM25 via RRF; helps at scale, can hurt at small N.
+- `hierarchical` — coarse-rank scope rollups → **hybrid** fine within top `CoarseK` (~6) scopes;
+  needs `RollupScope` on sub-scopes. **Best at scale:** recall@topK ~0.94 at 180 artifacts vs 0.33
+  vector-only / 0.67 flat-hybrid (real bge-small). Pure-vector hierarchy does NOT help.
+
+`query` returns `query_id`, `weak_match` (per-embedder `core.ConfidenceFloor`, ~0.68 bge-small),
+`top_score`, `margin`. `-kind document,reasoning` restricts results by Kind (files vs thoughts).
 More commands: `ioc query|drill|traces|trace|rollup|consolidate|crossversion|...`,
 `ioc gen-scenario -shape flat|tree` (deterministic scale scenarios).
 

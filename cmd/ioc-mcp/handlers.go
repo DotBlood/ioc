@@ -63,6 +63,13 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	// Hierarchical uses a HYBRID fine stage (vector+BM25) — the configuration that
+	// holds up at scale; pure-vector hierarchy does not help.
+	hier := r.GetBool("hierarchical", false)
+	mode := core.ModeVector
+	if hier {
+		mode = core.ModeHybrid
+	}
 	qid, hits, err := a.e.Query(ctx, core.Query{
 		Scope:        id,
 		Text:         text,
@@ -71,7 +78,8 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 		Tier:         iocfmt.ParseTier(r.GetString("tier", "")),
 		Kinds:        iocfmt.ParseKinds(r.GetString("kind", "")),
 		MinScore:     r.GetFloat("min_score", 0),
-		Hierarchical: r.GetBool("hierarchical", false),
+		Mode:         mode,
+		Hierarchical: hier,
 		CoarseK:      r.GetInt("coarsek", 0),
 	})
 	if err != nil {

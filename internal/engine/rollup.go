@@ -53,7 +53,7 @@ func (e *Engine) descendantScopes(root core.ID) ([]core.Scope, error) {
 // visible set if no scope has a rollup.
 func (e *Engine) coarseToFineCandidates(viewpoint core.ID, qvec []float32, coarseK int, tier core.Tier) ([]core.Artifact, error) {
 	if coarseK <= 0 {
-		coarseK = 5
+		coarseK = 6 // sweet spot at ~18 clusters: narrow enough to cut cross-scope noise
 	}
 	descs, err := e.descendantScopes(viewpoint)
 	if err != nil {
