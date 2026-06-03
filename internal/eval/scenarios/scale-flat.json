@@ -1,0 +1,1377 @@
+{
+  "name": "scale-flat",
+  "topk": 5,
+  "turns": [
+    {
+      "op": "create_scope",
+      "id": "wt",
+      "parent": "root",
+      "role": "worktree",
+      "title": "platform"
+    },
+    {
+      "op": "create_scope",
+      "id": "ws",
+      "parent": "wt",
+      "role": "workspace",
+      "title": "decisions"
+    },
+    {
+      "op": "create_scope",
+      "id": "s",
+      "parent": "ws",
+      "role": "session",
+      "title": "log"
+    },
+    {
+      "op": "push",
+      "as": "t0",
+      "scope": "s",
+      "summary": "outbound request timeouts — we decided to time out outbound calls after 2 seconds",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v0_1",
+      "scope": "s",
+      "summary": "outbound request timeouts — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v0_2",
+      "scope": "s",
+      "summary": "outbound request timeouts — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v0_3",
+      "scope": "s",
+      "summary": "outbound request timeouts — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v0_4",
+      "scope": "s",
+      "summary": "outbound request timeouts — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v0_5",
+      "scope": "s",
+      "summary": "outbound request timeouts — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v0_6",
+      "scope": "s",
+      "summary": "outbound request timeouts — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v0_7",
+      "scope": "s",
+      "summary": "outbound request timeouts — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v0_8",
+      "scope": "s",
+      "summary": "outbound request timeouts — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v0_9",
+      "scope": "s",
+      "summary": "outbound request timeouts — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t1",
+      "scope": "s",
+      "summary": "retry and backoff policy — we decided to retry with exponential backoff, max 3 attempts",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v1_1",
+      "scope": "s",
+      "summary": "retry and backoff policy — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v1_2",
+      "scope": "s",
+      "summary": "retry and backoff policy — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v1_3",
+      "scope": "s",
+      "summary": "retry and backoff policy — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v1_4",
+      "scope": "s",
+      "summary": "retry and backoff policy — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v1_5",
+      "scope": "s",
+      "summary": "retry and backoff policy — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v1_6",
+      "scope": "s",
+      "summary": "retry and backoff policy — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v1_7",
+      "scope": "s",
+      "summary": "retry and backoff policy — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v1_8",
+      "scope": "s",
+      "summary": "retry and backoff policy — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v1_9",
+      "scope": "s",
+      "summary": "retry and backoff policy — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t2",
+      "scope": "s",
+      "summary": "authentication and tokens — we decided to use RS256 JWT access tokens with a 15-minute TTL",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v2_1",
+      "scope": "s",
+      "summary": "authentication and tokens — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v2_2",
+      "scope": "s",
+      "summary": "authentication and tokens — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v2_3",
+      "scope": "s",
+      "summary": "authentication and tokens — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v2_4",
+      "scope": "s",
+      "summary": "authentication and tokens — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v2_5",
+      "scope": "s",
+      "summary": "authentication and tokens — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v2_6",
+      "scope": "s",
+      "summary": "authentication and tokens — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v2_7",
+      "scope": "s",
+      "summary": "authentication and tokens — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v2_8",
+      "scope": "s",
+      "summary": "authentication and tokens — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v2_9",
+      "scope": "s",
+      "summary": "authentication and tokens — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t3",
+      "scope": "s",
+      "summary": "rate limiting — we decided to rate-limit with a token bucket per API key",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v3_1",
+      "scope": "s",
+      "summary": "rate limiting — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v3_2",
+      "scope": "s",
+      "summary": "rate limiting — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v3_3",
+      "scope": "s",
+      "summary": "rate limiting — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v3_4",
+      "scope": "s",
+      "summary": "rate limiting — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v3_5",
+      "scope": "s",
+      "summary": "rate limiting — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v3_6",
+      "scope": "s",
+      "summary": "rate limiting — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v3_7",
+      "scope": "s",
+      "summary": "rate limiting — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v3_8",
+      "scope": "s",
+      "summary": "rate limiting — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v3_9",
+      "scope": "s",
+      "summary": "rate limiting — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t4",
+      "scope": "s",
+      "summary": "database storage engine — we decided to store data in PostgreSQL 16 using JSONB columns",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v4_1",
+      "scope": "s",
+      "summary": "database storage engine — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v4_2",
+      "scope": "s",
+      "summary": "database storage engine — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v4_3",
+      "scope": "s",
+      "summary": "database storage engine — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v4_4",
+      "scope": "s",
+      "summary": "database storage engine — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v4_5",
+      "scope": "s",
+      "summary": "database storage engine — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v4_6",
+      "scope": "s",
+      "summary": "database storage engine — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v4_7",
+      "scope": "s",
+      "summary": "database storage engine — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v4_8",
+      "scope": "s",
+      "summary": "database storage engine — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v4_9",
+      "scope": "s",
+      "summary": "database storage engine — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t5",
+      "scope": "s",
+      "summary": "event delivery semantics — we decided to guarantee at-least-once event delivery",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v5_1",
+      "scope": "s",
+      "summary": "event delivery semantics — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v5_2",
+      "scope": "s",
+      "summary": "event delivery semantics — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v5_3",
+      "scope": "s",
+      "summary": "event delivery semantics — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v5_4",
+      "scope": "s",
+      "summary": "event delivery semantics — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v5_5",
+      "scope": "s",
+      "summary": "event delivery semantics — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v5_6",
+      "scope": "s",
+      "summary": "event delivery semantics — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v5_7",
+      "scope": "s",
+      "summary": "event delivery semantics — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v5_8",
+      "scope": "s",
+      "summary": "event delivery semantics — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v5_9",
+      "scope": "s",
+      "summary": "event delivery semantics — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t6",
+      "scope": "s",
+      "summary": "consumer idempotency — we decided to deduplicate events by a stable dedup key",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v6_1",
+      "scope": "s",
+      "summary": "consumer idempotency — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v6_2",
+      "scope": "s",
+      "summary": "consumer idempotency — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v6_3",
+      "scope": "s",
+      "summary": "consumer idempotency — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v6_4",
+      "scope": "s",
+      "summary": "consumer idempotency — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v6_5",
+      "scope": "s",
+      "summary": "consumer idempotency — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v6_6",
+      "scope": "s",
+      "summary": "consumer idempotency — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v6_7",
+      "scope": "s",
+      "summary": "consumer idempotency — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v6_8",
+      "scope": "s",
+      "summary": "consumer idempotency — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v6_9",
+      "scope": "s",
+      "summary": "consumer idempotency — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t7",
+      "scope": "s",
+      "summary": "structured logging — we decided to emit structured JSON logs",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v7_1",
+      "scope": "s",
+      "summary": "structured logging — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v7_2",
+      "scope": "s",
+      "summary": "structured logging — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v7_3",
+      "scope": "s",
+      "summary": "structured logging — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v7_4",
+      "scope": "s",
+      "summary": "structured logging — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v7_5",
+      "scope": "s",
+      "summary": "structured logging — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v7_6",
+      "scope": "s",
+      "summary": "structured logging — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v7_7",
+      "scope": "s",
+      "summary": "structured logging — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v7_8",
+      "scope": "s",
+      "summary": "structured logging — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v7_9",
+      "scope": "s",
+      "summary": "structured logging — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t8",
+      "scope": "s",
+      "summary": "distributed tracing — we decided to propagate the W3C traceparent header for tracing",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v8_1",
+      "scope": "s",
+      "summary": "distributed tracing — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v8_2",
+      "scope": "s",
+      "summary": "distributed tracing — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v8_3",
+      "scope": "s",
+      "summary": "distributed tracing — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v8_4",
+      "scope": "s",
+      "summary": "distributed tracing — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v8_5",
+      "scope": "s",
+      "summary": "distributed tracing — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v8_6",
+      "scope": "s",
+      "summary": "distributed tracing — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v8_7",
+      "scope": "s",
+      "summary": "distributed tracing — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v8_8",
+      "scope": "s",
+      "summary": "distributed tracing — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v8_9",
+      "scope": "s",
+      "summary": "distributed tracing — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t9",
+      "scope": "s",
+      "summary": "service metrics — we decided to record RED metrics per endpoint",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v9_1",
+      "scope": "s",
+      "summary": "service metrics — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v9_2",
+      "scope": "s",
+      "summary": "service metrics — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v9_3",
+      "scope": "s",
+      "summary": "service metrics — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v9_4",
+      "scope": "s",
+      "summary": "service metrics — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v9_5",
+      "scope": "s",
+      "summary": "service metrics — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v9_6",
+      "scope": "s",
+      "summary": "service metrics — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v9_7",
+      "scope": "s",
+      "summary": "service metrics — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v9_8",
+      "scope": "s",
+      "summary": "service metrics — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v9_9",
+      "scope": "s",
+      "summary": "service metrics — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t10",
+      "scope": "s",
+      "summary": "deployment rollout strategy — we decided to roll out with a canary then blue-green",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v10_1",
+      "scope": "s",
+      "summary": "deployment rollout strategy — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v10_2",
+      "scope": "s",
+      "summary": "deployment rollout strategy — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v10_3",
+      "scope": "s",
+      "summary": "deployment rollout strategy — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v10_4",
+      "scope": "s",
+      "summary": "deployment rollout strategy — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v10_5",
+      "scope": "s",
+      "summary": "deployment rollout strategy — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v10_6",
+      "scope": "s",
+      "summary": "deployment rollout strategy — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v10_7",
+      "scope": "s",
+      "summary": "deployment rollout strategy — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v10_8",
+      "scope": "s",
+      "summary": "deployment rollout strategy — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v10_9",
+      "scope": "s",
+      "summary": "deployment rollout strategy — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t11",
+      "scope": "s",
+      "summary": "caching layer — we decided to cache hot reads in Redis with a 60-second TTL",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v11_1",
+      "scope": "s",
+      "summary": "caching layer — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v11_2",
+      "scope": "s",
+      "summary": "caching layer — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v11_3",
+      "scope": "s",
+      "summary": "caching layer — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v11_4",
+      "scope": "s",
+      "summary": "caching layer — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v11_5",
+      "scope": "s",
+      "summary": "caching layer — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v11_6",
+      "scope": "s",
+      "summary": "caching layer — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v11_7",
+      "scope": "s",
+      "summary": "caching layer — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v11_8",
+      "scope": "s",
+      "summary": "caching layer — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v11_9",
+      "scope": "s",
+      "summary": "caching layer — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t12",
+      "scope": "s",
+      "summary": "API pagination — we decided to paginate with opaque cursors instead of offsets",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v12_1",
+      "scope": "s",
+      "summary": "API pagination — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v12_2",
+      "scope": "s",
+      "summary": "API pagination — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v12_3",
+      "scope": "s",
+      "summary": "API pagination — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v12_4",
+      "scope": "s",
+      "summary": "API pagination — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v12_5",
+      "scope": "s",
+      "summary": "API pagination — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v12_6",
+      "scope": "s",
+      "summary": "API pagination — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v12_7",
+      "scope": "s",
+      "summary": "API pagination — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v12_8",
+      "scope": "s",
+      "summary": "API pagination — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v12_9",
+      "scope": "s",
+      "summary": "API pagination — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t13",
+      "scope": "s",
+      "summary": "data encryption at rest — we decided to encrypt data at rest with AES-256",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v13_1",
+      "scope": "s",
+      "summary": "data encryption at rest — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v13_2",
+      "scope": "s",
+      "summary": "data encryption at rest — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v13_3",
+      "scope": "s",
+      "summary": "data encryption at rest — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v13_4",
+      "scope": "s",
+      "summary": "data encryption at rest — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v13_5",
+      "scope": "s",
+      "summary": "data encryption at rest — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v13_6",
+      "scope": "s",
+      "summary": "data encryption at rest — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v13_7",
+      "scope": "s",
+      "summary": "data encryption at rest — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v13_8",
+      "scope": "s",
+      "summary": "data encryption at rest — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v13_9",
+      "scope": "s",
+      "summary": "data encryption at rest — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t14",
+      "scope": "s",
+      "summary": "backup and restore — we decided to back up nightly with 90-day retention",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v14_1",
+      "scope": "s",
+      "summary": "backup and restore — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v14_2",
+      "scope": "s",
+      "summary": "backup and restore — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v14_3",
+      "scope": "s",
+      "summary": "backup and restore — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v14_4",
+      "scope": "s",
+      "summary": "backup and restore — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v14_5",
+      "scope": "s",
+      "summary": "backup and restore — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v14_6",
+      "scope": "s",
+      "summary": "backup and restore — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v14_7",
+      "scope": "s",
+      "summary": "backup and restore — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v14_8",
+      "scope": "s",
+      "summary": "backup and restore — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v14_9",
+      "scope": "s",
+      "summary": "backup and restore — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t15",
+      "scope": "s",
+      "summary": "feature flag rollout — we decided to gate features behind LaunchDarkly flags",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v15_1",
+      "scope": "s",
+      "summary": "feature flag rollout — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v15_2",
+      "scope": "s",
+      "summary": "feature flag rollout — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v15_3",
+      "scope": "s",
+      "summary": "feature flag rollout — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v15_4",
+      "scope": "s",
+      "summary": "feature flag rollout — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v15_5",
+      "scope": "s",
+      "summary": "feature flag rollout — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v15_6",
+      "scope": "s",
+      "summary": "feature flag rollout — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v15_7",
+      "scope": "s",
+      "summary": "feature flag rollout — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v15_8",
+      "scope": "s",
+      "summary": "feature flag rollout — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v15_9",
+      "scope": "s",
+      "summary": "feature flag rollout — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t16",
+      "scope": "s",
+      "summary": "configuration management — we decided to manage configuration via env vars and Vault",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v16_1",
+      "scope": "s",
+      "summary": "configuration management — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v16_2",
+      "scope": "s",
+      "summary": "configuration management — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v16_3",
+      "scope": "s",
+      "summary": "configuration management — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v16_4",
+      "scope": "s",
+      "summary": "configuration management — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v16_5",
+      "scope": "s",
+      "summary": "configuration management — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v16_6",
+      "scope": "s",
+      "summary": "configuration management — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v16_7",
+      "scope": "s",
+      "summary": "configuration management — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v16_8",
+      "scope": "s",
+      "summary": "configuration management — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v16_9",
+      "scope": "s",
+      "summary": "configuration management — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "t17",
+      "scope": "s",
+      "summary": "HTTP error status codes — we decided to return RFC 7807 problem+json error bodies",
+      "publish": true
+    },
+    {
+      "op": "push",
+      "as": "v17_1",
+      "scope": "s",
+      "summary": "HTTP error status codes — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "v17_2",
+      "scope": "s",
+      "summary": "HTTP error status codes — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "v17_3",
+      "scope": "s",
+      "summary": "HTTP error status codes — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "v17_4",
+      "scope": "s",
+      "summary": "HTTP error status codes — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "v17_5",
+      "scope": "s",
+      "summary": "HTTP error status codes — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "v17_6",
+      "scope": "s",
+      "summary": "HTTP error status codes — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "v17_7",
+      "scope": "s",
+      "summary": "HTTP error status codes — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "v17_8",
+      "scope": "s",
+      "summary": "HTTP error status codes — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "v17_9",
+      "scope": "s",
+      "summary": "HTTP error status codes — migration considerations, note 9"
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about outbound request timeouts?",
+      "expect": {
+        "mustContain": "t0",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t0"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about retry and backoff policy?",
+      "expect": {
+        "mustContain": "t1",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t1"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about authentication and tokens?",
+      "expect": {
+        "mustContain": "t2",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t2"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about rate limiting?",
+      "expect": {
+        "mustContain": "t3",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t3"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about database storage engine?",
+      "expect": {
+        "mustContain": "t4",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t4"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about event delivery semantics?",
+      "expect": {
+        "mustContain": "t5",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t5"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about consumer idempotency?",
+      "expect": {
+        "mustContain": "t6",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t6"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about structured logging?",
+      "expect": {
+        "mustContain": "t7",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t7"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about distributed tracing?",
+      "expect": {
+        "mustContain": "t8",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t8"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about service metrics?",
+      "expect": {
+        "mustContain": "t9",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t9"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about deployment rollout strategy?",
+      "expect": {
+        "mustContain": "t10",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t10"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about caching layer?",
+      "expect": {
+        "mustContain": "t11",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t11"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about API pagination?",
+      "expect": {
+        "mustContain": "t12",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t12"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about data encryption at rest?",
+      "expect": {
+        "mustContain": "t13",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t13"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about backup and restore?",
+      "expect": {
+        "mustContain": "t14",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t14"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about feature flag rollout?",
+      "expect": {
+        "mustContain": "t15",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t15"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about configuration management?",
+      "expect": {
+        "mustContain": "t16",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t16"
+        ]
+      }
+    },
+    {
+      "op": "query",
+      "scope": "s",
+      "text": "what did we decide about HTTP error status codes?",
+      "expect": {
+        "mustContain": "t17",
+        "mustMentionAny": [
+          "we decided"
+        ],
+        "rawBaseline": [
+          "t17"
+        ]
+      }
+    }
+  ]
+}

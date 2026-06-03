@@ -56,7 +56,7 @@ func (r *Report) Pass() bool {
 
 // Run plays a scenario against the engine. If traceW is non-nil, each query
 // turn's TurnMetric is written to it as one JSON line.
-func Run(ctx context.Context, e *engine.Engine, sc *Scenario, traceW io.Writer, mode core.QueryMode) (*Report, error) {
+func Run(ctx context.Context, e *engine.Engine, sc *Scenario, traceW io.Writer, mode core.QueryMode, hierarchical bool) (*Report, error) {
 	scopes := map[string]core.ID{}
 	arts := map[string]core.ID{}
 
@@ -151,12 +151,21 @@ func Run(ctx context.Context, e *engine.Engine, sc *Scenario, traceW io.Writer, 
 			}
 			scopes[t.ID] = ns.ID
 
+		case "rollup":
+			scope, err := resolveScope(t.Scope)
+			if err != nil {
+				return nil, fmt.Errorf("turn %d: %w", i, err)
+			}
+			if err := e.RollupScope(ctx, scope, t.Summary); err != nil {
+				return nil, fmt.Errorf("turn %d rollup: %w", i, err)
+			}
+
 		case "query":
 			scope, err := resolveScope(t.Scope)
 			if err != nil {
 				return nil, fmt.Errorf("turn %d: %w", i, err)
 			}
-			m, err := evalQuery(ctx, e, i, sc.TopK, scope, t, arts, mode)
+			m, err := evalQuery(ctx, e, i, sc.TopK, scope, t, arts, mode, hierarchical)
 			if err != nil {
 				return nil, fmt.Errorf("turn %d query: %w", i, err)
 			}
@@ -209,10 +218,10 @@ func Run(ctx context.Context, e *engine.Engine, sc *Scenario, traceW io.Writer, 
 	return rep, nil
 }
 
-func evalQuery(ctx context.Context, e *engine.Engine, turnIdx, topK int, scope core.ID, t Turn, arts map[string]core.ID, mode core.QueryMode) (TurnMetric, error) {
+func evalQuery(ctx context.Context, e *engine.Engine, turnIdx, topK int, scope core.ID, t Turn, arts map[string]core.ID, mode core.QueryMode, hierarchical bool) (TurnMetric, error) {
 	m := TurnMetric{Turn: turnIdx, Query: t.Text, ForbidOK: true, Met: true}
 
-	_, hits, err := e.Query(ctx, core.Query{Scope: scope, Text: t.Text, Detail: core.DetailOverview, TopK: topK, Mode: mode})
+	_, hits, err := e.Query(ctx, core.Query{Scope: scope, Text: t.Text, Detail: core.DetailOverview, TopK: topK, Mode: mode, Hierarchical: hierarchical})
 	if err != nil {
 		return m, err
 	}

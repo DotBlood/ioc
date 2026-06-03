@@ -50,9 +50,14 @@ Rules: keep summaries short and specific; prefer querying over re-reading; raw c
 context, summaries do not. Visibility is bottom-up: you see your own scope, your ancestors, and
 siblings' PUBLISHED artifacts.
 
-ioc_query returns a query_id (inspect with ioc_trace; list recent ones with ioc_list_traces) and a
-weak_match flag. If weak_match is true (top score below ~0.45), there is no specific stored artifact
-for your question — do NOT present the returned general context as a precise answer.`
+ioc_query returns a query_id (inspect with ioc_trace; list recent ones with ioc_list_traces) plus
+weak_match, top_score and margin. weak_match uses a per-embedder confidence floor; if it is true
+(or margin between the top two hits is tiny), there is no specific stored artifact for your question
+— do NOT present the returned general context as a precise answer; say you don't have it.
+
+Scaling: if a scope accumulates many artifacts, split work into sub-scopes, call ioc_rollup on each
+with a short "what this scope is about" summary, then query the parent with hierarchical=true — IOC
+ranks the rollups first and searches only the best scopes (coarse→fine).`
 
 type ioc struct {
 	mu sync.Mutex
@@ -122,6 +127,7 @@ func (a *ioc) register(s *server.MCPServer) {
 		mcp.WithString("tier", mcp.Description("worktree|workspace (empty = both)")),
 		mcp.WithNumber("topk", mcp.Description("max results (default 5)")),
 		mcp.WithNumber("min_score", mcp.Description("drop hits with cosine score below this (0 = keep all)")),
+		mcp.WithBoolean("hierarchical", mcp.Description("coarse→fine: rank scope rollups, then search within top scopes (needs ioc_rollup on sub-scopes)")),
 	), a.query)
 
 	s.AddTool(mcp.NewTool("ioc_list_traces",
@@ -161,6 +167,12 @@ func (a *ioc) register(s *server.MCPServer) {
 		mcp.WithString("scope", mcp.Required(), mcp.Description("scope ID")),
 		mcp.WithString("summary", mcp.Required(), mcp.Description("consolidated summary text")),
 	), a.consolidate)
+
+	s.AddTool(mcp.NewTool("ioc_rollup",
+		mcp.WithDescription("Attach a short summary representing a scope's contents, so hierarchical queries can rank scopes and search inside the best ones. Use on sub-scopes when you have many."),
+		mcp.WithString("scope", mcp.Required(), mcp.Description("scope ID")),
+		mcp.WithString("summary", mcp.Required(), mcp.Description("what this scope is about")),
+	), a.rollup)
 
 	s.AddTool(mcp.NewTool("ioc_crossversion",
 		mcp.WithDescription("Archive the scope version and open vN+1 seeded with distilled constraints/lessons."),
@@ -239,25 +251,50 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	qid, hits, err := a.e.Query(ctx, core.Query{
-		Scope:    scopeID,
-		Text:     text,
-		Detail:   parseDetail(r.GetString("detail", "overview")),
-		TopK:     r.GetInt("topk", 5),
-		Tier:     parseTier(r.GetString("tier", "")),
-		MinScore: r.GetFloat("min_score", 0),
+		Scope:        scopeID,
+		Text:         text,
+		Detail:       parseDetail(r.GetString("detail", "overview")),
+		TopK:         r.GetInt("topk", 5),
+		Tier:         parseTier(r.GetString("tier", "")),
+		MinScore:     r.GetFloat("min_score", 0),
+		Hierarchical: r.GetBool("hierarchical", false),
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	weak := len(hits) == 0 || hits[0].Score < weakThreshold
+	var top, margin float64
+	if len(hits) > 0 {
+		top = hits[0].Score
+	}
+	if len(hits) > 1 {
+		margin = hits[0].Score - hits[1].Score
+	}
+	weak := len(hits) == 0 || top < core.ConfidenceFloor(a.e.EmbModel())
 	return jsonResult(map[string]any{
 		"query_id":   qid.String(),
 		"weak_match": weak,
+		"top_score":  top,
+		"margin":     margin,
 		"hits":       hitsOut(hits),
 	})
 }
 
-const weakThreshold = 0.45
+func (a *ioc) rollup(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	id, err := requireID(r, "scope")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	summary, err := r.RequireString("summary")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if err := a.e.RollupScope(ctx, id, summary); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return jsonResult(map[string]any{"rolled_up": id.String()})
+}
 
 func (a *ioc) listTraces(_ context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	a.mu.Lock()

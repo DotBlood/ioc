@@ -34,7 +34,12 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 		return core.NilID, nil, err
 	}
 
-	arts, err := e.visibleArtifacts(q.Scope, q.Tier)
+	var arts []core.Artifact
+	if q.Hierarchical {
+		arts, err = e.coarseToFineCandidates(q.Scope, qvec, q.CoarseK, q.Tier)
+	} else {
+		arts, err = e.visibleArtifacts(q.Scope, q.Tier)
+	}
 	if err != nil {
 		return core.NilID, nil, err
 	}

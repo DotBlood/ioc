@@ -106,6 +106,11 @@ type Scope struct {
 	Archived   bool      `json:"archived"`    // superseded by a newer version
 	ForkedFrom ID        `json:"forked_from"` // scope this was forked from (idea-evolution graph)
 	CreatedAt  time.Time `json:"created_at"`
+
+	// Rollup: a representative summary+embedding of the scope's contents, set by
+	// RollupScope. Used by hierarchical (coarse→fine) retrieval to rank scopes.
+	RollupSummary string       `json:"rollup_summary,omitempty"`
+	RollupEmbRef  EmbeddingRef `json:"rollup_emb_ref,omitempty"`
 }
 
 // Artifact is a leaf result/insight. Full content lives in CAS (cold); the
@@ -154,8 +159,25 @@ type Query struct {
 	Detail   Detail    // start cheap (DetailOverview)
 	TopK     int       //
 	Tier     Tier      // 0 = both tiers
-	Mode     QueryMode // hybrid (default) or vector-only
+	Mode     QueryMode // vector (default) or hybrid
 	MinScore float64   // drop hits whose cosine score < MinScore (0 = keep all)
+
+	Hierarchical bool // coarse→fine: rank scope rollups, then search within top scopes
+	CoarseK      int  // # of scopes to keep in the coarse stage (default 3)
+}
+
+// ConfidenceFloor returns the cosine score below which a top hit should be
+// treated as "no specific match" (weak_match) for a given embedder. Calibration
+// is approximate and embedder-specific — not a solved problem.
+func ConfidenceFloor(model string) float64 {
+	switch model {
+	case "BAAI/bge-small-en-v1.5":
+		return 0.68 // in-domain floor ~0.6; real hits 0.78–0.87
+	case "mock-bow":
+		return 0.0 // lexical toy — don't flag weak
+	default:
+		return 0.5
+	}
 }
 
 // Hit is one retrieval result. Content is populated only at DetailRaw.

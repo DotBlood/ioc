@@ -119,14 +119,12 @@ func (e *Engine) CrossVersion(ctx context.Context, scope core.ID, seed core.Seed
 		return core.Scope{}, err
 	}
 
-	// One seed artifact per constraint/lesson line.
+	// One seed artifact per constraint/lesson line, embedded as CLEAN text (no
+	// "Constraint:/Lesson:" prefix — the prefix is a constant token that dilutes
+	// similarity; Kind=KindSeed already marks these as carried-forward facts).
 	var seeds []string
-	for _, c := range splitLines(seed.Constraints) {
-		seeds = append(seeds, "Constraint: "+c)
-	}
-	for _, l := range splitLines(seed.Lessons) {
-		seeds = append(seeds, "Lesson: "+l)
-	}
+	seeds = append(seeds, splitLines(seed.Constraints)...)
+	seeds = append(seeds, splitLines(seed.Lessons)...)
 	for i, text := range seeds {
 		ref, err := e.storeSummaryEmbedding(ctx, text)
 		if err != nil {

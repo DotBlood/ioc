@@ -63,6 +63,10 @@ func main() {
 		err = traceCmd(args)
 	case "traces":
 		err = traces(args)
+	case "rollup":
+		err = rollupCmd(args)
+	case "gen-scenario":
+		err = genScenario(args)
 	default:
 		usage()
 		os.Exit(2)
@@ -129,7 +133,7 @@ func runScenario(args []string) int {
 	fs := flag.NewFlagSet("run-scenario", flag.ExitOnError)
 	dir := fs.String("dir", filepath.Join(os.TempDir(), "ioc-run"), "run data directory (reset each run)")
 	em := fs.String("embed", "", "embedder endpoint (empty=mock)")
-	mode := fs.String("mode", "vector", "retrieval mode: vector|hybrid (hybrid is experimental)")
+	mode := fs.String("mode", "vector", "retrieval mode: vector|hybrid|hierarchical")
 	// Allow the scenario path before or after flags (Go's flag pkg otherwise
 	// stops at the first positional, silently dropping trailing -embed/-dir).
 	scenarioPath, rest := splitPositional(args)
@@ -163,7 +167,8 @@ func runScenario(args []string) int {
 	}
 	defer tf.Close()
 
-	rep, err := eval.Run(ctx, e, sc, tf, parseMode(*mode))
+	qm, hier := parseModeSpec(*mode)
+	rep, err := eval.Run(ctx, e, sc, tf, qm, hier)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: run:", err)
 		return 1
@@ -267,7 +272,7 @@ func query(args []string) error {
 	detail := fs.String("detail", "overview", "overview|entry|raw")
 	topk := fs.Int("topk", 5, "top-K")
 	tier := fs.String("tier", "", "worktree|workspace (empty=both)")
-	mode := fs.String("mode", "vector", "vector|hybrid (hybrid is experimental)")
+	mode := fs.String("mode", "vector", "vector|hybrid|hierarchical")
 	minScore := fs.Float64("min-score", 0, "drop hits with cosine score below this")
 	_ = fs.Parse(args)
 
@@ -281,19 +286,21 @@ func query(args []string) error {
 	}
 	defer e.Close()
 
+	qm, hier := parseModeSpec(*mode)
 	qid, hits, err := e.Query(context.Background(), core.Query{
-		Scope:    scopeID,
-		Text:     *text,
-		Detail:   parseDetail(*detail),
-		TopK:     *topk,
-		Tier:     parseTier(*tier),
-		Mode:     parseMode(*mode),
-		MinScore: *minScore,
+		Scope:        scopeID,
+		Text:         *text,
+		Detail:       parseDetail(*detail),
+		TopK:         *topk,
+		Tier:         parseTier(*tier),
+		Mode:         qm,
+		Hierarchical: hier,
+		MinScore:     *minScore,
 	})
 	if err != nil {
 		return err
 	}
-	return printJSON(queryOut(qid, hits))
+	return printJSON(queryOut(qid, hits, e.EmbModel()))
 }
 
 // traces lists recent query traces (newest first) so a query_id can be inspected.
@@ -501,6 +508,133 @@ func traceCmd(args []string) error {
 	return printJSON(tr)
 }
 
+func rollupCmd(args []string) error {
+	fs := flag.NewFlagSet("rollup", flag.ExitOnError)
+	dir, em := commonFlags(fs)
+	scope := fs.String("scope", "", "scope ID")
+	summary := fs.String("summary", "", "rollup summary representing the scope")
+	_ = fs.Parse(args)
+	scopeID, err := parseScopeID(*scope)
+	if err != nil {
+		return err
+	}
+	e, err := openEngine(*dir, *em)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	if err := e.RollupScope(context.Background(), scopeID, *summary); err != nil {
+		return err
+	}
+	return printJSON(map[string]any{"rolled_up": scopeID.String()})
+}
+
+// genScenario writes a deterministic scale scenario. -shape flat puts all
+// artifacts in one session; tree splits them across one session per cluster with
+// a rollup each (for hierarchical retrieval). Recall queries are identical in both.
+func genScenario(args []string) error {
+	fs := flag.NewFlagSet("gen-scenario", flag.ExitOnError)
+	n := fs.Int("n", 180, "total artifacts")
+	clusters := fs.Int("clusters", 18, "topic clusters")
+	shape := fs.String("shape", "tree", "flat|tree")
+	out := fs.String("out", "", "output JSON path (required)")
+	_ = fs.Parse(args)
+	if *out == "" {
+		return fmt.Errorf("gen-scenario: -out required")
+	}
+
+	topics := []string{
+		"outbound request timeouts", "retry and backoff policy", "authentication and tokens",
+		"rate limiting", "database storage engine", "event delivery semantics",
+		"consumer idempotency", "structured logging", "distributed tracing", "service metrics",
+		"deployment rollout strategy", "caching layer", "API pagination", "data encryption at rest",
+		"backup and restore", "feature flag rollout", "configuration management", "HTTP error status codes",
+	}
+	// Distinctive per-topic decision (avoids shared boilerplate that defeats
+	// sentence embeddings — the target must be topically discriminable).
+	decisions := []string{
+		"time out outbound calls after 2 seconds", "retry with exponential backoff, max 3 attempts",
+		"use RS256 JWT access tokens with a 15-minute TTL", "rate-limit with a token bucket per API key",
+		"store data in PostgreSQL 16 using JSONB columns", "guarantee at-least-once event delivery",
+		"deduplicate events by a stable dedup key", "emit structured JSON logs",
+		"propagate the W3C traceparent header for tracing", "record RED metrics per endpoint",
+		"roll out with a canary then blue-green", "cache hot reads in Redis with a 60-second TTL",
+		"paginate with opaque cursors instead of offsets", "encrypt data at rest with AES-256",
+		"back up nightly with 90-day retention", "gate features behind LaunchDarkly flags",
+		"manage configuration via env vars and Vault", "return RFC 7807 problem+json error bodies",
+	}
+	aspects := []string{"latency", "cost", "security", "testing", "rollback", "monitoring", "capacity", "compatibility", "migration"}
+	c := *clusters
+	if c > len(topics) {
+		c = len(topics)
+	}
+	per := *n / c
+	if per < 2 {
+		per = 2
+	}
+	tree := *shape == "tree"
+
+	sc := eval.Scenario{Name: "scale-" + *shape, TopK: 5}
+	add := func(t eval.Turn) { sc.Turns = append(sc.Turns, t) }
+
+	add(eval.Turn{Op: "create_scope", ID: "wt", Parent: "root", Role: "worktree", Title: "platform"})
+	add(eval.Turn{Op: "create_scope", ID: "ws", Parent: "wt", Role: "workspace", Title: "decisions"})
+	if !tree {
+		add(eval.Turn{Op: "create_scope", ID: "s", Parent: "ws", Role: "session", Title: "log"})
+	}
+
+	scopeOf := func(i int) string {
+		if tree {
+			return fmt.Sprintf("s%d", i)
+		}
+		return "s"
+	}
+	for i := 0; i < c; i++ {
+		topic := topics[i]
+		if tree {
+			add(eval.Turn{Op: "create_scope", ID: fmt.Sprintf("s%d", i), Parent: "ws", Role: "session", Title: topic})
+		}
+		add(eval.Turn{Op: "push", Scope: scopeOf(i), As: fmt.Sprintf("t%d", i), Publish: true,
+			Summary: fmt.Sprintf("%s — we decided to %s", topic, decisions[i])})
+		for j := 1; j < per; j++ {
+			add(eval.Turn{Op: "push", Scope: scopeOf(i), As: fmt.Sprintf("v%d_%d", i, j),
+				Summary: fmt.Sprintf("%s — %s considerations, note %d", topic, aspects[(j-1)%len(aspects)], j)})
+		}
+		if tree {
+			// Distinctive rollup (topic + its decision) — coarse retrieval can
+			// only disambiguate scopes if their rollups are distinctive.
+			add(eval.Turn{Op: "rollup", Scope: fmt.Sprintf("s%d", i),
+				Summary: fmt.Sprintf("%s — decided to %s", topic, decisions[i])})
+		}
+	}
+
+	qScope := "s"
+	if tree {
+		qScope = "ws"
+	}
+	for i := 0; i < c; i++ {
+		topic := topics[i]
+		add(eval.Turn{Op: "query", Scope: qScope,
+			Text: fmt.Sprintf("what did we decide about %s?", topic),
+			Expect: &eval.Expectation{
+				MustContain:    fmt.Sprintf("t%d", i),
+				MustMentionAny: []string{"we decided"},
+				MaxDrills:      0,
+				RawBaseline:    []string{fmt.Sprintf("t%d", i)},
+			}})
+	}
+
+	data, err := json.MarshalIndent(sc, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(*out, append(data, '\n'), 0o644); err != nil {
+		return err
+	}
+	fmt.Printf("wrote %s: %d artifacts, %d clusters, shape=%s\n", *out, c*per, c, *shape)
+	return nil
+}
+
 // --- helpers: parsing + output shaping ---
 
 // splitPositional pulls the first bare (non-flag) token out as a positional,
@@ -601,21 +735,36 @@ func parseTier(s string) core.Tier {
 	}
 }
 
-func parseMode(s string) core.QueryMode {
-	if strings.ToLower(s) == "hybrid" {
-		return core.ModeHybrid
+// parseModeSpec maps a -mode string to (retrieval mode, hierarchical?).
+//   vector (default) | hybrid (experimental) | hierarchical (coarse→fine over rollups)
+func parseModeSpec(s string) (core.QueryMode, bool) {
+	switch strings.ToLower(s) {
+	case "hybrid":
+		return core.ModeHybrid, false
+	case "hierarchical":
+		return core.ModeVector, true
+	default:
+		return core.ModeVector, false
 	}
-	return core.ModeVector
 }
 
-// weakThreshold: a top cosine below this means "no strong match" for bge-small.
-const weakThreshold = 0.45
-
-func queryOut(qid core.ID, hits []core.Hit) map[string]any {
-	weak := len(hits) == 0 || hits[0].Score < weakThreshold
+// queryOut builds the query response: weak_match uses a per-embedder confidence
+// floor (not a fixed constant), plus top_score and margin (top1-top2) as a
+// relative signal. Calibration is heuristic.
+func queryOut(qid core.ID, hits []core.Hit, model string) map[string]any {
+	var top, margin float64
+	if len(hits) > 0 {
+		top = hits[0].Score
+	}
+	if len(hits) > 1 {
+		margin = hits[0].Score - hits[1].Score
+	}
+	weak := len(hits) == 0 || top < core.ConfidenceFloor(model)
 	return map[string]any{
 		"query_id":   qid.String(),
 		"weak_match": weak,
+		"top_score":  top,
+		"margin":     margin,
 		"hits":       hitsOut(hits),
 	}
 }
