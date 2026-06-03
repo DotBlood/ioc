@@ -30,6 +30,11 @@ func NewMockEmbedder(dims int) *MockEmbedder {
 func (m *MockEmbedder) Dims() int     { return m.dims }
 func (m *MockEmbedder) Model() string { return "mock-bow" }
 
+// EmbedQuery is identical to Embed for the mock (no instruction tuning).
+func (m *MockEmbedder) EmbedQuery(ctx context.Context, texts []string) ([][]float32, error) {
+	return m.Embed(ctx, texts)
+}
+
 // Embed produces one normalized vector per text via hashed bag-of-words.
 func (m *MockEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {

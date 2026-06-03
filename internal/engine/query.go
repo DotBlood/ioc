@@ -29,7 +29,7 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 		topK = defaultTopK
 	}
 
-	qvec, err := e.embedText(ctx, q.Text)
+	qvec, err := e.embedQuery(ctx, q.Text)
 	if err != nil {
 		return core.NilID, nil, err
 	}

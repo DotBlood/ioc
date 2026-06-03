@@ -9,8 +9,11 @@ import (
 
 // Embedder turns text into fixed-dimension vectors.
 type Embedder interface {
-	// Embed returns one vector per input text (normalized, so cosine == dot product).
+	// Embed encodes documents/passages (normalized, so cosine == dot product).
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
+	// EmbedQuery encodes search queries. For instruction-tuned models (e.g. bge)
+	// this prepends the model's retrieval instruction; for others it equals Embed.
+	EmbedQuery(ctx context.Context, texts []string) ([][]float32, error)
 	// Dims is the vector dimension.
 	Dims() int
 	// Model is a human-readable model identifier (recorded in traces).

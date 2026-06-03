@@ -74,8 +74,20 @@ func (e *Engine) coarseToFineCandidates(viewpoint core.ID, qvec []float32, coars
 		return e.visibleArtifacts(viewpoint, tier) // no rollups → flat
 	}
 
+	// Adaptive selection: always keep the top minK scopes, then keep more only
+	// while their rollup score is within `margin` of the top — up to coarseK.
+	// Narrow when one scope dominates; wider when several are close.
+	const margin = 0.05
+	const minK = 3
+	ranked := rset.Search(qvec, rset.Len())
 	selected := map[core.ID]bool{viewpoint: true}
-	for _, r := range rset.Search(qvec, coarseK) {
+	for i, r := range ranked {
+		if i >= coarseK {
+			break
+		}
+		if i >= minK && r.Score < ranked[0].Score-margin {
+			break
+		}
 		if id, err := core.ParseID(r.ID); err == nil {
 			selected[id] = true
 		}

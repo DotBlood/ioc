@@ -7,10 +7,22 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
 )
+
+// bgeQueryInstruction is bge-v1.5's recommended retrieval prefix for the QUERY
+// side (passages are encoded without it). Override via IOC_QUERY_INSTRUCTION.
+const bgeQueryInstruction = "Represent this sentence for searching relevant passages: "
+
+func defaultQueryInstruction() string {
+	if v := os.Getenv("IOC_QUERY_INSTRUCTION"); v != "" {
+		return v
+	}
+	return bgeQueryInstruction
+}
 
 // HTTPEmbedder talks to an external embedding service (py/embed_server.py).
 //
@@ -21,32 +33,46 @@ import (
 // The dimension is runtime-discovered on the first successful response and then fixed.
 // NOTE: this is an EMBEDDING model, not a reasoning LLM. IOC never calls an LLM.
 type HTTPEmbedder struct {
-	client  *http.Client
-	baseURL string
-	model   atomic.Value // string
-	dims    atomic.Int32
+	client     *http.Client
+	baseURL    string
+	queryInstr string
+	model      atomic.Value // string
+	dims       atomic.Int32
 }
 
 // NewHTTPEmbedder builds an embedder for a TCP URL or a Unix socket endpoint.
 func NewHTTPEmbedder(endpoint string) *HTTPEmbedder {
+	e := &HTTPEmbedder{queryInstr: defaultQueryInstruction()}
 	if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
-		return &HTTPEmbedder{
-			client:  &http.Client{Timeout: 120 * time.Second},
-			baseURL: strings.TrimRight(endpoint, "/"),
-		}
+		e.client = &http.Client{Timeout: 120 * time.Second}
+		e.baseURL = strings.TrimRight(endpoint, "/")
+		return e
 	}
 	// Unix socket: "unix:/path" or bare "/path".
 	sock := strings.TrimPrefix(endpoint, "unix:")
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", sock)
+	e.client = &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "unix", sock)
+			},
 		},
+		Timeout: 120 * time.Second,
 	}
-	return &HTTPEmbedder{
-		client:  &http.Client{Transport: transport, Timeout: 120 * time.Second},
-		baseURL: "http://unix",
+	e.baseURL = "http://unix"
+	return e
+}
+
+// EmbedQuery prepends the retrieval query instruction to each text, then embeds.
+func (e *HTTPEmbedder) EmbedQuery(ctx context.Context, texts []string) ([][]float32, error) {
+	if e.queryInstr == "" {
+		return e.Embed(ctx, texts)
 	}
+	pref := make([]string, len(texts))
+	for i, t := range texts {
+		pref[i] = e.queryInstr + t
+	}
+	return e.Embed(ctx, pref)
 }
 
 type embedRequest struct {

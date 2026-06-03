@@ -91,9 +91,17 @@ func (e *Engine) ensureEmb(dims int) error {
 	return nil
 }
 
-// embedText embeds a single string into a vector.
+// embedText embeds a single document/passage into a vector.
 func (e *Engine) embedText(ctx context.Context, text string) ([]float32, error) {
-	batch, err := e.embedder.Embed(ctx, []string{text})
+	return one(e.embedder.Embed(ctx, []string{text}))
+}
+
+// embedQuery embeds a single search query (instruction-prefixed for bge).
+func (e *Engine) embedQuery(ctx context.Context, text string) ([]float32, error) {
+	return one(e.embedder.EmbedQuery(ctx, []string{text}))
+}
+
+func one(batch [][]float32, err error) ([]float32, error) {
 	if err != nil {
 		return nil, err
 	}
