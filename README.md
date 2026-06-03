@@ -1,180 +1,114 @@
-# IOC — Stateful Knowledge Graph Runtime 
+# IOC
 
-[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8)](https://go.dev)
-[![License](https://img.shields.io/badge/license-Non_Commercial-blue)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
 
-Version: v0.1.0
+IOC is a **local-first, model-agnostic memory/context layer for working with LLMs** — a single
+model or many agents. See [`VISION.md`](VISION.md) for the full direction and
+[`docs/MODEL-CHANGES.md`](docs/MODEL-CHANGES.md) for how it diverges from the earlier v0.1 specs.
 
-IOC is a hybrid cognitive storage system that combines a **static knowledge graph** (disk-persisted facts, files, chat logs) with **stateful runtime state** (active graph, embeddings, summaries) and **temporal versioning** (anchor/delta snapshots with time-travel queries).
+> **Status: greenfield thin slice (v0.2 direction).** The repository currently holds a small,
+> end-to-end prototype whose purpose is to test one load-bearing claim ("the wall"):
+> mini-summary + embedding are good enough that an agent rarely drills to raw content, and memory
+> stays navigable across branch and version boundaries. It is intentionally not feature-complete.
+> The previous v0.1 engine lives in git history (branch `development/v0.2-review`).
 
-Designed for AI agents requiring deterministic retrieval, context isolation via formal scope hierarchy (Worktree → Workspace → Session → Artifact), and structural archiving — with **no LLM dependency** in the core engine.
+## Layout
 
----
+```
+internal/
+  core/      pure domain types (Scope, Artifact, Tier, Kind, Detail, Query, Hit, Seed, Trace)
+  embed/     Embedder interface + MockEmbedder (offline) + HTTPEmbedder (py/embed_server.py)
+  storage/   CAS (sha256+zstd), EmbeddingStore (float32), Meta (bbolt)
+  search/    brute-force cosine
+  engine/    public API: Open / Push / Query / Drill / Publish / SiblingOverview /
+             Ancestors / Fork / Consolidate / CrossVersion / Trace
+  eval/      scripted scenario runner + metrics; eval/scenarios/hoe.json
+cmd/
+  ioc/       CLI: run-scenario, embed-ping, and persistent memory commands
+  ioc-mcp/   stdio MCP server (agent-native surface)
+py/
+  embed_server.py   optional external embedding service (FastAPI); venv in py/.venv
+```
 
-## Quick start
+## Build & test
 
 ```bash
-# 1. Initialize IOC repository
-iocctl init
-
-# 2. Create scopes (auto-nests: worktree → workspace → session)
-iocctl scope create worktree
-iocctl scope create workspace
-iocctl scope create session
-
-# 3. Add an artifact
-iocctl artifact add <session-id> --text "IOC is a knowledge graph runtime"
-
-# 4. Search
-iocctl retrieval query "knowledge graph" --topk 5
-
-# 5. Archive the session
-iocctl scope archive <session-id>
-
-# 6. List archive snapshots
-iocctl archive list
-
-# 7. Restore from an archive
-iocctl scope restore <anchor-id>
+make build          # -> bin/ioc, bin/ioc-mcp
+make test           # go test ./...
+go run ./cmd/ioc run-scenario internal/eval/scenarios/hoe.json   # scenario on the offline mock embedder
 ```
 
----
+## Real embedder (real wall numbers)
 
-## Architecture
-
-```
-CLI / API
-    ↓
-Pipelines / Runtime          — orchestration, transient state
-    ↓
-Knowledge Runtime            — cognition semantics (scope, revision, lineage)
-    ↓
-Graph Engine (PURE)          — physical adjacency, CRUD, indexes
-    ↓
-Storage                      — bbolt (KV), CAS (SHA-256 zstd), Embedding (file)
-```
-
-| Layer | Package | Responsibility |
-|-------|---------|----------------|
-| CLI | `cmd/iocctl` | Cobra commands, input parsing |
-| API | `pkg/api` | Embeddable runtime for programmatic use |
-| Pipelines | `internal/pipeline` | Ingestion + Archive orchestration |
-| Session | `internal/session` | Ephemeral runtime state (not persisted) |
-| Knowledge | `internal/knowledge` | Scope, revision, lifecycle, lineage, archive, time-travel |
-| Graph | `internal/graph` | Pure in-memory graph (nodes, edges, BFS/DFS) |
-| Storage | `internal/store` | bbolt persistence, CAS file store, embedding store |
-| Embedding | `internal/embedding` | Embedder interface, mock, HTTP, weighted averaging |
-| Retrieval | `internal/retrieval` | Vector (BruteForce), text (BM25), RRF fusion, trace |
-| Model | `internal/model` | Core types: ID, Artifact, Edge, Lifecycle, Anchor |
-
----
-
-## CLI reference
-
-| Command | Description |
-|---------|-------------|
-| `iocctl init` | Initialize IOC data directory (`~/.ioc/`) |
-| `iocctl scope create <type>` | Create worktree / workspace / session |
-| `iocctl scope list` | List all scopes with state and type |
-| `iocctl scope archive <id>` | Archive a scope (snapshot + lifecycle transition) |
-| `iocctl scope restore <id>` | Restore a scope from archive anchor |
-| `iocctl artifact add <scope> [--text\|--file]` | Add artifact (stdin / `--text` / `--file`) |
-| `iocctl artifact get <id>` | Show artifact content and metadata |
-| `iocctl artifact revisions <id>` | List projection revisions |
-| `iocctl retrieval query <text> [--topk]` | Hybrid search (vector + BM25 + fusion) |
-| `iocctl retrieval trace <text> [--topk]` | Search with pipeline trace |
-| `iocctl archive list [--scope]` | List archive snapshots |
-| `iocctl archive show <id>` | Show anchor details |
-| `iocctl retention run` | Run retention sweep |
-| `--json` | JSON output for all commands |
-
----
-
-## Library usage
-
-```go
-import "github.com/DotBlood/ioc/pkg/api"
-
-ctx := context.Background()
-rt, err := api.Open(ctx, api.Config{RootDir: "/path/to/.ioc"})
-if err != nil {
-    log.Fatal(err)
-}
-defer rt.Close()
-
-// Create a scope
-scope, err := rt.CreateScope(ctx, api.CreateScopeRequest{
-    Type: "worktree",
-})
-if err != nil {
-    log.Fatal(err)
-}
-
-// Add an artifact
-id, err := rt.AddArtifact(ctx, scope.ScopeID, []byte("hello world"), "my artifact")
-if err != nil {
-    log.Fatal(err)
-}
-
-// Query
-results, err := rt.Query(ctx, "hello", 10)
-if err != nil {
-    log.Fatal(err)
-}
-
-// Trace
-trace, err := rt.Trace(ctx, "hello", 10)
-if err != nil {
-    log.Fatal(err)
-}
-```
-
----
-
-## Development
+The `-embed` endpoint is a TCP URL (`http://host:port`, works on Windows) or a Unix socket
+(`unix:/path`). Set up the service once via a virtualenv:
 
 ```bash
-make all         # tidy → fmt → vet → test → build
-make test        # go test -count=1 ./...
-make lint        # golangci-lint run ./...
-go build ./cmd/iocctl
+python -m venv py/.venv
+py/.venv/Scripts/python -m pip install -r py/requirements.txt   # Windows; */bin/* on Unix
+#   downloads BAAI/bge-small-en-v1.5 (~130MB) on first run
+
+# start it (TCP — works anywhere incl. Windows):
+IOC_EMBED_HOST=127.0.0.1 IOC_EMBED_PORT=8088 py/.venv/Scripts/python py/embed_server.py
+
+go run ./cmd/ioc embed-ping   -embed http://127.0.0.1:8088
+go run ./cmd/ioc run-scenario internal/eval/scenarios/hoe.json -embed http://127.0.0.1:8088
 ```
 
-Run single package tests:
+## Memory commands (drive IOC from the shell)
+
+Operate IOC as a persistent store (an agent can call these via the shell). All take `-dir`
+(persistent; default `.ioc-data`) and `-embed`. **One `-dir` must always use the SAME embedder** —
+mock and real embeddings are different vector spaces.
+
 ```bash
-go test ./internal/graph/
-go test ./internal/retrieval/
-go test ./pkg/api/
+ioc create-scope -role worktree -title proj                  # -> {"id": ...}
+ioc create-scope -parent <ID> -role session -title t
+ioc push  -scope <ID> -summary "..." [-content "..."|-content-file f] [-publish]
+ioc query -scope <ID> -text "..." [-detail overview|entry|raw] [-topk 5]
+ioc drill -artifact <ID> -detail raw
+ioc fork  -scope <ID> -title t
+ioc consolidate  -scope <ID> -summary "..."
+ioc crossversion -scope <ID> -constraints "..." -lessons "..."
+ioc siblings -scope <ID>      # published sibling artifacts
+ioc ancestors -scope <ID>
+ioc publish  -artifact <ID>
+ioc trace    -query <ID>
 ```
 
-Benchmarks (GOMAXPROCS=1 baseline):
+## MCP server (agent-native surface)
+
+`cmd/ioc-mcp` is a stdio MCP server exposing the engine as tools (`ioc_create_scope`, `ioc_push`,
+`ioc_query`, `ioc_drill`, `ioc_publish`, `ioc_siblings`, `ioc_ancestors`, `ioc_fork`,
+`ioc_consolidate`, `ioc_crossversion`, `ioc_trace`). Config via env `IOC_DIR`, `IOC_EMBED`.
+
 ```bash
-$env:GOMAXPROCS='1'; go test -bench=. -benchmem -count=5 ./internal/graph/ ./internal/retrieval/ ./internal/store/ ./internal/embedding/
+make build      # -> bin/ioc-mcp
 ```
 
----
+Register in Claude Code (`.mcp.json`), then reconnect so the tools appear:
 
-## Known limitations (v0.1)
+```json
+{
+  "mcpServers": {
+    "ioc": {
+      "command": "F:\\projects\\IOC\\bin\\ioc-mcp.exe",
+      "env": { "IOC_DIR": "F:\\projects\\IOC\\.ioc-data", "IOC_EMBED": "http://127.0.0.1:8088" }
+    }
+  }
+}
+```
 
-- **`Graph.Snapshot()`** — `ErrNotImplemented` (full snapshot persistence deferred to v0.2)
-- **`policy.PrunableRevisions()`** — `ErrNotImplemented` (retention policy not configurable per-scope)
-- **Vector search** — `BruteForceIndex` (O(N×dim) linear scan, no ANN index)
-- **BM25** — full rebuild on every `Index()` call, not incremental
-- **Embedding** — `MockEmbedder` in-process only; `HTTPEmbedder` requires external Python server
-- **Concurrency** — reads are safe; mutations (CreateScope, AddArtifact, ArchiveScope, RestoreScope) are NOT concurrent-safe
-- **No metadata scoring** — retrieval ranks by vector similarity + BM25 only
-- **No scope state reverse index** — listing scopes by state requires full scan
-- **CLI tests** — manual verification only
-- **Cross-worktree operations** — defined in spec, not implemented
+## Wall metrics (success targets)
 
----
+- **(a) overview-sufficiency** ≥ 0.80 — recall turns satisfied at `DetailOverview` with no drill-to-raw.
+- **(b) context ratio** ≤ 0.25 — tokens consumed via IOC vs the raw an agent would carry without it.
+- **(c) constraint survival** = pass — a distilled lesson surfaces after a version boundary.
+- **(d) recall@topK** ≥ 1.0 — expected items appear within top-K.
 
-## Docs
-[Devlog](devlog.md)   |   [Benchmarks](docs/benchmarks/v0.1.md)   |   [Methodology](docs/METHODOLOGY.md)   |   [Code style](docs/CODE-STYLE.md)
-
----
+With `MockEmbedder` these numbers validate the **pipeline** only (it is a lexical proxy). Real wall
+numbers require the real embedder via `-embed`.
 
 ## License
 
-Non-commercial open source — see [LICENSE](LICENSE) for details.
-Commercial use requires permission.
+IOC is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0) — see [LICENSE](LICENSE).

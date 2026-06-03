@@ -17,4 +17,11 @@ go.work.sum
 .vscode/
 AGENTS.md
 bin/
+dist/
 close/
+# Python embed-service virtualenv
+py/.venv/
+# local IOC data dirs
+.ioc-data/
+.ioc-mcp-data/
+.ioc-live/

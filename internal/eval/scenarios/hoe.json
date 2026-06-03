@@ -1,0 +1,69 @@
+{
+  "name": "hoe",
+  "topk": 5,
+  "turns": [
+    { "op": "create_scope", "id": "wt", "parent": "root", "role": "worktree", "title": "garden-tools" },
+    { "op": "create_scope", "id": "ws", "parent": "wt", "role": "workspace", "title": "tool-design" },
+    { "op": "create_scope", "id": "s1", "parent": "ws", "role": "session", "title": "stick-prototype" },
+
+    {
+      "op": "push", "scope": "s1", "kind": "insight", "as": "a_wood", "publish": true,
+      "summary": "the wooden tool head splits under load and is unsafe",
+      "content": "Bench test report for the wooden tool head prototype. We mounted a carved oak head onto the shaft and applied increasing downward force using a calibrated press. At roughly five kilograms of sustained load the wooden head developed a hairline crack at the neck, and at eight kilograms it fractured completely and separated from the shaft. The failure mode was consistent across three samples. Conclusion: a wooden head cannot safely carry the working loads expected for digging and chopping, and is therefore unsafe for the intended use."
+    },
+    {
+      "op": "push", "scope": "s1", "kind": "insight", "as": "a_grip", "publish": true,
+      "summary": "a longer handle improves leverage but adds weight for the user",
+      "content": "Ergonomics notes on handle length. We compared a short handle against a long handle for the same head mass. The longer handle measurably improved leverage and reduced the effort needed per stroke when breaking compacted soil. However the longer handle also increased the total tool weight and shifted the balance point forward, which tired the user's wrist over extended sessions. The recommendation is a medium-length handle as a compromise between leverage and fatigue for a typical adult user working a garden bed."
+    },
+
+    {
+      "op": "query", "scope": "s1",
+      "text": "what material should the tool head be made of",
+      "expect": {
+        "mustContain": "a_wood",
+        "mustMentionAny": ["wood", "split"],
+        "maxDrills": 0,
+        "rawBaseline": ["a_wood", "a_grip"]
+      }
+    },
+
+    { "op": "fork", "scope": "s1", "id": "f1", "title": "digging-stick" },
+    {
+      "op": "push", "scope": "f1", "kind": "insight", "as": "a_dig", "publish": true,
+      "summary": "the digging stick needs a sharp pointed tip to break soil",
+      "content": "Field notes from the digging-stick branch. A pointed, hardened tip penetrates compacted soil far better than a blunt end, and a slight taper helps lever clods out of the ground. This branch keeps the leverage findings from the stick prototype but explores a fundamentally different working end. The earlier load findings about the head remain relevant because the tip experiences similar stress concentrations at the neck where it meets the shaft."
+    },
+    {
+      "op": "query", "scope": "f1",
+      "text": "what did we learn about the head material and the load it carries",
+      "expect": {
+        "mustMentionAny": ["split", "load", "wood"],
+        "maxDrills": 0,
+        "rawBaseline": ["a_wood"]
+      }
+    },
+
+    {
+      "op": "consolidate", "scope": "s1",
+      "summary": "decision: adopt a metal head because earlier heads split and fractured under working load"
+    },
+    {
+      "op": "crossversion", "scope": "ws", "id": "ws2",
+      "constraints": "the tool head must be made of metal",
+      "lessons": "earlier non-metal heads fractured under working load and were unsafe"
+    },
+    { "op": "create_scope", "id": "sv2", "parent": "ws2", "role": "session", "title": "hoe-build" },
+
+    {
+      "op": "query", "scope": "sv2",
+      "text": "design the hoe head, which material should we use for it",
+      "expect": {
+        "mustMentionAny": ["metal"],
+        "forbidMention": ["wood", "wooden"],
+        "maxDrills": 0,
+        "rawBaseline": ["a_wood", "a_grip"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "name": "distractors",
+  "topk": 3,
+  "turns": [
+    { "op": "create_scope", "id": "wt", "parent": "root", "role": "worktree", "title": "service" },
+    { "op": "create_scope", "id": "ws", "parent": "wt", "role": "workspace", "title": "decisions" },
+    { "op": "create_scope", "id": "s", "parent": "ws", "role": "session", "title": "log" },
+
+    { "op": "push", "scope": "s", "kind": "insight", "as": "a_lock", "publish": true,
+      "summary": "use optimistic locking on the records table to prevent lost updates from concurrent writes",
+      "content": "Decision: adopt optimistic concurrency control. Each record carries a version column; a write must supply the version it read, and the update fails (and is retried) if the version changed meanwhile. This avoids lost updates when two clients modify the same record at the same time, without holding long pessimistic locks." },
+    { "op": "push", "scope": "s", "kind": "insight", "as": "a_rate", "publish": true,
+      "summary": "throttle client requests with a token-bucket rate limiter keyed per API key",
+      "content": "Decision: rate limiting uses a token-bucket algorithm, one bucket per API key, refilled at a steady rate with a burst allowance. Requests over budget get HTTP 429 with a Retry-After header." },
+
+    { "op": "push", "scope": "s", "as": "d1", "summary": "the team standup moved to 10:00 on Tuesdays" },
+    { "op": "push", "scope": "s", "as": "d2", "summary": "the product logo color changed to dark blue" },
+    { "op": "push", "scope": "s", "as": "d3", "summary": "the staging server was relocated to the eu-west region" },
+    { "op": "push", "scope": "s", "as": "d4", "summary": "documentation migrated from the wiki to markdown files in the repo" },
+    { "op": "push", "scope": "s", "as": "d5", "summary": "the CI build cache size was increased to 5 gigabytes" },
+    { "op": "push", "scope": "s", "as": "d6", "summary": "onboarding now includes a mandatory security training module" },
+    { "op": "push", "scope": "s", "as": "d7", "summary": "the database migration tool was upgraded to the latest version" },
+    { "op": "push", "scope": "s", "as": "d8", "summary": "client onboarding emails were rewritten for clarity" },
+    { "op": "push", "scope": "s", "as": "d9", "summary": "request logging verbosity was reduced in production" },
+    { "op": "push", "scope": "s", "as": "d10", "summary": "the quarterly planning review was scheduled for next month" },
+
+    { "op": "query", "scope": "s",
+      "text": "how do we prevent concurrent writes from clobbering each other?",
+      "expect": { "mustContain": "a_lock", "mustMentionAny": ["optimistic", "locking", "concurrent"],
+        "maxDrills": 0, "rawBaseline": ["a_lock", "d7", "d9"] } },
+
+    { "op": "query", "scope": "s",
+      "text": "what is our approach to throttling client request volume?",
+      "expect": { "mustContain": "a_rate", "mustMentionAny": ["token-bucket", "rate", "throttle"],
+        "maxDrills": 0, "rawBaseline": ["a_rate", "d8", "d9"] } },
+
+    { "op": "query", "scope": "s",
+      "text": "how should the service behave when two people edit the same item at the same time?",
+      "expect": { "mustContain": "a_lock", "mustMentionAny": ["optimistic", "locking", "version"],
+        "maxDrills": 1, "rawBaseline": ["a_lock"] } }
+  ]
+}

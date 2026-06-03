@@ -81,7 +81,13 @@ async def embed(req: EmbedRequest):
 
 
 if __name__ == "__main__":
-    import uvicorn.server
-
-    os.makedirs(os.path.dirname(SOCKET_PATH), exist_ok=True)
-    uvicorn.run(app, uds=SOCKET_PATH, log_level="info")
+    # TCP mode (works on Windows): set IOC_EMBED_HOST (and optionally IOC_EMBED_PORT).
+    # Otherwise fall back to a Unix domain socket (Linux/WSL/macOS).
+    host = os.environ.get("IOC_EMBED_HOST")
+    if host:
+        port = int(os.environ.get("IOC_EMBED_PORT", "8088"))
+        logger.info("serving on http://%s:%d", host, port)
+        uvicorn.run(app, host=host, port=port, log_level="info")
+    else:
+        os.makedirs(os.path.dirname(SOCKET_PATH), exist_ok=True)
+        uvicorn.run(app, uds=SOCKET_PATH, log_level="info")
