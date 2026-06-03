@@ -41,8 +41,22 @@ Retrieval modes (`-mode` / `Query.Mode`+`Hierarchical`+`CoarseK`):
 
 `query` returns `query_id`, `weak_match` (per-embedder `core.ConfidenceFloor`, ~0.68 bge-small),
 `top_score`, `margin`. `-kind document,reasoning` restricts results by Kind (files vs thoughts).
-More commands: `ioc query|drill|traces|trace|rollup|consolidate|crossversion|...`,
-`ioc gen-scenario -shape flat|tree` (deterministic scale scenarios).
+`-rerank` (CLI) / `rerank` (MCP) cross-encoder reranks the top-N candidates (needs the py `/rerank`
+endpoint) — the universal last-mile precision fix. More commands: `ioc query|drill|traces|trace|
+rollup|consolidate|crossversion|...`, `ioc gen-scenario -shape flat|tree`.
+
+**Scale levers — measured (real, 180 artifacts, top-5, recall@topK):**
+
+| | bge-small (384d) | bge-base (768d) |
+|---|---|---|
+| flat vector | 0.39 | 0.72 |
+| hierarchical (no rerank) | 0.94 | **1.00** |
+| hierarchical + rerank | 1.00 | 1.00 |
+
+Two independent paths to recall 1.0: **bge-small + hierarchical + rerank**, or **bge-base +
+hierarchical (no rerank)**. bge-base (set `IOC_EMBED_MODEL=BAAI/bge-base-en-v1.5`) closes the tail
+without a reranker but costs a heavier embedder (768d, ~440MB, 2× vector storage). NOTE: switching
+embedder requires recalibrating `core.ConfidenceFloor` (the weak_match threshold is bge-small-tuned).
 
 ## Layout
 
