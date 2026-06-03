@@ -162,8 +162,22 @@ type Query struct {
 	Mode     QueryMode // vector (default) or hybrid
 	MinScore float64   // drop hits whose cosine score < MinScore (0 = keep all)
 
-	Hierarchical bool // coarse→fine: rank scope rollups, then search within top scopes
-	CoarseK      int  // # of scopes to keep in the coarse stage (default 3)
+	Hierarchical bool           // coarse→fine: rank scope rollups, then search within top scopes
+	CoarseK      int            // # of scopes to keep in the coarse stage (default 5)
+	Kinds        []ArtifactKind // restrict results to these kinds (empty = all)
+}
+
+// matchesKind reports whether k is in the (possibly empty=all) filter set.
+func MatchesKinds(kinds []ArtifactKind, k ArtifactKind) bool {
+	if len(kinds) == 0 {
+		return true
+	}
+	for _, want := range kinds {
+		if want == k {
+			return true
+		}
+	}
+	return false
 }
 
 // ConfidenceFloor returns the cosine score below which a top hit should be

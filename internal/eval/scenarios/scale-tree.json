@@ -87,7 +87,7 @@
     {
       "op": "rollup",
       "scope": "s0",
-      "summary": "outbound request timeouts — decided to time out outbound calls after 2 seconds"
+      "summary": "outbound request timeouts — decided to time out outbound calls after 2 seconds; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -160,7 +160,7 @@
     {
       "op": "rollup",
       "scope": "s1",
-      "summary": "retry and backoff policy — decided to retry with exponential backoff, max 3 attempts"
+      "summary": "retry and backoff policy — decided to retry with exponential backoff, max 3 attempts; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -233,7 +233,7 @@
     {
       "op": "rollup",
       "scope": "s2",
-      "summary": "authentication and tokens — decided to use RS256 JWT access tokens with a 15-minute TTL"
+      "summary": "authentication and tokens — decided to use RS256 JWT access tokens with a 15-minute TTL; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -306,7 +306,7 @@
     {
       "op": "rollup",
       "scope": "s3",
-      "summary": "rate limiting — decided to rate-limit with a token bucket per API key"
+      "summary": "rate limiting — decided to rate-limit with a token bucket per API key; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -379,7 +379,7 @@
     {
       "op": "rollup",
       "scope": "s4",
-      "summary": "database storage engine — decided to store data in PostgreSQL 16 using JSONB columns"
+      "summary": "database storage engine — decided to store data in PostgreSQL 16 using JSONB columns; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -452,7 +452,7 @@
     {
       "op": "rollup",
       "scope": "s5",
-      "summary": "event delivery semantics — decided to guarantee at-least-once event delivery"
+      "summary": "event delivery semantics — decided to guarantee at-least-once event delivery; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -525,7 +525,7 @@
     {
       "op": "rollup",
       "scope": "s6",
-      "summary": "consumer idempotency — decided to deduplicate events by a stable dedup key"
+      "summary": "consumer idempotency — decided to deduplicate events by a stable dedup key; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -598,7 +598,7 @@
     {
       "op": "rollup",
       "scope": "s7",
-      "summary": "structured logging — decided to emit structured JSON logs"
+      "summary": "structured logging — decided to emit structured JSON logs; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -671,7 +671,7 @@
     {
       "op": "rollup",
       "scope": "s8",
-      "summary": "distributed tracing — decided to propagate the W3C traceparent header for tracing"
+      "summary": "distributed tracing — decided to propagate the W3C traceparent header for tracing; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -744,7 +744,7 @@
     {
       "op": "rollup",
       "scope": "s9",
-      "summary": "service metrics — decided to record RED metrics per endpoint"
+      "summary": "service metrics — decided to record RED metrics per endpoint; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -817,7 +817,7 @@
     {
       "op": "rollup",
       "scope": "s10",
-      "summary": "deployment rollout strategy — decided to roll out with a canary then blue-green"
+      "summary": "deployment rollout strategy — decided to roll out with a canary then blue-green; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -890,7 +890,7 @@
     {
       "op": "rollup",
       "scope": "s11",
-      "summary": "caching layer — decided to cache hot reads in Redis with a 60-second TTL"
+      "summary": "caching layer — decided to cache hot reads in Redis with a 60-second TTL; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -963,7 +963,7 @@
     {
       "op": "rollup",
       "scope": "s12",
-      "summary": "API pagination — decided to paginate with opaque cursors instead of offsets"
+      "summary": "API pagination — decided to paginate with opaque cursors instead of offsets; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -1036,7 +1036,7 @@
     {
       "op": "rollup",
       "scope": "s13",
-      "summary": "data encryption at rest — decided to encrypt data at rest with AES-256"
+      "summary": "data encryption at rest — decided to encrypt data at rest with AES-256; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -1109,7 +1109,7 @@
     {
       "op": "rollup",
       "scope": "s14",
-      "summary": "backup and restore — decided to back up nightly with 90-day retention"
+      "summary": "backup and restore — decided to back up nightly with 90-day retention; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -1182,7 +1182,7 @@
     {
       "op": "rollup",
       "scope": "s15",
-      "summary": "feature flag rollout — decided to gate features behind LaunchDarkly flags"
+      "summary": "feature flag rollout — decided to gate features behind LaunchDarkly flags; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -1255,7 +1255,7 @@
     {
       "op": "rollup",
       "scope": "s16",
-      "summary": "configuration management — decided to manage configuration via env vars and Vault"
+      "summary": "configuration management — decided to manage configuration via env vars and Vault; covers latency, cost, security"
     },
     {
       "op": "create_scope",
@@ -1328,7 +1328,7 @@
     {
       "op": "rollup",
       "scope": "s17",
-      "summary": "HTTP error status codes — decided to return RFC 7807 problem+json error bodies"
+      "summary": "HTTP error status codes — decided to return RFC 7807 problem+json error bodies; covers latency, cost, security"
     },
     {
       "op": "query",
