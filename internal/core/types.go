@@ -134,13 +134,28 @@ type PushRequest struct {
 	Publish     bool // make visible to siblings immediately
 }
 
+// QueryMode selects the retrieval strategy.
+type QueryMode uint8
+
+const (
+	// ModeVector (default) — cosine only. Strongest at tested scale: bge-small
+	// disambiguates near-duplicate clusters well on its own.
+	ModeVector QueryMode = iota
+	// ModeHybrid — vector + BM25 fused with RRF. EXPERIMENTAL: naive RRF over
+	// short, term-overlapping summaries DEGRADED ranking in scale tests
+	// (recall 0.75 vs vector's 1.00). Kept opt-in; needs better fusion to help.
+	ModeHybrid
+)
+
 // Query is a progressive-disclosure retrieval request.
 type Query struct {
-	Scope  ID     // viewpoint scope (governs visibility)
-	Text   string // natural-language query; embedded via the embedder
-	Detail Detail // start cheap (DetailOverview)
-	TopK   int
-	Tier   Tier // 0 = both tiers
+	Scope    ID        // viewpoint scope (governs visibility)
+	Text     string    // natural-language query; embedded via the embedder
+	Detail   Detail    // start cheap (DetailOverview)
+	TopK     int       //
+	Tier     Tier      // 0 = both tiers
+	Mode     QueryMode // hybrid (default) or vector-only
+	MinScore float64   // drop hits whose cosine score < MinScore (0 = keep all)
 }
 
 // Hit is one retrieval result. Content is populated only at DetailRaw.

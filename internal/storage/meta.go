@@ -165,6 +165,22 @@ func (m *Meta) GetTrace(id core.ID) (core.TraceRecord, error) {
 	return t, err
 }
 
+// ListTraces returns all trace records.
+func (m *Meta) ListTraces() ([]core.TraceRecord, error) {
+	var out []core.TraceRecord
+	err := m.db.View(func(tx *bolt.Tx) error {
+		return tx.Bucket(bkTraces).ForEach(func(_, v []byte) error {
+			var t core.TraceRecord
+			if err := json.Unmarshal(v, &t); err != nil {
+				return err
+			}
+			out = append(out, t)
+			return nil
+		})
+	})
+	return out, err
+}
+
 // --- helpers ---
 
 func (m *Meta) putJSON(bucket []byte, key string, v any) error {

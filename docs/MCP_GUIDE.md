@@ -32,7 +32,8 @@ summaries; IOC embeds, stores, and serves them.
 | `ioc_fork` | branch a scope (keep both); copies published summaries into the new scope |
 | `ioc_consolidate` | end a line of work: write one summary, promoted to the parent's long-term memory |
 | `ioc_crossversion` | start a new version: archive the old, seed the new with carried-forward constraints/lessons |
-| `ioc_trace` | inspect exactly what context a past query saw |
+| `ioc_trace` | inspect exactly what context a past query saw (pass a query_id) |
+| `ioc_list_traces` | list recent query traces (newest first) to get a query_id |
 
 ## Recommended loop
 
@@ -52,6 +53,11 @@ summaries; IOC embeds, stores, and serves them.
 - Visibility is **bottom-up**: you see your own scope, your ancestors, and siblings' *published*
   artifacts — not other scopes' private reasoning.
 - One IOC data directory must use one embedder consistently (mock vs real are different vector spaces).
+- `ioc_query` returns `query_id` (inspect with `ioc_trace` / `ioc_list_traces`) and `weak_match`.
+  **If `weak_match` is true (top cosine score below ~0.45), there is no specific stored artifact** —
+  don't present the returned general context as a precise answer; say you don't have it, or push it.
+- Retrieval is semantic (vector) by default; it disambiguates near-duplicate entries well. (A hybrid
+  vector+BM25 mode exists but is experimental — it degraded ranking in scale tests.)
 
 ## Setup (operator)
 

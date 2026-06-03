@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
@@ -11,12 +12,14 @@ import (
 
 const defaultTopK = 5
 
-// Query runs progressive-disclosure retrieval from a viewpoint scope.
-// At DetailOverview it returns summaries + scores only (cheap); DetailRaw also
-// loads full content from CAS. Visibility is bottom-up (see visibleArtifacts).
-func (e *Engine) Query(ctx context.Context, q core.Query) ([]core.Hit, error) {
+// Query runs progressive-disclosure retrieval from a viewpoint scope and returns
+// the trace's query ID alongside the hits (use it with Trace). Mode selects
+// hybrid (vector+BM25 via RRF, default) or vector-only. Hit.Score is always the
+// cosine similarity (the confidence signal), regardless of fusion order; MinScore
+// drops hits below it. Visibility is bottom-up (see visibleArtifacts).
+func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, error) {
 	if _, err := e.meta.GetScope(q.Scope); err != nil {
-		return nil, err
+		return core.NilID, nil, err
 	}
 	if q.Detail == 0 {
 		q.Detail = core.DetailOverview
@@ -28,15 +31,16 @@ func (e *Engine) Query(ctx context.Context, q core.Query) ([]core.Hit, error) {
 
 	qvec, err := e.embedText(ctx, q.Text)
 	if err != nil {
-		return nil, err
+		return core.NilID, nil, err
 	}
 
 	arts, err := e.visibleArtifacts(q.Scope, q.Tier)
 	if err != nil {
-		return nil, err
+		return core.NilID, nil, err
 	}
 
 	set := search.New()
+	bm := search.NewBM25()
 	byID := make(map[string]core.Artifact, len(arts))
 	visible := make([]core.ID, 0, len(arts))
 	for _, a := range arts {
@@ -49,23 +53,46 @@ func (e *Engine) Query(ctx context.Context, q core.Query) ([]core.Hit, error) {
 			continue
 		}
 		set.Add(a.ID.String(), vec)
+		bm.Add(a.ID.String(), a.Summary)
 		byID[a.ID.String()] = a
 	}
 
-	results := set.Search(qvec, topK)
-	hits := make([]core.Hit, 0, len(results))
-	for _, r := range results {
-		a := byID[r.ID]
-		h, err := e.buildHit(ctx, a, r.Score, q.Detail)
+	// Cosine ranking — also the displayed/confidence score for every hit.
+	vecRanked := set.Search(qvec, set.Len())
+	cosineByID := make(map[string]float64, len(vecRanked))
+	for _, r := range vecRanked {
+		cosineByID[r.ID] = r.Score
+	}
+
+	// Ordering: vector (cosine) by default; hybrid opt-in fuses cosine + BM25 via RRF.
+	ordered := vecRanked
+	if q.Mode == core.ModeHybrid {
+		ordered = search.RRF(60, vecRanked, bm.Search(q.Text, bm.Len()))
+	}
+
+	hits := make([]core.Hit, 0, topK)
+	for _, r := range ordered {
+		if len(hits) >= topK {
+			break
+		}
+		a, ok := byID[r.ID]
+		if !ok {
+			continue
+		}
+		score := cosineByID[r.ID]
+		if q.MinScore > 0 && score < q.MinScore {
+			continue
+		}
+		h, err := e.buildHit(ctx, a, score, q.Detail)
 		if err != nil {
-			return nil, err
+			return core.NilID, nil, err
 		}
 		hits = append(hits, h)
 	}
 
-	// Record the trace (inspectability).
+	queryID := core.NewID()
 	_ = e.meta.PutTrace(core.TraceRecord{
-		QueryID:    core.NewID(),
+		QueryID:    queryID,
 		Scope:      q.Scope,
 		Text:       q.Text,
 		EmbModel:   e.embedder.Model(),
@@ -73,7 +100,20 @@ func (e *Engine) Query(ctx context.Context, q core.Query) ([]core.Hit, error) {
 		Hits:       hits,
 		CreatedAt:  time.Now(),
 	})
-	return hits, nil
+	return queryID, hits, nil
+}
+
+// RecentTraces returns up to n most recent query traces, newest first.
+func (e *Engine) RecentTraces(n int) ([]core.TraceRecord, error) {
+	all, err := e.meta.ListTraces()
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].QueryID.String() > all[j].QueryID.String() })
+	if n > 0 && len(all) > n {
+		all = all[:n]
+	}
+	return all, nil
 }
 
 // Drill re-fetches a single artifact at a higher detail level (e.g. raw content).

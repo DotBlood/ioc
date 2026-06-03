@@ -47,7 +47,7 @@ func TestEngine_FullLoop(t *testing.T) {
 	require.False(t, a.Content.IsZero())
 
 	// Query at overview from s1: the insight should be visible (own scope).
-	hits, err := e.Query(ctx, core.Query{Scope: s1.ID, Text: "what material should the head be", Detail: core.DetailOverview, TopK: 5})
+	_, hits, err := e.Query(ctx, core.Query{Scope: s1.ID, Text: "what material should the head be", Detail: core.DetailOverview, TopK: 5})
 	require.NoError(t, err)
 	h, ok := hitWith(hits, "wooden tool head splits")
 	require.True(t, ok, "expected the wooden-head insight in overview")
@@ -95,7 +95,7 @@ func TestEngine_FullLoop(t *testing.T) {
 	require.True(t, archived.Archived)
 
 	// In v2, the seed constraint surfaces and mentions metal.
-	v2hits, err := e.Query(ctx, core.Query{Scope: ns.ID, Text: "what material for the head", Detail: core.DetailOverview, TopK: 5})
+	_, v2hits, err := e.Query(ctx, core.Query{Scope: ns.ID, Text: "what material for the head", Detail: core.DetailOverview, TopK: 5})
 	require.NoError(t, err)
 	_, ok = hitWith(v2hits, "metal")
 	require.True(t, ok, "seed constraint should surface in v2")

@@ -61,6 +61,8 @@ func main() {
 		err = crossversion(args)
 	case "trace":
 		err = traceCmd(args)
+	case "traces":
+		err = traces(args)
 	default:
 		usage()
 		os.Exit(2)
@@ -127,6 +129,7 @@ func runScenario(args []string) int {
 	fs := flag.NewFlagSet("run-scenario", flag.ExitOnError)
 	dir := fs.String("dir", filepath.Join(os.TempDir(), "ioc-run"), "run data directory (reset each run)")
 	em := fs.String("embed", "", "embedder endpoint (empty=mock)")
+	mode := fs.String("mode", "vector", "retrieval mode: vector|hybrid (hybrid is experimental)")
 	// Allow the scenario path before or after flags (Go's flag pkg otherwise
 	// stops at the first positional, silently dropping trailing -embed/-dir).
 	scenarioPath, rest := splitPositional(args)
@@ -160,7 +163,7 @@ func runScenario(args []string) int {
 	}
 	defer tf.Close()
 
-	rep, err := eval.Run(ctx, e, sc, tf)
+	rep, err := eval.Run(ctx, e, sc, tf, parseMode(*mode))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: run:", err)
 		return 1
@@ -264,6 +267,8 @@ func query(args []string) error {
 	detail := fs.String("detail", "overview", "overview|entry|raw")
 	topk := fs.Int("topk", 5, "top-K")
 	tier := fs.String("tier", "", "worktree|workspace (empty=both)")
+	mode := fs.String("mode", "vector", "vector|hybrid (hybrid is experimental)")
+	minScore := fs.Float64("min-score", 0, "drop hits with cosine score below this")
 	_ = fs.Parse(args)
 
 	scopeID, err := parseScopeID(*scope)
@@ -276,17 +281,46 @@ func query(args []string) error {
 	}
 	defer e.Close()
 
-	hits, err := e.Query(context.Background(), core.Query{
-		Scope:  scopeID,
-		Text:   *text,
-		Detail: parseDetail(*detail),
-		TopK:   *topk,
-		Tier:   parseTier(*tier),
+	qid, hits, err := e.Query(context.Background(), core.Query{
+		Scope:    scopeID,
+		Text:     *text,
+		Detail:   parseDetail(*detail),
+		TopK:     *topk,
+		Tier:     parseTier(*tier),
+		Mode:     parseMode(*mode),
+		MinScore: *minScore,
 	})
 	if err != nil {
 		return err
 	}
-	return printJSON(hitsOut(hits))
+	return printJSON(queryOut(qid, hits))
+}
+
+// traces lists recent query traces (newest first) so a query_id can be inspected.
+func traces(args []string) error {
+	fs := flag.NewFlagSet("traces", flag.ExitOnError)
+	dir, em := commonFlags(fs)
+	n := fs.Int("n", 10, "max recent traces")
+	_ = fs.Parse(args)
+	e, err := openEngine(*dir, *em)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	trs, err := e.RecentTraces(*n)
+	if err != nil {
+		return err
+	}
+	out := make([]map[string]any, len(trs))
+	for i, t := range trs {
+		out[i] = map[string]any{
+			"query_id": t.QueryID.String(),
+			"scope":    t.Scope.String(),
+			"text":     t.Text,
+			"hits":     len(t.Hits),
+		}
+	}
+	return printJSON(out)
 }
 
 func drill(args []string) error {
@@ -473,7 +507,7 @@ func traceCmd(args []string) error {
 // returning the remaining args (flags, original order) so flags may appear
 // before or after the positional. Handles "-dir value" / "-embed value".
 func splitPositional(args []string) (pos string, rest []string) {
-	valueFlags := map[string]bool{"-dir": true, "-embed": true}
+	valueFlags := map[string]bool{"-dir": true, "-embed": true, "-mode": true}
 	skip := false
 	for _, a := range args {
 		if skip {
@@ -564,6 +598,25 @@ func parseTier(s string) core.Tier {
 		return core.TierWorkspace
 	default:
 		return 0
+	}
+}
+
+func parseMode(s string) core.QueryMode {
+	if strings.ToLower(s) == "hybrid" {
+		return core.ModeHybrid
+	}
+	return core.ModeVector
+}
+
+// weakThreshold: a top cosine below this means "no strong match" for bge-small.
+const weakThreshold = 0.45
+
+func queryOut(qid core.ID, hits []core.Hit) map[string]any {
+	weak := len(hits) == 0 || hits[0].Score < weakThreshold
+	return map[string]any{
+		"query_id":   qid.String(),
+		"weak_match": weak,
+		"hits":       hitsOut(hits),
 	}
 }
 

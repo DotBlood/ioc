@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/DotBlood/ioc/internal/core"
@@ -91,8 +92,10 @@ func (e *Engine) Consolidate(ctx context.Context, scope core.ID, summary string)
 	return a, nil
 }
 
-// CrossVersion archives the current scope version and opens vN+1 seeded with a
-// single KindSeed artifact carrying distilled constraints/lessons.
+// CrossVersion archives the current scope version and opens vN+1 seeded with
+// one KindSeed artifact PER constraint/lesson line (granular, individually
+// embedded) — so each carried-forward fact ranks on its own instead of being
+// buried in one fat seed blob.
 func (e *Engine) CrossVersion(ctx context.Context, scope core.ID, seed core.Seed) (core.Scope, error) {
 	s, err := e.meta.GetScope(scope)
 	if err != nil {
@@ -116,27 +119,49 @@ func (e *Engine) CrossVersion(ctx context.Context, scope core.ID, seed core.Seed
 		return core.Scope{}, err
 	}
 
-	seedText := fmt.Sprintf("Constraints: %s\nLessons: %s", seed.Constraints, seed.Lessons)
-	ref, err := e.storeSummaryEmbedding(ctx, seedText)
-	if err != nil {
-		return core.Scope{}, err
+	// One seed artifact per constraint/lesson line.
+	var seeds []string
+	for _, c := range splitLines(seed.Constraints) {
+		seeds = append(seeds, "Constraint: "+c)
 	}
-	seedArt := core.Artifact{
-		ID:        core.NewID(),
-		Scope:     ns.ID,
-		Kind:      core.KindSeed,
-		Tier:      core.TierWorktree,
-		Summary:   seedText,
-		EmbRef:    ref,
-		Published: true,
-		CreatedAt: time.Now(),
+	for _, l := range splitLines(seed.Lessons) {
+		seeds = append(seeds, "Lesson: "+l)
 	}
-	if err := e.meta.PutArtifact(seedArt); err != nil {
-		return core.Scope{}, err
-	}
-	ns.SeedFrom = seedArt.ID
-	if err := e.meta.PutScope(ns); err != nil {
-		return core.Scope{}, err
+	for i, text := range seeds {
+		ref, err := e.storeSummaryEmbedding(ctx, text)
+		if err != nil {
+			return core.Scope{}, err
+		}
+		seedArt := core.Artifact{
+			ID:        core.NewID(),
+			Scope:     ns.ID,
+			Kind:      core.KindSeed,
+			Tier:      core.TierWorktree,
+			Summary:   text,
+			EmbRef:    ref,
+			Published: true,
+			CreatedAt: time.Now(),
+		}
+		if err := e.meta.PutArtifact(seedArt); err != nil {
+			return core.Scope{}, err
+		}
+		if i == 0 {
+			ns.SeedFrom = seedArt.ID
+			if err := e.meta.PutScope(ns); err != nil {
+				return core.Scope{}, err
+			}
+		}
 	}
 	return ns, nil
+}
+
+// splitLines returns non-empty trimmed lines.
+func splitLines(s string) []string {
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		if t := strings.TrimSpace(line); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }

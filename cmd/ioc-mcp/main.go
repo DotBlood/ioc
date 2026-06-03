@@ -48,7 +48,11 @@ Typical loop:
 
 Rules: keep summaries short and specific; prefer querying over re-reading; raw content costs
 context, summaries do not. Visibility is bottom-up: you see your own scope, your ancestors, and
-siblings' PUBLISHED artifacts.`
+siblings' PUBLISHED artifacts.
+
+ioc_query returns a query_id (inspect with ioc_trace; list recent ones with ioc_list_traces) and a
+weak_match flag. If weak_match is true (top score below ~0.45), there is no specific stored artifact
+for your question — do NOT present the returned general context as a precise answer.`
 
 type ioc struct {
 	mu sync.Mutex
@@ -111,13 +115,19 @@ func (a *ioc) register(s *server.MCPServer) {
 	), a.push)
 
 	s.AddTool(mcp.NewTool("ioc_query",
-		mcp.WithDescription("Progressive-disclosure retrieval from a viewpoint scope. Start at detail=overview (cheap); drill only if needed."),
+		mcp.WithDescription("Progressive-disclosure semantic retrieval from a viewpoint scope. Start at detail=overview (cheap); drill only if needed. Returns query_id (for ioc_trace) and weak_match=true when the top score is low (no specific artifact — don't treat general context as a precise answer)."),
 		mcp.WithString("scope", mcp.Required(), mcp.Description("viewpoint scope ID")),
 		mcp.WithString("text", mcp.Required(), mcp.Description("query text")),
 		mcp.WithString("detail", mcp.Description("overview|entry|raw (default overview)")),
 		mcp.WithString("tier", mcp.Description("worktree|workspace (empty = both)")),
 		mcp.WithNumber("topk", mcp.Description("max results (default 5)")),
+		mcp.WithNumber("min_score", mcp.Description("drop hits with cosine score below this (0 = keep all)")),
 	), a.query)
+
+	s.AddTool(mcp.NewTool("ioc_list_traces",
+		mcp.WithDescription("List recent query traces (newest first); each has a query_id you can pass to ioc_trace."),
+		mcp.WithNumber("n", mcp.Description("max traces (default 10)")),
+	), a.listTraces)
 
 	s.AddTool(mcp.NewTool("ioc_drill",
 		mcp.WithDescription("Fetch one artifact at higher detail (raw loads full content from CAS)."),
@@ -228,17 +238,44 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	hits, err := a.e.Query(ctx, core.Query{
-		Scope:  scopeID,
-		Text:   text,
-		Detail: parseDetail(r.GetString("detail", "overview")),
-		TopK:   r.GetInt("topk", 5),
-		Tier:   parseTier(r.GetString("tier", "")),
+	qid, hits, err := a.e.Query(ctx, core.Query{
+		Scope:    scopeID,
+		Text:     text,
+		Detail:   parseDetail(r.GetString("detail", "overview")),
+		TopK:     r.GetInt("topk", 5),
+		Tier:     parseTier(r.GetString("tier", "")),
+		MinScore: r.GetFloat("min_score", 0),
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	return jsonResult(hitsOut(hits))
+	weak := len(hits) == 0 || hits[0].Score < weakThreshold
+	return jsonResult(map[string]any{
+		"query_id":   qid.String(),
+		"weak_match": weak,
+		"hits":       hitsOut(hits),
+	})
+}
+
+const weakThreshold = 0.45
+
+func (a *ioc) listTraces(_ context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	trs, err := a.e.RecentTraces(r.GetInt("n", 10))
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	out := make([]map[string]any, len(trs))
+	for i, t := range trs {
+		out[i] = map[string]any{
+			"query_id": t.QueryID.String(),
+			"scope":    t.Scope.String(),
+			"text":     t.Text,
+			"hits":     len(t.Hits),
+		}
+	}
+	return jsonResult(out)
 }
 
 func (a *ioc) drill(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
