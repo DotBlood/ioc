@@ -81,6 +81,7 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 		Mode:         mode,
 		Hierarchical: hier,
 		CoarseK:      r.GetInt("coarsek", 0),
+		Rerank:       r.GetBool("rerank", false),
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil

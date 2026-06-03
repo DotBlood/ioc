@@ -40,17 +40,13 @@ type HTTPEmbedder struct {
 	dims       atomic.Int32
 }
 
-// NewHTTPEmbedder builds an embedder for a TCP URL or a Unix socket endpoint.
-func NewHTTPEmbedder(endpoint string) *HTTPEmbedder {
-	e := &HTTPEmbedder{queryInstr: defaultQueryInstruction()}
+// dialClient builds an HTTP client + base URL for a TCP URL or Unix socket endpoint.
+func dialClient(endpoint string) (*http.Client, string) {
 	if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
-		e.client = &http.Client{Timeout: 120 * time.Second}
-		e.baseURL = strings.TrimRight(endpoint, "/")
-		return e
+		return &http.Client{Timeout: 120 * time.Second}, strings.TrimRight(endpoint, "/")
 	}
-	// Unix socket: "unix:/path" or bare "/path".
 	sock := strings.TrimPrefix(endpoint, "unix:")
-	e.client = &http.Client{
+	return &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				var d net.Dialer
@@ -58,9 +54,13 @@ func NewHTTPEmbedder(endpoint string) *HTTPEmbedder {
 			},
 		},
 		Timeout: 120 * time.Second,
-	}
-	e.baseURL = "http://unix"
-	return e
+	}, "http://unix"
+}
+
+// NewHTTPEmbedder builds an embedder for a TCP URL or a Unix socket endpoint.
+func NewHTTPEmbedder(endpoint string) *HTTPEmbedder {
+	c, base := dialClient(endpoint)
+	return &HTTPEmbedder{client: c, baseURL: base, queryInstr: defaultQueryInstruction()}
 }
 
 // EmbedQuery prepends the retrieval query instruction to each text, then embeds.

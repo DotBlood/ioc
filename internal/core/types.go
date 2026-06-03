@@ -163,8 +163,10 @@ type Query struct {
 	MinScore float64   // drop hits whose cosine score < MinScore (0 = keep all)
 
 	Hierarchical bool           // coarse→fine: rank scope rollups, then search within top scopes
-	CoarseK      int            // # of scopes to keep in the coarse stage (default 5)
+	CoarseK      int            // # of scopes to keep in the coarse stage (default 6)
 	Kinds        []ArtifactKind // restrict results to these kinds (empty = all)
+	Rerank       bool           // cross-encoder rerank the top RerankN candidates (needs a reranker)
+	RerankN      int            // # of candidates to rerank (default 20)
 }
 
 // matchesKind reports whether k is in the (possibly empty=all) filter set.

@@ -23,11 +23,18 @@ type Engine struct {
 	cas      *storage.CAS
 	emb      *storage.EmbeddingStore // opened lazily once the embedding dim is known
 	embedder embed.Embedder
+	reranker embed.Reranker // optional cross-encoder for last-mile rerank (nil = off)
 }
 
+// Option configures an Engine at Open time.
+type Option func(*Engine)
+
+// WithReranker attaches a cross-encoder reranker (used when Query.Rerank is set).
+func WithReranker(r embed.Reranker) Option { return func(e *Engine) { e.reranker = r } }
+
 // Open opens (creating if needed) an IOC repository at dir, using embedder for
-// summary embeddings.
-func Open(_ context.Context, dir string, embedder embed.Embedder) (*Engine, error) {
+// summary embeddings. Options can attach extras like a reranker.
+func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option) (*Engine, error) {
 	if embedder == nil {
 		return nil, fmt.Errorf("engine: nil embedder")
 	}
@@ -43,6 +50,9 @@ func Open(_ context.Context, dir string, embedder embed.Embedder) (*Engine, erro
 		meta:     meta,
 		cas:      storage.NewCAS(filepath.Join(dir, "cas")),
 		embedder: embedder,
+	}
+	for _, opt := range opts {
+		opt(e)
 	}
 	// Open the embedding store eagerly if the dimension is already known
 	// (persisted from a prior run, or fixed by the embedder).

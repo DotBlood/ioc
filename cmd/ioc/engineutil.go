@@ -25,6 +25,16 @@ func openEngine(dir, endpoint string) (*engine.Engine, error) {
 	return engine.Open(context.Background(), dir, buildEmbedder(endpoint))
 }
 
+// openEngineRerank also attaches a reranker on the same endpoint (when rerank
+// is requested and the endpoint is a real service, not the mock).
+func openEngineRerank(dir, endpoint string, rerank bool) (*engine.Engine, error) {
+	var opts []engine.Option
+	if rerank && endpoint != "" {
+		opts = append(opts, engine.WithReranker(embed.NewHTTPReranker(endpoint)))
+	}
+	return engine.Open(context.Background(), dir, buildEmbedder(endpoint), opts...)
+}
+
 // commonFlags registers -dir and -embed on a flag set.
 func commonFlags(fs *flag.FlagSet) (*string, *string) {
 	dir := fs.String("dir", defaultDataDir, "persistent data directory")

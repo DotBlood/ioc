@@ -18,11 +18,12 @@ import numpy as np
 import uvicorn
 from fastapi import FastAPI, Response
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import CrossEncoder, SentenceTransformer
 
 logger = logging.getLogger("ioc-embedder")
 
 MODEL_NAME = os.environ.get("IOC_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
+RERANK_MODEL = os.environ.get("IOC_RERANK_MODEL", "BAAI/bge-reranker-base")
 SOCKET_PATH = os.environ.get(
     "IOC_EMBED_SOCKET",
     os.environ.get("XDG_RUNTIME_DIR", "/tmp") + "/ioc/embedder.sock",
@@ -78,6 +79,38 @@ async def embed(req: EmbedRequest):
         vectors=vectors,
         model=MODEL_NAME,
     )
+
+
+# Reranker (cross-encoder) is loaded lazily on first /rerank to keep startup light.
+_reranker = None
+
+
+def get_reranker():
+    global _reranker
+    if _reranker is None:
+        logger.info("loading reranker: %s", RERANK_MODEL)
+        _reranker = CrossEncoder(RERANK_MODEL)
+    return _reranker
+
+
+class RerankRequest(BaseModel):
+    query: str
+    passages: list[str]
+
+
+class RerankResponse(BaseModel):
+    scores: list[float]
+    model: str
+
+
+@app.post("/rerank")
+async def rerank(req: RerankRequest):
+    if not req.passages:
+        return RerankResponse(scores=[], model=RERANK_MODEL)
+    ce = get_reranker()
+    pairs = [[req.query, p] for p in req.passages]
+    scores = ce.predict(pairs)
+    return RerankResponse(scores=[float(s) for s in scores], model=RERANK_MODEL)
 
 
 if __name__ == "__main__":

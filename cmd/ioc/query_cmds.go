@@ -20,13 +20,14 @@ func query(args []string) error {
 	mode := fs.String("mode", "vector", "vector|hybrid|hierarchical")
 	coarseK := fs.Int("coarsek", 0, "hierarchical coarse stage: # scopes to keep (0=default)")
 	minScore := fs.Float64("min-score", 0, "drop hits with cosine score below this")
+	rerank := fs.Bool("rerank", false, "cross-encoder rerank the top candidates (needs a real -embed)")
 	_ = fs.Parse(args)
 
 	scopeID, err := iocfmt.ParseScopeID(*scope)
 	if err != nil {
 		return err
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openEngineRerank(*dir, *em, *rerank)
 	if err != nil {
 		return err
 	}
@@ -44,6 +45,7 @@ func query(args []string) error {
 		Hierarchical: hier,
 		CoarseK:      *coarseK,
 		MinScore:     *minScore,
+		Rerank:       *rerank,
 	})
 	if err != nil {
 		return err

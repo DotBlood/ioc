@@ -21,6 +21,7 @@ func runScenario(args []string) int {
 	em := fs.String("embed", "", "embedder endpoint (empty=mock)")
 	mode := fs.String("mode", "vector", "retrieval mode: vector|hybrid|hierarchical")
 	coarseK := fs.Int("coarsek", 0, "hierarchical coarse stage: # scopes to keep (0=engine default)")
+	rerank := fs.Bool("rerank", false, "cross-encoder rerank the top candidates (needs a real -embed)")
 	// Allow the scenario path before or after flags (Go's flag pkg otherwise
 	// stops at the first positional, silently dropping trailing -embed/-dir).
 	scenarioPath, rest := splitPositional(args)
@@ -38,7 +39,7 @@ func runScenario(args []string) int {
 		fmt.Fprintln(os.Stderr, "error: reset dir:", err)
 		return 1
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openEngineRerank(*dir, *em, *rerank)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: open engine:", err)
 		return 1
@@ -54,7 +55,7 @@ func runScenario(args []string) int {
 	defer tf.Close()
 
 	qm, hier := iocfmt.ParseModeSpec(*mode)
-	rep, err := eval.Run(context.Background(), e, sc, tf, qm, hier, *coarseK)
+	rep, err := eval.Run(context.Background(), e, sc, tf, qm, hier, *coarseK, *rerank)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: run:", err)
 		return 1

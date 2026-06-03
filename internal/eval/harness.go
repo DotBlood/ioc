@@ -14,7 +14,7 @@ import (
 // Run plays a scenario against the engine. If traceW is non-nil, each query
 // turn's TurnMetric is written to it as one JSON line. mode/hierarchical/coarseK
 // configure how query turns retrieve.
-func Run(ctx context.Context, e *engine.Engine, sc *Scenario, traceW io.Writer, mode core.QueryMode, hierarchical bool, coarseK int) (*Report, error) {
+func Run(ctx context.Context, e *engine.Engine, sc *Scenario, traceW io.Writer, mode core.QueryMode, hierarchical bool, coarseK int, rerank bool) (*Report, error) {
 	scopes := map[string]core.ID{}
 	arts := map[string]core.ID{}
 
@@ -123,7 +123,7 @@ func Run(ctx context.Context, e *engine.Engine, sc *Scenario, traceW io.Writer, 
 			if err != nil {
 				return nil, fmt.Errorf("turn %d: %w", i, err)
 			}
-			m, err := evalQuery(ctx, e, i, sc.TopK, scope, t, arts, mode, hierarchical, coarseK)
+			m, err := evalQuery(ctx, e, i, sc.TopK, scope, t, arts, mode, hierarchical, coarseK, rerank)
 			if err != nil {
 				return nil, fmt.Errorf("turn %d query: %w", i, err)
 			}

@@ -74,7 +74,11 @@ func main() {
 		embedder = embed.NewHTTPEmbedder(endpoint)
 	}
 
-	e, err := engine.Open(context.Background(), dir, embedder)
+	var opts []engine.Option
+	if endpoint != "" {
+		opts = append(opts, engine.WithReranker(embed.NewHTTPReranker(endpoint)))
+	}
+	e, err := engine.Open(context.Background(), dir, embedder, opts...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ioc-mcp: open engine:", err)
 		os.Exit(1)
@@ -129,6 +133,7 @@ func (a *ioc) register(s *server.MCPServer) {
 		mcp.WithNumber("min_score", mcp.Description("drop hits with cosine score below this (0 = keep all)")),
 		mcp.WithBoolean("hierarchical", mcp.Description("coarse→fine: rank scope rollups, then search within top scopes (needs ioc_rollup on sub-scopes)")),
 		mcp.WithNumber("coarsek", mcp.Description("hierarchical coarse stage: # scopes to keep (0=default)")),
+		mcp.WithBoolean("rerank", mcp.Description("cross-encoder rerank the top candidates for higher precision")),
 	), a.query)
 
 	s.AddTool(mcp.NewTool("ioc_list_traces",

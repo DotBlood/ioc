@@ -85,6 +85,13 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 	if q.Mode == core.ModeHybrid {
 		ordered = search.RRF(60, vecRanked, bm.Search(q.Text, bm.Len()))
 	}
+	// Optional cross-encoder rerank of the top candidates (reorders only; Hit.Score
+	// stays cosine). On rerank error, keep the existing order rather than fail.
+	if q.Rerank && e.reranker != nil {
+		if reranked, rerr := e.rerankTop(ctx, q.Text, ordered, byID, q.RerankN); rerr == nil {
+			ordered = reranked
+		}
+	}
 
 	hits := make([]core.Hit, 0, topK)
 	for _, r := range ordered {

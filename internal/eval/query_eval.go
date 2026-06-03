@@ -10,12 +10,12 @@ import (
 )
 
 // evalQuery runs one query turn and scores it against the turn's Expectation.
-func evalQuery(ctx context.Context, e *engine.Engine, turnIdx, topK int, scope core.ID, t Turn, arts map[string]core.ID, mode core.QueryMode, hierarchical bool, coarseK int) (TurnMetric, error) {
+func evalQuery(ctx context.Context, e *engine.Engine, turnIdx, topK int, scope core.ID, t Turn, arts map[string]core.ID, mode core.QueryMode, hierarchical bool, coarseK int, rerank bool) (TurnMetric, error) {
 	m := TurnMetric{Turn: turnIdx, Query: t.Text, ForbidOK: true, Met: true}
 
 	_, hits, err := e.Query(ctx, core.Query{
 		Scope: scope, Text: t.Text, Detail: core.DetailOverview, TopK: topK,
-		Mode: mode, Hierarchical: hierarchical, CoarseK: coarseK,
+		Mode: mode, Hierarchical: hierarchical, CoarseK: coarseK, Rerank: rerank,
 	})
 	if err != nil {
 		return m, err
