@@ -28,6 +28,8 @@ func main() {
 		err = embedPing(args)
 	case "gen-scenario":
 		err = genScenario(args)
+	case "ingest":
+		err = ingestCmd(args)
 	case "create-scope":
 		err = createScope(args)
 	case "fork":
@@ -73,6 +75,7 @@ commands:
   embed-ping [-embed e]                          check the embedding service
   create-scope [-parent ID] -role R -title T     create a scope
   push -scope ID -summary S [-kind K] [-content X|-content-file F] [-publish]
+  ingest <path> [-scope ID] [-title T] [-maxchars N] [-overlap N]  mirror a dir tree into scopes; chunk files as documents
   query -scope ID -text T [-detail overview|entry|raw] [-topk N] [-tier t] [-kind k] [-mode m]
   drill -artifact ID [-detail raw]
   publish -artifact ID

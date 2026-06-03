@@ -41,6 +41,12 @@ func HitOut(h core.Hit) map[string]any {
 		"summary":    h.Summary,
 		"score":      h.Score,
 	}
+	if p := h.Meta["path"]; p != "" {
+		out["path"] = p
+	}
+	if l := h.Meta["lines"]; l != "" {
+		out["lines"] = l
+	}
 	if len(h.Content) > 0 {
 		out["content"] = string(h.Content)
 	}

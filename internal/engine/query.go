@@ -199,6 +199,7 @@ func (e *Engine) buildHit(ctx context.Context, a core.Artifact, score float64, d
 		Tier:      a.Tier,
 		Summary:   a.Summary,
 		Score:     score,
+		Meta:      a.Meta,
 	}
 	if detail >= core.DetailRaw && !a.Content.IsZero() {
 		data, err := e.cas.Load(ctx, a.Content)

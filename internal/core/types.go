@@ -101,7 +101,7 @@ type Scope struct {
 	Parent     ID        `json:"parent"`      // zero => root
 	Role       Role      `json:"role"`        // worktree/workspace/session (a label)
 	Title      string    `json:"title"`       //
-	Version    int        `json:"version"`    // vN
+	Version    int       `json:"version"`     // vN
 	SeedFrom   ID        `json:"seed_from"`   // KindSeed artifact this version started from
 	Archived   bool      `json:"archived"`    // superseded by a newer version
 	ForkedFrom ID        `json:"forked_from"` // scope this was forked from (idea-evolution graph)
@@ -116,27 +116,32 @@ type Scope struct {
 // Artifact is a leaf result/insight. Full content lives in CAS (cold); the
 // working layer holds only a mini-summary + an embedding OF THE SUMMARY.
 type Artifact struct {
-	ID          ID           `json:"id"`
-	Scope       ID           `json:"scope"`
-	Kind        ArtifactKind `json:"kind"`
-	Tier        Tier         `json:"tier"`
-	Summary     string       `json:"summary"`      // the cheap representation
-	EmbRef      EmbeddingRef `json:"emb_ref"`      // embedding of Summary
-	Content     ContentHash  `json:"content"`      // full content in CAS; zero if summary-only
-	DerivedFrom []ID         `json:"derived_from"` // idea-evolution lineage
-	Published   bool         `json:"published"`    // visible to siblings via parent blackboard
-	CreatedAt   time.Time    `json:"created_at"`
+	ID          ID                `json:"id"`
+	Scope       ID                `json:"scope"`
+	Kind        ArtifactKind      `json:"kind"`
+	Tier        Tier              `json:"tier"`
+	Summary     string            `json:"summary"`        // the cheap representation
+	EmbRef      EmbeddingRef      `json:"emb_ref"`        // embedding of Summary
+	Content     ContentHash       `json:"content"`        // full content in CAS; zero if summary-only
+	DerivedFrom []ID              `json:"derived_from"`   // idea-evolution lineage
+	Published   bool              `json:"published"`      // visible to siblings via parent blackboard
+	Meta        map[string]string `json:"meta,omitempty"` // e.g. file path, line range, chunk index
+	CreatedAt   time.Time         `json:"created_at"`
 }
 
 // PushRequest is how an external LLM writes content + a summary into IOC.
 type PushRequest struct {
 	Scope       ID
 	Kind        ArtifactKind
-	Summary     string // REQUIRED — the mini-summary the LLM wrote
+	Summary     string // REQUIRED — the display label / mini-summary
 	Content     []byte // OPTIONAL — full content; nil => summary-only
 	DerivedFrom []ID
 	Tier        Tier // defaults to TierWorkspace
 	Publish     bool // make visible to siblings immediately
+	// EmbedText, if set, is what gets embedded instead of Summary — used for file
+	// chunks (embed the raw chunk text; keep Summary as a short display label).
+	EmbedText string
+	Meta      map[string]string // optional metadata (file path, line range, ...)
 }
 
 // QueryMode selects the retrieval strategy.
@@ -198,14 +203,15 @@ func ConfidenceFloor(model string) float64 {
 
 // Hit is one retrieval result. Content is populated only at DetailRaw.
 type Hit struct {
-	Artifact  ID           `json:"artifact"`
-	Scope     ID           `json:"scope"`
-	ScopePath string       `json:"scope_path"`
-	Kind      ArtifactKind `json:"kind"`
-	Tier      Tier         `json:"tier"`
-	Summary   string       `json:"summary"`
-	Score     float64      `json:"score"`
-	Content   []byte       `json:"content,omitempty"`
+	Artifact  ID                `json:"artifact"`
+	Scope     ID                `json:"scope"`
+	ScopePath string            `json:"scope_path"`
+	Kind      ArtifactKind      `json:"kind"`
+	Tier      Tier              `json:"tier"`
+	Summary   string            `json:"summary"`
+	Score     float64           `json:"score"`
+	Meta      map[string]string `json:"meta,omitempty"`
+	Content   []byte            `json:"content,omitempty"`
 }
 
 // Seed carries distilled constraints/lessons across a version boundary.

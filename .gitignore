@@ -25,3 +25,6 @@ py/.venv/
 .ioc-data/
 .ioc-mcp-data/
 .ioc-live/
+.ioc-files/
+.ioc-regress*/
+.claude/

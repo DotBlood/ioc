@@ -27,6 +27,11 @@ make scenario EMBED=http://127.0.0.1:8088   # on the real embedder
 
 go run ./cmd/ioc run-scenario internal/eval/scenarios/hoe.json [-embed <endpoint>]
 go run ./cmd/ioc embed-ping -embed http://127.0.0.1:8088
+
+# Ingest a code/doc tree as KindDocument chunks (mechanical, no LLM):
+go run ./cmd/ioc ingest internal -dir .ioc-files -embed http://127.0.0.1:8088
+go run ./cmd/ioc query -dir .ioc-files -embed http://127.0.0.1:8088 \
+  -scope <root> -kind document -mode hierarchical -text "cross-encoder reranker"
 ```
 
 Embedder `-embed`: empty = deterministic mock (pipeline only, not real wall numbers);
@@ -44,6 +49,16 @@ Retrieval modes (`-mode` / `Query.Mode`+`Hierarchical`+`CoarseK`):
 `-rerank` (CLI) / `rerank` (MCP) cross-encoder reranks the top-N candidates (needs the py `/rerank`
 endpoint) — the universal last-mile precision fix. More commands: `ioc query|drill|traces|trace|
 rollup|consolidate|crossversion|...`, `ioc gen-scenario -shape flat|tree`.
+
+**Ingestion (`ioc ingest <path>`, files as a first-class Kind):** mirrors the directory tree into
+nested scopes, chunks each text file into line-aligned windows (~1500 chars, ~200 overlap), and
+embeds the **raw chunk text** (`PushRequest.EmbedText`) while keeping a short `path:lines — first
+line` label as `Summary`. Each chunk is `KindDocument` with `Meta{path,lines,chunk}` and the chunk
+bytes in CAS (so `drill` returns the source). Per-directory mechanical rollups (filenames) let
+hierarchical retrieval route by the file tree. Skips `.git`/`vendor`/`node_modules`/`bin`/binaries
+(NUL)/files >512KB. Use a SEPARATE `-dir` from reasoning data (one embedder per data-dir). The
+reasoning write path (`Push` without `EmbedText`) is unchanged. Deferred: incremental re-ingest/
+sync, language-aware chunking, MCP `ioc_ingest`.
 
 **Scale levers — measured (real, 180 artifacts, top-5, recall@topK):**
 
@@ -67,7 +82,8 @@ internal/storage/  CAS (sha256+zstd), EmbeddingStore (float32), Meta (bbolt)
 internal/search/   brute-force cosine (leaf; no core import)
 internal/engine/   the public API (Open/Push/Query/Drill/Publish/Fork/Consolidate/CrossVersion/...)
 internal/eval/     scenario runner + metrics; eval/scenarios/hoe.json
-cmd/ioc/           CLI (run-scenario, embed-ping, memory commands)
+internal/ingest/   file→chunk→KindDocument ingestion (chunk.go + ingest.go); dir tree → scopes
+cmd/ioc/           CLI (run-scenario, embed-ping, ingest, memory commands)
 cmd/ioc-mcp/       stdio MCP server (ioc_* tools)
 py/                embed_server.py (FastAPI) + .venv (gitignored)
 ```

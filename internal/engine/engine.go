@@ -180,7 +180,13 @@ func (e *Engine) Push(ctx context.Context, r core.PushRequest) (core.Artifact, e
 		}
 		content = h
 	}
-	ref, err := e.storeSummaryEmbedding(ctx, r.Summary)
+	// Embed EmbedText if provided (file chunks embed raw chunk text, keeping
+	// Summary as a short display label); otherwise embed the Summary itself.
+	embedTarget := r.Summary
+	if r.EmbedText != "" {
+		embedTarget = r.EmbedText
+	}
+	ref, err := e.storeSummaryEmbedding(ctx, embedTarget)
 	if err != nil {
 		return core.Artifact{}, err
 	}
@@ -194,6 +200,7 @@ func (e *Engine) Push(ctx context.Context, r core.PushRequest) (core.Artifact, e
 		Content:     content,
 		DerivedFrom: r.DerivedFrom,
 		Published:   r.Publish,
+		Meta:        r.Meta,
 		CreatedAt:   time.Now(),
 	}
 	if err := e.meta.PutArtifact(a); err != nil {

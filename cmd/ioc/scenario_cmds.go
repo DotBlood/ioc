@@ -194,7 +194,10 @@ func genScenario(args []string) error {
 // returning remaining args (flags, original order) so flags may appear before or
 // after the positional. Handles "-dir/-embed/-mode/-coarsek value".
 func splitPositional(args []string) (pos string, rest []string) {
-	valueFlags := map[string]bool{"-dir": true, "-embed": true, "-mode": true, "-coarsek": true}
+	valueFlags := map[string]bool{
+		"-dir": true, "-embed": true, "-mode": true, "-coarsek": true,
+		"-scope": true, "-title": true, "-maxchars": true, "-overlap": true,
+	}
 	skip := false
 	for _, a := range args {
 		if skip {
