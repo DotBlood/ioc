@@ -59,3 +59,14 @@ func (e *Engine) Config(key string) (string, bool) { return e.meta.GetConfig(key
 
 // SetConfig persists a small config value.
 func (e *Engine) SetConfig(key, val string) error { return e.meta.PutConfig(key, val) }
+
+// Sync flushes buffered embeddings to disk. The embedding store keeps vectors in
+// memory until Sync (Close also syncs); a long-lived runtime owner must call this
+// after writes so a crash does not lose embeddings. No-op if the store is not yet
+// opened (no embeddings written this run).
+func (e *Engine) Sync() error {
+	if e.emb == nil {
+		return nil
+	}
+	return e.emb.Sync()
+}
