@@ -52,6 +52,7 @@ func TestEmbeddingStore_PutGetPersist(t *testing.T) {
 	// Reopen and verify persistence.
 	s2, err := OpenEmbeddingStore(path, 4)
 	require.NoError(t, err)
+	defer s2.Close()
 	require.Equal(t, 2, s2.Len())
 	v2, err := s2.Get(r2)
 	require.NoError(t, err)

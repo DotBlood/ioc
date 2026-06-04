@@ -12,16 +12,21 @@ import (
 )
 
 // EmbeddingStore is a file-backed, fixed-size, append-only embedding store.
-// Each record is dims*4 bytes (float32). Refs are 1-indexed.
-// In-memory buffer + Sync() to disk (mmap deferred; same Put/Get/Len/Close API).
+// Each record is dims*4 bytes (float32); refs are 1-indexed. The file holds a
+// header (count + dims) followed by the records. An in-memory copy serves reads;
+// each Put APPENDS exactly its record to the file and then rewrites the count
+// header (the count is the commit point), so persistence is O(1) per write and
+// crash-atomic — a torn tail past the committed count is ignored on reopen.
+// Sync fsyncs; it no longer rewrites the whole file.
 type EmbeddingStore struct {
 	mu      sync.RWMutex
 	path    string
+	file    *os.File
 	dims    int
 	recSize int
 	count   int
 	data    []byte
-	dirty   bool
+	dirty   bool // records written but not yet fsynced
 }
 
 const embHeaderSize = 16 // 8 bytes count + 4 bytes dims + 4 reserved
@@ -38,7 +43,12 @@ func OpenEmbeddingStore(path string, dims int) (*EmbeddingStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("embedding store: open: %w", err)
 	}
-	defer file.Close()
+	ok := false
+	defer func() {
+		if !ok {
+			file.Close()
+		}
+	}()
 
 	fi, err := file.Stat()
 	if err != nil {
@@ -52,7 +62,7 @@ func OpenEmbeddingStore(path string, dims int) (*EmbeddingStore, error) {
 	case fi.Size() == 0:
 		header := make([]byte, embHeaderSize)
 		binary.LittleEndian.PutUint32(header[8:12], uint32(dims))
-		if _, err := file.Write(header); err != nil {
+		if _, err := file.WriteAt(header, 0); err != nil {
 			return nil, fmt.Errorf("embedding store: write header: %w", err)
 		}
 		fileSize = embHeaderSize
@@ -76,10 +86,13 @@ func OpenEmbeddingStore(path string, dims int) (*EmbeddingStore, error) {
 			return nil, fmt.Errorf("embedding store: read: %w", err)
 		}
 	}
-	return &EmbeddingStore{path: path, dims: dims, recSize: recSize, count: count, data: buf}, nil
+	ok = true
+	return &EmbeddingStore{path: path, file: file, dims: dims, recSize: recSize, count: count, data: buf}, nil
 }
 
-// Put appends a vector and returns its 1-indexed ref.
+// Put appends a vector and returns its 1-indexed ref. It writes the record to the
+// file, then the updated count header (the commit point); on a write error the
+// in-memory count is left unchanged so memory and disk stay consistent.
 func (s *EmbeddingStore) Put(vec []float32) (core.EmbeddingRef, error) {
 	if len(vec) != s.dims {
 		return 0, fmt.Errorf("embedding store: expected %d dims, got %d", s.dims, len(vec))
@@ -99,8 +112,18 @@ func (s *EmbeddingStore) Put(vec []float32) (core.EmbeddingRef, error) {
 	for i, v := range vec {
 		binary.LittleEndian.PutUint32(s.data[offset+i*4:offset+(i+1)*4], math.Float32bits(v))
 	}
-	s.count = newCount
 	binary.LittleEndian.PutUint32(s.data[0:8], uint32(newCount))
+
+	// Persist incrementally: record first, then the count header (commit point).
+	if _, err := s.file.WriteAt(s.data[offset:offset+s.recSize], int64(offset)); err != nil {
+		binary.LittleEndian.PutUint32(s.data[0:8], uint32(oldCount)) // uncommit
+		return 0, fmt.Errorf("embedding store: write record: %w", err)
+	}
+	if _, err := s.file.WriteAt(s.data[0:embHeaderSize], 0); err != nil {
+		binary.LittleEndian.PutUint32(s.data[0:8], uint32(oldCount)) // uncommit
+		return 0, fmt.Errorf("embedding store: write header: %w", err)
+	}
+	s.count = newCount
 	s.dirty = true
 	return core.EmbeddingRef(newCount), nil
 }
@@ -136,22 +159,33 @@ func (s *EmbeddingStore) Len() int {
 // Dims returns the fixed vector dimension.
 func (s *EmbeddingStore) Dims() int { return s.dims }
 
-// Sync flushes the in-memory buffer to disk.
+// Sync fsyncs records written since the last Sync (records already hit the file
+// on Put; this makes them durable to power loss). No whole-file rewrite.
 func (s *EmbeddingStore) Sync() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.dirty {
 		return nil
 	}
-	if err := os.WriteFile(s.path, s.data, 0o644); err != nil {
+	if err := s.file.Sync(); err != nil {
 		return fmt.Errorf("embedding store: sync: %w", err)
 	}
 	s.dirty = false
 	return nil
 }
 
-// Close syncs and releases resources.
-func (s *EmbeddingStore) Close() error { return s.Sync() }
+// Close syncs and releases the file handle.
+func (s *EmbeddingStore) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dirty {
+		if err := s.file.Sync(); err != nil {
+			return fmt.Errorf("embedding store: sync: %w", err)
+		}
+		s.dirty = false
+	}
+	return s.file.Close()
+}
 
 // alignPow2 rounds up to the nearest power of 2 (minimum 4096).
 func alignPow2(n int) int {
