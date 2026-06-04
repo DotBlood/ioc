@@ -29,8 +29,8 @@ go run ./cmd/ioc run-scenario internal/eval/scenarios/hoe.json [-embed <endpoint
 go run ./cmd/ioc embed-ping -embed http://127.0.0.1:8088
 
 # Ingest a code/doc tree as KindDocument chunks (mechanical, no LLM):
-go run ./cmd/ioc ingest internal -dir .ioc-files -embed http://127.0.0.1:8088
-go run ./cmd/ioc query -dir .ioc-files -embed http://127.0.0.1:8088 \
+go run ./cmd/ioc ingest internal -dir .ioc/files -embed http://127.0.0.1:8088
+go run ./cmd/ioc query -dir .ioc/files -embed http://127.0.0.1:8088 \
   -scope <root> -kind document -mode hierarchical -text "cross-encoder reranker"
 ```
 

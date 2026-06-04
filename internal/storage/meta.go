@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,6 +33,9 @@ func OpenMeta(path string) (*Meta, error) {
 	}
 	db, err := bolt.Open(path, 0o644, &bolt.Options{Timeout: time.Second})
 	if err != nil {
+		if errors.Is(err, bolt.ErrTimeout) {
+			return nil, fmt.Errorf("meta: data dir %q is busy — locked by another ioc/ioc-mcp process (close it or use a different -dir): %w", path, err)
+		}
 		return nil, fmt.Errorf("meta: open: %w", err)
 	}
 	err = db.Update(func(tx *bolt.Tx) error {

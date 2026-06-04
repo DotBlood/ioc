@@ -58,7 +58,7 @@ go run ./cmd/ioc run-scenario internal/eval/scenarios/hoe.json -embed http://127
 ## Memory commands (drive IOC from the shell)
 
 Operate IOC as a persistent store (an agent can call these via the shell). All take `-dir`
-(persistent; default `.ioc-data`) and `-embed`. **One `-dir` must always use the SAME embedder** —
+(persistent; default `.ioc/data`) and `-embed`. **One `-dir` must always use the SAME embedder** —
 mock and real embeddings are different vector spaces.
 
 ```bash
@@ -93,7 +93,7 @@ Register in Claude Code (`.mcp.json`), then reconnect so the tools appear:
   "mcpServers": {
     "ioc": {
       "command": "F:\\projects\\IOC\\bin\\ioc-mcp.exe",
-      "env": { "IOC_DIR": "F:\\projects\\IOC\\.ioc-data", "IOC_EMBED": "http://127.0.0.1:8088" }
+      "env": { "IOC_DIR": "F:\\projects\\IOC\\.ioc\\mcp-data", "IOC_EMBED": "http://127.0.0.1:8088" }
     }
   }
 }

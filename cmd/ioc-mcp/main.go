@@ -3,7 +3,7 @@
 //
 // Config via environment:
 //
-//	IOC_DIR    persistent data directory (default ".ioc-data")
+//	IOC_DIR    persistent data directory (default ".ioc/mcp-data")
 //	IOC_EMBED  embedder endpoint (empty=mock; http://host:port or unix:/path)
 //
 // A single engine instance is guarded by a mutex (single-writer).
@@ -66,7 +66,7 @@ type ioc struct {
 }
 
 func main() {
-	dir := envOr("IOC_DIR", ".ioc-data")
+	dir := envOr("IOC_DIR", ".ioc/mcp-data")
 	endpoint := os.Getenv("IOC_EMBED")
 
 	var embedder embed.Embedder

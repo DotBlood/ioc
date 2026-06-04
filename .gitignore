@@ -21,10 +21,7 @@ dist/
 close/
 # Python embed-service virtualenv
 py/.venv/
-# local IOC data dirs
-.ioc-data/
-.ioc-mcp-data/
-.ioc-live/
-.ioc-files/
-.ioc-regress*/
+# local IOC data dirs: new stores live under .ioc/; pattern also covers any
+# leftover/temp .ioc-* dirs from older layouts.
+.ioc*/
 .claude/

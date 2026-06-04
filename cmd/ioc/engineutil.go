@@ -12,7 +12,7 @@ import (
 	"github.com/DotBlood/ioc/internal/engine"
 )
 
-const defaultDataDir = ".ioc-data"
+const defaultDataDir = ".ioc/data"
 
 func buildEmbedder(endpoint string) embed.Embedder {
 	if endpoint == "" {

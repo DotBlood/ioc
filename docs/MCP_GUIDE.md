@@ -77,7 +77,7 @@ make build      # -> bin/ioc-mcp
   "mcpServers": {
     "ioc": {
       "command": "F:\\projects\\IOC\\bin\\ioc-mcp.exe",
-      "env": { "IOC_DIR": "F:\\projects\\IOC\\.ioc-mcp-data", "IOC_EMBED": "http://127.0.0.1:8088" }
+      "env": { "IOC_DIR": "F:\\projects\\IOC\\.ioc\\mcp-data", "IOC_EMBED": "http://127.0.0.1:8088" }
     }
   }
 }
