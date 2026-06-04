@@ -54,6 +54,9 @@ func runtimeStatus(dir string) error {
 		if st, serr := c.Stats(); serr == nil {
 			out["conns"] = st.Conns
 			out["requests"] = st.Requests
+			if st.EmbedModel != "" { // live model name (runtime.json snapshot is empty for HTTP embedders at startup)
+				out["embed_model"] = st.EmbedModel
+			}
 		}
 		_ = c.Close()
 		if t, perr := time.Parse(time.RFC3339, info.StartedAt); perr == nil {
