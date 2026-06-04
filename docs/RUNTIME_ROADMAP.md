@@ -22,6 +22,44 @@ clients/agents concurrently over a local protocol. The CLI and the stdio MCP ser
 **clients** of the daemon (falling back to embedded `engine.Open` when no daemon is running). This
 removes the lock conflict and gives real shared memory.
 
+## Why a daemon, not multi-process access to one store
+
+Short version: building multi-process access to a single store as its own feature has little value —
+the same need ("several agents on one memory") is served more cleanly by the runtime daemon.
+
+Why multi-process is a dead end:
+
+1. **It duplicates the runtime's goal.** Both "N processes on one store" and "a daemon" solve the
+   same problem; the daemon does it correctly (one owner, serialization *inside* the process), while
+   multi-process pushes coordination down into the file layer.
+2. **High cost, little gain.** Safely opening one store from 2+ processes would require: replacing
+   bbolt's exclusive lock with a shared protocol (or single-writer + read-replicas); making
+   `EmbeddingStore` cross-process coordinated — today it reads the whole file into memory and does a
+   blind `os.WriteFile` on Sync (`internal/storage/embstore.go`), so two writers race and lose
+   records; and making CAS dedup atomic across processes. That is a large change in the most fragile
+   part of the system, for a scenario the daemon covers more cleanly.
+3. **VISION points the other way.** "Single-writer now; design interfaces so MVCC can be added when
+   multi-tenant concurrency is needed" and "an MCP server is a thin wrapper over the core." The
+   direction is one owner + MVCC-ready interfaces, not many writers into one file.
+
+What to do instead:
+
+- **The daemon is the sole store owner**; clients (CLI, MCP, sub-agents) talk to it over the
+  transport. Concurrency lives *inside* the daemon at the goroutine level (RWMutex: parallel reads,
+  serialized writes), not across OS processes. That is exactly this roadmap.
+- **A clear error when a second process tries** to open a live store (already shipped in `OpenMeta`)
+  is enough as a guardrail for a CLI run next to a live daemon.
+- **MVCC / snapshot isolation comes later**, and also inside one owner — not between processes.
+
+The one niche where multi-process would be justified: if the goal were "several *independent* tools
+occasionally touch the store with no live daemon" (a pure CLI world, no server), a minimal
+shared-read + single-write lock would make sense. But IOC needs the daemon anyway for multi-agent, so
+that work would be thrown away.
+
+**Conclusion:** don't build multi-process as a separate feature. Invest in the daemon and solve
+concurrency inside it (goroutines + RWMutex, then MVCC). Multi-process is a solution the daemon makes
+unnecessary.
+
 ## Decisions (locked)
 
 - **Transport:** internal **framed-JSON RPC** over a local socket / loopback (stdlib `net` +
@@ -133,7 +171,9 @@ owner.
 - **MVCC / multi-tenant** (VISION: "MVCC-ready interfaces later") — keep single-writer / RWMutex;
   the `Service` contract is shaped so MVCC slots in later without breaking it.
 - **Networked MCP / HTTP transport**, remote/cross-host clients, auth beyond the loopback token.
-- **Orphaned-embedding compaction**; cross-process coordination without a daemon.
+- **Orphaned-embedding compaction.**
+- **Cross-process coordination without a daemon — deliberately rejected**, not merely deferred (see
+  "Why a daemon, not multi-process access to one store" above).
 
 ## End-to-end verification (after all three sessions)
 
