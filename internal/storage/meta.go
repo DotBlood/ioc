@@ -151,6 +151,39 @@ func (m *Meta) ArtifactsInScope(scope core.ID) ([]core.Artifact, error) {
 	return out, err
 }
 
+// ListArtifacts returns all artifacts (full scan; no secondary index).
+func (m *Meta) ListArtifacts() ([]core.Artifact, error) {
+	var out []core.Artifact
+	err := m.db.View(func(tx *bolt.Tx) error {
+		return tx.Bucket(bkArtifacts).ForEach(func(_, v []byte) error {
+			var a core.Artifact
+			if err := json.Unmarshal(v, &a); err != nil {
+				return err
+			}
+			out = append(out, a)
+			return nil
+		})
+	})
+	return out, err
+}
+
+// DeleteArtifact removes an artifact record. Its embedding stays in the
+// append-only EmbeddingStore (dead weight; never re-surfaces in search, which
+// builds its candidate set from live artifacts).
+func (m *Meta) DeleteArtifact(id core.ID) error {
+	return m.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(bkArtifacts).Delete([]byte(id.String()))
+	})
+}
+
+// DeleteScope removes a scope record. Callers must ensure the scope is empty
+// (no artifacts, no children) first.
+func (m *Meta) DeleteScope(id core.ID) error {
+	return m.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(bkScopes).Delete([]byte(id.String()))
+	})
+}
+
 // --- traces ---
 
 // PutTrace stores a trace record.

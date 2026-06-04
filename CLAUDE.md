@@ -57,8 +57,17 @@ line` label as `Summary`. Each chunk is `KindDocument` with `Meta{path,lines,chu
 bytes in CAS (so `drill` returns the source). Per-directory mechanical rollups (filenames) let
 hierarchical retrieval route by the file tree. Skips `.git`/`vendor`/`node_modules`/`bin`/binaries
 (NUL)/files >512KB. Use a SEPARATE `-dir` from reasoning data (one embedder per data-dir). The
-reasoning write path (`Push` without `EmbedText`) is unchanged. Deferred: incremental re-ingest/
-sync, language-aware chunking, MCP `ioc_ingest`.
+reasoning write path (`Push` without `EmbedText`) is unchanged.
+
+`ingest` is **idempotent / synchronizing**: re-running reconciles the store to the current tree —
+changed files (detected via `Meta["sig"]` = content hash + chunk params) are re-chunked, new files
+added, vanished files' chunks removed, emptied directory scopes pruned; an unchanged re-run is a
+no-op (no new scopes/chunks/embeddings). Directory scopes are reused by `(parent, title)`. The
+abspath→root-scope mapping is remembered in the meta config bucket, so a later `ioc ingest <path>`
+without `-scope` re-syncs the same tree in place. Caveats: orphaned embeddings of
+deleted/re-chunked artifacts stay in the append-only `EmbeddingStore` (dead weight, never surfaced
+in search — store compaction deferred); a mid-run crash can leave partial state (no transaction;
+`-force` deferred). Deferred: language-aware chunking, MCP `ioc_ingest`.
 
 **Scale levers — measured (real, 180 artifacts, top-5, recall@topK):**
 

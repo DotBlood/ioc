@@ -3,12 +3,7 @@ package ingest
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"io/fs"
-	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
 	"github.com/DotBlood/ioc/internal/core"
 	"github.com/DotBlood/ioc/internal/engine"
@@ -31,134 +26,54 @@ type Options struct {
 	Overlap  int // chunk overlap in chars (<0 => DefaultOverlap)
 }
 
-// Stats summarizes an ingest run.
+// Stats summarizes a reconcile run.
 type Stats struct {
-	Files   int `json:"files"`
-	Chunks  int `json:"chunks"`
-	Skipped int `json:"skipped"`
-	Scopes  int `json:"scopes"`
+	FilesAdded     int `json:"files_added"`
+	FilesUpdated   int `json:"files_updated"`
+	FilesUnchanged int `json:"files_unchanged"`
+	FilesRemoved   int `json:"files_removed"`
+	ChunksAdded    int `json:"chunks_added"`
+	ChunksRemoved  int `json:"chunks_removed"`
+	ScopesCreated  int `json:"scopes_created"`
+	ScopesRemoved  int `json:"scopes_removed"`
 }
 
-// Ingest walks root, mirrors its directory tree into nested scopes under
-// rootScope, and writes each text file as line-aligned KindDocument chunks
-// (the raw chunk text is embedded; Summary is a short path:lines label). Each
-// directory scope gets a mechanical rollup listing its files so hierarchical
-// retrieval can route by the file tree.
+// Ingest synchronizes the store under rootScope to match the file tree at root:
+// new files are added, changed files re-chunked, vanished files' chunks removed,
+// and emptied directory scopes pruned. It is IDEMPOTENT — re-running with no
+// filesystem changes is a no-op (no new scopes, chunks, or embeddings), because
+// each text file carries a content+params signature (Meta["sig"]) and directory
+// scopes are reused by (parent, title) rather than recreated.
 func Ingest(ctx context.Context, e *engine.Engine, root string, rootScope core.ID, opt Options) (Stats, error) {
-	var st Stats
-	root = filepath.Clean(root)
-	dirScopes := map[string]core.ID{".": rootScope}
-	dirFiles := map[string][]string{}
-
-	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			return relErr
-		}
-		if d.IsDir() {
-			if rel != "." && (skipDirs[d.Name()] || strings.HasPrefix(d.Name(), ".ioc")) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		relDir := filepath.Dir(rel)
-		scopeID, scErr := ensureDirScope(ctx, e, dirScopes, relDir)
-		if scErr != nil {
-			return scErr
-		}
-		n, ferr := ingestFile(ctx, e, path, filepath.ToSlash(rel), scopeID, opt)
-		if ferr != nil {
-			return ferr
-		}
-		if n == 0 {
-			st.Skipped++
-			return nil
-		}
-		st.Files++
-		st.Chunks += n
-		dirFiles[relDir] = append(dirFiles[relDir], d.Name())
-		return nil
-	})
-	if walkErr != nil {
-		return st, walkErr
+	if opt.MaxChars <= 0 {
+		opt.MaxChars = DefaultMaxChars
 	}
-	st.Scopes = len(dirScopes)
-
-	// Mechanical per-directory rollups (filenames) so coarse→fine routing works.
-	for relDir, files := range dirFiles {
-		sort.Strings(files)
-		label := relDir
-		if label == "." {
-			label = filepath.Base(root)
-		}
-		summary := fmt.Sprintf("directory %s; files: %s", filepath.ToSlash(label), strings.Join(files, ", "))
-		if err := e.RollupScope(ctx, dirScopes[relDir], summary); err != nil {
-			return st, err
-		}
+	if opt.Overlap < 0 || opt.Overlap >= opt.MaxChars {
+		opt.Overlap = DefaultOverlap
 	}
-	return st, nil
-}
-
-// ensureDirScope returns the scope mirroring relDir, creating the missing
-// ancestor chain under the cached root. relDir is in OS form ("." = root).
-func ensureDirScope(ctx context.Context, e *engine.Engine, cache map[string]core.ID, relDir string) (core.ID, error) {
-	if id, ok := cache[relDir]; ok {
-		return id, nil
+	r := &reconciler{
+		ctx: ctx, e: e, root: filepath.Clean(root), rootScope: rootScope, opt: opt,
+		dirScope:  map[string]core.ID{".": rootScope},
+		dirFiles:  map[string][]string{},
+		dirty:     map[string]bool{},
+		wantPaths: map[string]bool{},
 	}
-	parent := filepath.Dir(relDir)
-	parentID, err := ensureDirScope(ctx, e, cache, parent)
-	if err != nil {
-		return core.NilID, err
+	if err := r.buildIndex(); err != nil {
+		return r.st, err
 	}
-	s, err := e.CreateScope(ctx, parentID, core.RoleWorkspace, filepath.Base(relDir))
-	if err != nil {
-		return core.NilID, err
+	if err := r.walk(); err != nil {
+		return r.st, err
 	}
-	cache[relDir] = s.ID
-	return s.ID, nil
-}
-
-// ingestFile reads, filters, chunks, and pushes one file. Returns the number of
-// chunks pushed (0 => skipped: too large or binary or empty).
-func ingestFile(ctx context.Context, e *engine.Engine, path, relSlash string, scope core.ID, opt Options) (int, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return 0, err
+	if err := r.removeVanished(); err != nil {
+		return r.st, err
 	}
-	if info.Size() > MaxFileBytes {
-		return 0, nil
+	if err := r.pruneEmpty(); err != nil {
+		return r.st, err
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0, err
+	if err := r.rollups(); err != nil {
+		return r.st, err
 	}
-	if isBinary(data) {
-		return 0, nil
-	}
-	chunks := Split(string(data), opt.MaxChars, opt.Overlap)
-	for i, c := range chunks {
-		lines := fmt.Sprintf("%d-%d", c.StartLine, c.EndLine)
-		summary := fmt.Sprintf("%s:%s — %s", relSlash, lines, FirstLine(c.Text, 80))
-		if _, err := e.Push(ctx, core.PushRequest{
-			Scope:     scope,
-			Kind:      core.KindDocument,
-			Tier:      core.TierWorktree,
-			Summary:   summary,
-			EmbedText: c.Text,
-			Content:   []byte(c.Text),
-			Meta: map[string]string{
-				"path":  relSlash,
-				"lines": lines,
-				"chunk": fmt.Sprintf("%d", i),
-			},
-		}); err != nil {
-			return 0, err
-		}
-	}
-	return len(chunks), nil
+	return r.st, nil
 }
 
 // isBinary reports whether data looks non-text: a NUL byte in the first 8KB.

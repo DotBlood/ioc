@@ -2,7 +2,12 @@
 // as KindDocument artifacts (no LLM in the loop — the raw chunk text is embedded).
 package ingest
 
-import "strings"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"strings"
+)
 
 // Defaults for chunking, in characters. A chunk is a window of whole lines whose
 // combined length stays under maxChars; consecutive chunks overlap by ~overlap
@@ -84,6 +89,15 @@ func backupForOverlap(lines []string, start, end, overlap int) int {
 		j = start + 1
 	}
 	return j
+}
+
+// Sig is a per-file change signature: the content hash plus the chunking
+// parameters. Two ingests produce the same Sig iff the bytes AND the chunk
+// windowing are identical — so an unchanged file (same params) can be skipped,
+// while changing the file or the maxChars/overlap forces a re-chunk.
+func Sig(data []byte, maxChars, overlap int) string {
+	h := sha256.Sum256(data)
+	return fmt.Sprintf("%s:%d:%d", hex.EncodeToString(h[:]), maxChars, overlap)
 }
 
 // FirstLine returns a trimmed one-line label for a chunk (its first non-empty
