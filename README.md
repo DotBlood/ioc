@@ -99,6 +99,12 @@ Register in Claude Code (`.mcp.json`), then reconnect so the tools appear:
 }
 ```
 
+## Runtime (planned)
+
+A single long-lived daemon will own a store and serve many clients/agents over a local protocol, so
+the CLI, the MCP server, and sub-agents share one memory instead of fighting bbolt's exclusive lock.
+Phased plan: [`docs/RUNTIME_ROADMAP.md`](docs/RUNTIME_ROADMAP.md).
+
 ## Wall metrics (success targets)
 
 - **(a) overview-sufficiency** ≥ 0.80 — recall turns satisfied at `DetailOverview` with no drill-to-raw.

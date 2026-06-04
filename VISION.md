@@ -90,6 +90,9 @@ requirement is dropped.
   out of the box. (HTTP API and library use are also possible.)
 - **Local-first now; SaaS later.** The top scope maps to a tenant. Implement single-writer now;
   design interfaces so MVCC can be added when multi-tenant concurrency is needed.
+- **Runtime (planned):** a single long-lived daemon owns a store and serves many clients/agents over
+  a local protocol, so CLI/MCP/sub-agents share one memory instead of fighting the bbolt lock. Phased
+  plan in [`docs/RUNTIME_ROADMAP.md`](docs/RUNTIME_ROADMAP.md).
 
 ## The load-bearing risk (honest)
 
