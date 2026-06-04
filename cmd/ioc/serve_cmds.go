@@ -18,11 +18,17 @@ func serveCmd(args []string) error {
 	dir, em := commonFlags(fs)
 	_ = fs.Parse(args)
 
+	// If a daemon already owns this dir, say so clearly instead of leaking the
+	// raw bbolt lock error.
+	if _, derr := runtime.Dial(*dir); derr == nil {
+		return fmt.Errorf("a runtime daemon already owns %s — stop it with `ioc runtime stop -dir %s`", *dir, *dir)
+	}
+
 	// rerank=true so Query rerank works through the daemon when a real embedder
 	// endpoint is configured (no-op for the mock).
 	e, err := openEngineEmbedded(*dir, *em, true)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w (if a daemon is running here, run `ioc runtime stop -dir %s`)", err, *dir)
 	}
 	srv := runtime.NewServer(e, *dir)
 

@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/DotBlood/ioc/internal/engine"
@@ -24,11 +25,19 @@ type Server struct {
 	eng *engine.Engine
 	dir string
 
-	mu sync.Mutex // serializes every engine call
+	// mu guards engine access: writes take Lock (exclusive), reads take RLock
+	// (concurrent). Reads are safe to run in parallel because the engine mutates
+	// no shared field on a read path (the embedding store is opened eagerly at
+	// engine.Open) and storage is internally concurrency-safe (bbolt serializes
+	// its own write txns — including the trace append a Query makes).
+	mu sync.RWMutex
 
-	token string
-	ln    net.Listener
-	ready chan struct{}
+	token     string
+	ln        net.Listener
+	ready     chan struct{}
+	stopped   chan struct{} // closed when Stop has fully finished cleanup
+	startedAt string
+	reqCount  atomic.Uint64
 
 	connsMu sync.Mutex
 	conns   map[net.Conn]struct{}
@@ -40,7 +49,7 @@ type Server struct {
 
 // NewServer wraps an open engine; the daemon takes ownership (Stop closes it).
 func NewServer(eng *engine.Engine, dir string) *Server {
-	return &Server{eng: eng, dir: dir, conns: map[net.Conn]struct{}{}, ready: make(chan struct{})}
+	return &Server{eng: eng, dir: dir, conns: map[net.Conn]struct{}{}, ready: make(chan struct{}), stopped: make(chan struct{})}
 }
 
 // Ready is closed once the daemon is listening and runtime.json is published.
@@ -52,6 +61,12 @@ func (s *Server) Addr() string {
 		return ""
 	}
 	return s.ln.Addr().String()
+}
+
+func (s *Server) connCount() int {
+	s.connsMu.Lock()
+	defer s.connsMu.Unlock()
+	return len(s.conns)
 }
 
 // Serve binds a loopback listener, publishes runtime.json, then accepts
@@ -69,10 +84,11 @@ func (s *Server) Serve() error {
 		return err
 	}
 	s.token = hex.EncodeToString(tok)
+	s.startedAt = time.Now().UTC().Format(time.RFC3339)
 
 	info := RuntimeInfo{
 		PID: os.Getpid(), Net: "tcp", Addr: ln.Addr().String(), Token: s.token,
-		StartedAt: time.Now().UTC().Format(time.RFC3339), DataDir: s.dir,
+		StartedAt: s.startedAt, DataDir: s.dir,
 		EmbedModel: s.eng.EmbModel(),
 	}
 	if err := writeRuntimeInfo(s.dir, info); err != nil {
@@ -88,6 +104,7 @@ func (s *Server) Serve() error {
 			closing := s.closing
 			s.connsMu.Unlock()
 			if closing {
+				<-s.stopped // wait for Stop to finish cleanup before returning
 				return nil
 			}
 			return fmt.Errorf("runtime: accept: %w", err)
@@ -160,6 +177,7 @@ func (s *Server) Stop() error {
 		if err := removeRuntimeInfo(s.dir); err != nil && ret == nil {
 			ret = err
 		}
+		close(s.stopped) // unblocks Serve so the process exits only after cleanup
 	})
 	return ret
 }

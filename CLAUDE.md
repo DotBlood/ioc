@@ -32,7 +32,13 @@ go run ./cmd/ioc embed-ping -embed http://127.0.0.1:8088
 go run ./cmd/ioc ingest internal -dir .ioc/files -embed http://127.0.0.1:8088
 go run ./cmd/ioc query -dir .ioc/files -embed http://127.0.0.1:8088 \
   -scope <root> -kind document -mode hierarchical -text "cross-encoder reranker"
+
+# Runtime daemon (single owner of -dir; other commands/MCP auto-route to it):
+go run ./cmd/ioc serve -dir .ioc/data -embed http://127.0.0.1:8088
+go run ./cmd/ioc runtime status -dir .ioc/data    # also: runtime stop
 ```
+
+`-race` needs cgo+gcc: `PATH=/d/tools/mingw64/mingw64/bin:$PATH CGO_ENABLED=1 go test -race ./...`.
 
 Embedder `-embed`: empty = deterministic mock (pipeline only, not real wall numbers);
 `http://host:port` (TCP, Windows-ok) or `unix:/path` = external `py/embed_server.py`.
@@ -76,6 +82,20 @@ deleted/re-chunked artifacts stay in the append-only `EmbeddingStore` (dead weig
 in search — store compaction deferred); a mid-run crash can leave partial state (no transaction;
 `-force` deferred). Deferred: language-aware chunking, MCP `ioc_ingest`.
 
+**Runtime daemon (`internal/runtime`, `ioc serve`):** a long-lived process owns ONE store
+(`engine.Open` once) and serves clients over an internal framed-JSON RPC (length-prefixed; loopback
+TCP; random per-store token in `<dir>/runtime.json`). `runtime.Service` mirrors the engine op set;
+both `*engine.Engine` and the remote `*runtime.Client` satisfy it. `runtime.Open(dir, …)` returns a
+client when a daemon owns `dir`, else an embedded engine — so CLI memory commands (`openService`) and
+the MCP server route through a daemon when present and fall back to embedded otherwise; `serve` and
+`run-scenario` use a direct embedded engine (`openEngineEmbedded`). `ingest` takes a small `Store`
+interface so it works over either path. Concurrency is in-process: `RWMutex` (parallel reads,
+serialized writes); writes flush embeddings (`engine.Sync`) for durability; per-request panic
+recovery; graceful shutdown via signal or the `shutdown` control op (`ioc runtime stop`). One daemon
+= one data-dir; **sharing = same `-dir`**. Multi-process access to one store is deliberately rejected
+in favor of the daemon (see `docs/RUNTIME_ROADMAP.md`). Deferred: MVCC/multi-tenant, networked
+MCP/HTTP, auto-start, auth beyond the loopback token.
+
 **Scale levers — measured (real, 180 artifacts, top-5, recall@topK):**
 
 | | bge-small (384d) | bge-base (768d) |
@@ -99,6 +119,7 @@ internal/search/   brute-force cosine (leaf; no core import)
 internal/engine/   the public API (Open/Push/Query/Drill/Publish/Fork/Consolidate/CrossVersion/...)
 internal/eval/     scenario runner + metrics; eval/scenarios/hoe.json
 internal/ingest/   file→chunk→KindDocument ingestion (chunk.go + ingest.go); dir tree → scopes
+internal/runtime/  daemon owning the store + framed-JSON client (Service/proto/server/client/discover)
 cmd/ioc/           CLI (run-scenario, embed-ping, ingest, memory commands)
 cmd/ioc-mcp/       stdio MCP server (ioc_* tools)
 py/                embed_server.py (FastAPI) + .venv (gitignored)

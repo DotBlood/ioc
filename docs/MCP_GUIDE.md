@@ -86,3 +86,10 @@ make build      # -> bin/ioc-mcp
 With `IOC_EMBED` set to the embedding service, start it first (see [`../README.md`](../README.md)).
 Leave `IOC_EMBED` empty to use the offline mock embedder (fine for trying the tools, but recall
 quality is only a lexical proxy).
+
+**Sharing memory with the CLI / sub-agents.** The MCP server auto-routes to a runtime daemon owning
+`IOC_DIR` if one is running (else it opens the store embedded). To share one memory across the MCP
+server, `ioc` CLI runs, and sub-agents, start a daemon on that dir first:
+`ioc serve -dir <IOC_DIR> -embed <endpoint>` (inspect with `ioc runtime status -dir <IOC_DIR>`).
+Without a daemon, only one process may hold the store at a time. See
+[`RUNTIME_ROADMAP.md`](RUNTIME_ROADMAP.md).

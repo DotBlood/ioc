@@ -43,7 +43,18 @@ const (
 	// mShutdown is a control op (not part of Service): it asks the daemon to
 	// stop gracefully. Handled specially, never reaches the engine.
 	mShutdown = "shutdown"
+	// mStats is a control op returning live daemon stats (conns, uptime, ...).
+	mStats = "stats"
 )
+
+// serverStats is the daemon's self-report (control op mStats).
+type serverStats struct {
+	ProtoVersion int    `json:"proto_version"`
+	Conns        int    `json:"conns"`
+	Requests     uint64 `json:"requests"`
+	StartedAt    string `json:"started_at"`
+	EmbedModel   string `json:"embed_model"`
+}
 
 // writeMethods mutate the store; the daemon flushes embeddings (eng.Sync) after
 // each so a crash does not lose in-memory vectors.
@@ -57,6 +68,7 @@ var writeMethods = map[string]bool{
 
 type request struct {
 	ID     uint64          `json:"id"`
+	V      int             `json:"v"` // protocol version
 	Method string          `json:"method"`
 	Token  string          `json:"token,omitempty"`
 	Params json.RawMessage `json:"params,omitempty"`

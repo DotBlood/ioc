@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/DotBlood/ioc/internal/runtime"
 )
@@ -37,21 +38,29 @@ func runtimeStatus(dir string) error {
 		}
 		return err
 	}
-	// runtime.json exists; confirm the daemon is actually reachable.
-	alive := false
-	if c, derr := runtime.Dial(dir); derr == nil {
-		alive = true
-		_ = c.Close()
-	}
-	return printJSON(map[string]any{
-		"running":     alive,
-		"stale":       !alive, // file present but no daemon answering
+	// runtime.json exists; confirm the daemon is actually reachable and pull
+	// live stats (connections, request count).
+	out := map[string]any{
+		"running":     false,
+		"stale":       true, // file present but no daemon answering
 		"pid":         info.PID,
 		"addr":        info.Addr,
 		"embed_model": info.EmbedModel,
 		"started_at":  info.StartedAt,
 		"data_dir":    info.DataDir,
-	})
+	}
+	if c, derr := runtime.Dial(dir); derr == nil {
+		out["running"], out["stale"] = true, false
+		if st, serr := c.Stats(); serr == nil {
+			out["conns"] = st.Conns
+			out["requests"] = st.Requests
+		}
+		_ = c.Close()
+		if t, perr := time.Parse(time.RFC3339, info.StartedAt); perr == nil {
+			out["uptime_sec"] = int(time.Since(t).Seconds())
+		}
+	}
+	return printJSON(out)
 }
 
 func runtimeStop(dir string) error {

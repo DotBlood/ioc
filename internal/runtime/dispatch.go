@@ -8,35 +8,58 @@ import (
 	"github.com/DotBlood/ioc/internal/core"
 )
 
-// handle authenticates and dispatches one request, returning its response.
-func (s *Server) handle(ctx context.Context, req request) response {
+// handle authenticates and dispatches one request, returning its response. A
+// panic in dispatch is recovered into an internal error so one bad request
+// cannot crash the daemon.
+func (s *Server) handle(ctx context.Context, req request) (resp response) {
+	defer func() {
+		if r := recover(); r != nil {
+			resp = response{ID: req.ID, Error: &wireError{Code: codeInternal, Msg: fmt.Sprintf("runtime: panic: %v", r)}}
+		}
+	}()
+	s.reqCount.Add(1)
+
+	if req.V != 0 && req.V != ProtoVersion {
+		return response{ID: req.ID, Error: &wireError{Code: codeInvalid, Msg: fmt.Sprintf("runtime: protocol version mismatch (client %d, server %d)", req.V, ProtoVersion)}}
+	}
 	if req.Token != s.token {
 		return response{ID: req.ID, Error: &wireError{Code: codeAuth, Msg: "runtime: bad or missing token"}}
 	}
-	if req.Method == mShutdown {
+	switch req.Method {
+	case mShutdown:
 		// Acknowledge here; serveConn triggers the actual Stop after the reply
 		// is flushed (avoids closing the conn before the client reads OK).
 		return response{ID: req.ID}
+	case mStats:
+		raw, _ := marshalRaw(serverStats{
+			ProtoVersion: ProtoVersion, Conns: s.connCount(), Requests: s.reqCount.Load(),
+			StartedAt: s.startedAt, EmbedModel: s.eng.EmbModel(),
+		})
+		return response{ID: req.ID, Result: raw}
 	}
 	result, err := s.invoke(ctx, req.Method, req.Params)
 	return response{ID: req.ID, Result: result, Error: errToWire(err)}
 }
 
-// invoke serializes the engine call and flushes embeddings after writes.
+// invoke runs the engine call under the guard: writes take an exclusive Lock
+// (then flush embeddings), reads take a shared RLock so they run concurrently.
+// defer-unlock keeps the lock released even if call panics (recovered above).
 func (s *Server) invoke(ctx context.Context, method string, params json.RawMessage) (json.RawMessage, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	raw, err := s.call(ctx, method, params)
-	if err != nil {
-		return nil, err
-	}
 	if writeMethods[method] {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		raw, err := s.call(ctx, method, params)
+		if err != nil {
+			return nil, err
+		}
 		if err := s.eng.Sync(); err != nil {
 			return nil, err
 		}
+		return raw, nil
 	}
-	return raw, nil
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.call(ctx, method, params)
 }
 
 func decode(params json.RawMessage, v any) error {

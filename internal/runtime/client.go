@@ -51,7 +51,7 @@ func (c *Client) call(method string, params, out any) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.id++
-	reqBytes, err := json.Marshal(request{ID: c.id, Method: method, Token: c.tok, Params: praw})
+	reqBytes, err := json.Marshal(request{ID: c.id, V: ProtoVersion, Method: method, Token: c.tok, Params: praw})
 	if err != nil {
 		return err
 	}
@@ -81,6 +81,13 @@ func (c *Client) Close() error { return c.conn.Close() }
 // Shutdown asks the daemon to stop gracefully. It is a control op, not part of
 // Service.
 func (c *Client) Shutdown() error { return c.call(mShutdown, nil, nil) }
+
+// Stats returns the daemon's live self-report (control op, not part of Service).
+func (c *Client) Stats() (serverStats, error) {
+	var st serverStats
+	err := c.call(mStats, nil, &st)
+	return st, err
+}
 
 func (c *Client) CreateScope(_ context.Context, parent core.ID, role core.Role, title string) (core.Scope, error) {
 	var sc core.Scope

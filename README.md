@@ -99,11 +99,22 @@ Register in Claude Code (`.mcp.json`), then reconnect so the tools appear:
 }
 ```
 
-## Runtime (planned)
+## Runtime (daemon)
 
-A single long-lived daemon will own a store and serve many clients/agents over a local protocol, so
-the CLI, the MCP server, and sub-agents share one memory instead of fighting bbolt's exclusive lock.
-Phased plan: [`docs/RUNTIME_ROADMAP.md`](docs/RUNTIME_ROADMAP.md).
+A long-lived daemon owns a store and serves many clients over a local framed-JSON protocol, so the
+CLI, the MCP server, and sub-agents **share one memory** instead of fighting bbolt's exclusive lock.
+
+```bash
+ioc serve -dir .ioc/data -embed http://127.0.0.1:8088   # run the daemon (single owner of -dir)
+ioc runtime status -dir .ioc/data                        # running/stale, pid, conns, uptime
+ioc runtime stop   -dir .ioc/data                        # graceful shutdown
+```
+
+Every other command (`push`, `query`, ingest, the MCP server, …) **auto-routes** to a daemon that
+owns the same `-dir` (discovered via `<dir>/runtime.json`) and falls back to opening the store
+embedded when none is running. Concurrency lives inside the daemon: reads run in parallel, writes are
+serialized (`RWMutex`). Sharing = point clients at the same `-dir`. Design + phasing:
+[`docs/RUNTIME_ROADMAP.md`](docs/RUNTIME_ROADMAP.md).
 
 ## Wall metrics (success targets)
 

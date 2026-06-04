@@ -1,7 +1,10 @@
 # Runtime Roadmap — a daemon that owns the store, serving many clients
 
-Status: planned (implementation spans ~3 sessions). This document is the source of truth for the
-runtime work; it follows [`VISION.md`](../VISION.md) (§ "Integration & deployment").
+Status: **implemented (Sessions 1–3 done).** `internal/runtime` + `ioc serve` / `ioc runtime
+status|stop`; CLI/MCP auto-route to a daemon (embedded fallback); RWMutex concurrent reads, durable
+writes, graceful shutdown, panic recovery, protocol version, stats. This document is the source of
+truth for the runtime work; it follows [`VISION.md`](../VISION.md) (§ "Integration & deployment").
+Remaining/deferred: MVCC/multi-tenant, networked MCP/HTTP, auto-start, auth beyond the loopback token.
 
 ## Why
 
