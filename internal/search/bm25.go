@@ -10,13 +10,13 @@ import (
 // BM25 is a minimal in-memory Okapi BM25 index over short texts (summaries),
 // keyed by string id. Dependency-free; sized for a per-query visible set.
 type BM25 struct {
-	k1, b   float64
-	ids     []string
-	docs    [][]string // tokenized
-	docLen  []int
-	df      map[string]int
-	avgLen  float64
-	totalN  int
+	k1, b  float64
+	ids    []string
+	docs   [][]string // tokenized
+	docLen []int
+	df     map[string]int
+	avgLen float64
+	totalN int
 }
 
 // NewBM25 creates an empty index with standard parameters (k1=1.2, b=0.75).
