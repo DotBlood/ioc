@@ -1,10 +1,16 @@
 # Runtime Roadmap — a daemon that owns the store, serving many clients
 
-Status: **implemented (Sessions 1–3 done).** `internal/runtime` + `ioc serve` / `ioc runtime
-status|stop`; CLI/MCP auto-route to a daemon (embedded fallback); RWMutex concurrent reads, durable
-writes, graceful shutdown, panic recovery, protocol version, stats. This document is the source of
-truth for the runtime work; it follows [`VISION.md`](../VISION.md) (§ "Integration & deployment").
-Remaining/deferred: MVCC/multi-tenant, networked MCP/HTTP, auto-start, auth beyond the loopback token.
+Status: **FULLY IMPLEMENTED — Sessions 1–3 complete.** `internal/runtime` + `ioc serve` / `ioc
+runtime status|stop`; CLI/MCP auto-route to a daemon (embedded fallback); RWMutex concurrent reads,
+durable writes, graceful shutdown, per-request panic recovery, protocol version, stats. Verified
+race-clean (`go test -race ./...`) and end-to-end on the real **bge-small** embedder (2026-06-04):
+daemon-owned store, multi-client concurrent reads (no "dir busy"), ingest via the daemon (53 files /
+228 chunks), hierarchical + cross-encoder rerank → the right source chunk, graceful stop (runtime.json
+removed), embedded fallback after stop (data persisted). This document is the source of truth for the
+runtime work; it follows [`VISION.md`](../VISION.md) (§ "Integration & deployment").
+
+Out of scope (intentionally NOT part of the runtime; tracked separately): MVCC/multi-tenant,
+networked MCP/HTTP transport, daemon auto-start, auth beyond the loopback token.
 
 ## Why
 
@@ -107,7 +113,7 @@ Visibility under multiple clients is already correct: every request carries a vi
 scope** (`internal/engine/visibility.go`). The daemon hides nothing new — it is just the single
 owner.
 
-## Session 1 — contract + daemon + client + protocol (serialized)
+## Session 1 ✅ — contract + daemon + client + protocol (serialized)
 
 - Build `internal/runtime`: `Service`, `proto.go`, `server.go`, `client.go`, `discover.go`.
 - Daemon `ioc serve -dir <d> -embed <e>`: `engine.Open` once; a single `sync.Mutex` around every
@@ -123,7 +129,7 @@ owner.
   `go test -race`.
 - **Outcome:** you can talk to a daemon. CLI/MCP not yet switched over.
 
-## Session 2 — CLI and MCP become clients; daemon as default owner; lifecycle
+## Session 2 ✅ — CLI and MCP become clients; daemon as default owner; lifecycle
 
 - `resolveService(dir, endpoint) Service`: a live `runtime.json` → `Client`; otherwise embedded
   `engine.Open` (fallback). Used by both `cmd/ioc` and `cmd/ioc-mcp`.
@@ -140,7 +146,7 @@ owner.
   no "dir busy"; stdio MCP through the daemon + the embedded-fallback path.
 - **Outcome:** shared memory works end-to-end.
 
-## Session 3 — concurrent reads, hardening, observability, docs
+## Session 3 ✅ — concurrent reads, hardening, observability, docs
 
 - Upgrade the guard `sync.Mutex` → `sync.RWMutex`, classifying methods:
   - **reads (RLock):** Query, Drill, Trace, RecentTraces, ListScopes, ListArtifacts, GetScope,
