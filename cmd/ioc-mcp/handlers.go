@@ -7,6 +7,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/DotBlood/ioc/internal/core"
+	"github.com/DotBlood/ioc/internal/ingest"
 	"github.com/DotBlood/ioc/internal/iocfmt"
 )
 
@@ -50,6 +51,33 @@ func (a *ioc) push(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRes
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return jsonResult(iocfmt.ArtifactOut(art))
+}
+
+func (a *ioc) ingest(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	path, err := r.RequireString("path")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	given, err := iocfmt.ParseScopeID(r.GetString("scope", ""))
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	rootScope, err := ingest.RootScope(ctx, a.e, path, given, r.GetString("title", ""))
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	st, err := ingest.Ingest(ctx, a.e, path, rootScope, ingest.Options{
+		MaxChars: r.GetInt("maxchars", ingest.DefaultMaxChars),
+		Overlap:  r.GetInt("overlap", ingest.DefaultOverlap),
+	})
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	out := st.JSON()
+	out["root_scope"] = rootScope.String()
+	return jsonResult(out)
 }
 
 func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {

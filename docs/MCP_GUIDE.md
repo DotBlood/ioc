@@ -24,6 +24,7 @@ summaries; IOC embeds, stores, and serves them.
 |------|-----------|
 | `ioc_create_scope` | open a scope (`parent` empty = root; `role` = worktree/workspace/session) |
 | `ioc_push` | record an insight: `summary` (required) + optional `content`; `publish=true` to share with siblings |
+| `ioc_ingest` | load a code/doc tree into memory as document chunks: `path` (required); idempotent re-sync; language-aware chunking. Then `ioc_query kind=document` instead of re-reading files |
 | `ioc_query` | recall from a scope: `detail=overview` returns cheap summaries + scores — **read these first** |
 | `ioc_drill` | fetch ONE artifact at `detail=raw` (full content) — only when the summary isn't enough |
 | `ioc_publish` | make an existing artifact visible to sibling scopes |

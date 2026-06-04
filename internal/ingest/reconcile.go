@@ -100,7 +100,8 @@ func (r *reconciler) reconcileFile(path, rel string) error {
 	r.wantPaths[relSlash] = true
 	r.dirFiles[relDir] = append(r.dirFiles[relDir], filepath.Base(rel))
 
-	sig := Sig(data, r.opt.MaxChars, r.opt.Overlap)
+	lang := DetectLanguage(relSlash)
+	sig := Sig(data, lang, r.opt.MaxChars, r.opt.Overlap)
 	existing := r.chunksForPath(dirScope, relSlash)
 	if len(existing) > 0 && existing[0].Meta["sig"] == sig {
 		r.st.FilesUnchanged++
@@ -112,7 +113,7 @@ func (r *reconciler) reconcileFile(path, rel string) error {
 			return err
 		}
 	}
-	for i, c := range Split(string(data), r.opt.MaxChars, r.opt.Overlap) {
+	for i, c := range SplitLang(string(data), lang, r.opt.MaxChars, r.opt.Overlap) {
 		if err := r.pushChunk(dirScope, relSlash, c, i, sig); err != nil {
 			return err
 		}

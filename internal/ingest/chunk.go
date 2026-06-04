@@ -91,13 +91,87 @@ func backupForOverlap(lines []string, start, end, overlap int) int {
 	return j
 }
 
-// Sig is a per-file change signature: the content hash plus the chunking
-// parameters. Two ingests produce the same Sig iff the bytes AND the chunk
-// windowing are identical — so an unchanged file (same params) can be skipped,
-// while changing the file or the maxChars/overlap forces a re-chunk.
-func Sig(data []byte, maxChars, overlap int) string {
+// SplitLang segments text into chunks at language-aware semantic boundaries
+// (functions, types, headings, paragraphs), packing consecutive units up to
+// maxChars. A single unit larger than maxChars falls back to the line-aligned
+// char-window Split (with overlap). Boundaries are never merged across, so a
+// chunk holds whole semantic units. StartLine/EndLine are 1-based, inclusive.
+func SplitLang(text string, lang Language, maxChars, overlap int) []Chunk {
+	if maxChars <= 0 {
+		maxChars = DefaultMaxChars
+	}
+	if overlap < 0 || overlap >= maxChars {
+		overlap = DefaultOverlap
+	}
+	lines := strings.Split(text, "\n")
+	var bnds []int
+	if lang == Generic {
+		bnds = paragraphBoundaries(lines)
+	} else {
+		bnds = boundaries(lang, lines)
+	}
+	starts := append([]int{0}, bnds...) // ascending, unique, all < len(lines)
+
+	var chunks []Chunk
+	packStart, packLen := -1, 0
+	flush := func(end int) {
+		if packStart < 0 {
+			return
+		}
+		txt := strings.TrimRight(strings.Join(lines[packStart:end], "\n"), "\n")
+		if strings.TrimSpace(txt) != "" {
+			chunks = append(chunks, Chunk{Text: txt, StartLine: packStart + 1, EndLine: end})
+		}
+		packStart, packLen = -1, 0
+	}
+	for u := 0; u < len(starts); u++ {
+		s := starts[u]
+		e := len(lines)
+		if u+1 < len(starts) {
+			e = starts[u+1]
+		}
+		unitLen := joinLen(lines[s:e])
+		if unitLen > maxChars {
+			flush(s)
+			for _, c := range Split(strings.Join(lines[s:e], "\n"), maxChars, overlap) {
+				chunks = append(chunks, Chunk{Text: c.Text, StartLine: c.StartLine + s, EndLine: c.EndLine + s})
+			}
+			continue
+		}
+		switch {
+		case packStart < 0:
+			packStart, packLen = s, unitLen
+		case packLen+1+unitLen <= maxChars:
+			packLen += 1 + unitLen
+		default:
+			flush(s)
+			packStart, packLen = s, unitLen
+		}
+	}
+	flush(len(lines))
+	return chunks
+}
+
+// joinLen is the length of strings.Join(lines, "\n") without building it.
+func joinLen(lines []string) int {
+	n := 0
+	for _, ln := range lines {
+		n += len(ln)
+	}
+	if len(lines) > 1 {
+		n += len(lines) - 1
+	}
+	return n
+}
+
+// Sig is a per-file change signature: the content hash plus the language and
+// chunking parameters. Two ingests produce the same Sig iff the bytes AND the
+// chunk strategy are identical — so an unchanged file (same params/lang) can be
+// skipped, while changing the file, language, or maxChars/overlap forces a
+// re-chunk.
+func Sig(data []byte, lang Language, maxChars, overlap int) string {
 	h := sha256.Sum256(data)
-	return fmt.Sprintf("%s:%d:%d", hex.EncodeToString(h[:]), maxChars, overlap)
+	return fmt.Sprintf("%s:%s:%d:%d", hex.EncodeToString(h[:]), lang.String(), maxChars, overlap)
 }
 
 // FirstLine returns a trimmed one-line label for a chunk (its first non-empty

@@ -40,6 +40,8 @@ Typical loop:
 3. ioc_query (detail=overview) to recall — you get cheap summaries + scores. Read those FIRST.
    Only ioc_drill (detail=raw) into a specific artifact when the summary is not enough.
    Use kind=... to search only files (document) or only thoughts (reasoning,insight).
+   To pull existing code/docs into memory, ioc_ingest a directory once (idempotent; re-run to
+   re-sync), then ioc_query kind=document instead of re-reading files from disk.
 4. ioc_consolidate when a line of work ends: write one summary that captures what matters; it is
    promoted to the parent's long-term memory.
 5. ioc_crossversion when starting a new major version: archive the old one and seed the new with
@@ -112,6 +114,15 @@ func (a *ioc) register(s *server.MCPServer) {
 		mcp.WithString("role", mcp.Description("worktree|workspace|session")),
 		mcp.WithString("title", mcp.Description("scope title")),
 	), a.createScope)
+
+	s.AddTool(mcp.NewTool("ioc_ingest",
+		mcp.WithDescription("Mechanically load a code/doc directory tree into memory as document chunks (no LLM): mirrors dirs to scopes, language-aware chunking, embeds raw chunk text. Idempotent — re-running syncs in place (changed files re-chunked, removed files pruned). Then retrieve with ioc_query kind=document."),
+		mcp.WithString("path", mcp.Required(), mcp.Description("directory (or file) path to ingest")),
+		mcp.WithString("scope", mcp.Description("root scope ID to ingest under (empty = reuse remembered root for this path, else create a worktree)")),
+		mcp.WithString("title", mcp.Description("title for the created root scope (default: base name of path)")),
+		mcp.WithNumber("maxchars", mcp.Description("chunk window size in chars (default 1500)")),
+		mcp.WithNumber("overlap", mcp.Description("chunk overlap in chars for oversize units (default 200)")),
+	), a.ingest)
 
 	s.AddTool(mcp.NewTool("ioc_push",
 		mcp.WithDescription("Write an artifact: a REQUIRED mini-summary (gets embedded) plus optional full content (stored cold)."),

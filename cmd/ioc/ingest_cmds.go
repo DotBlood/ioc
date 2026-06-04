@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/DotBlood/ioc/internal/core"
 	"github.com/DotBlood/ioc/internal/ingest"
 	"github.com/DotBlood/ioc/internal/iocfmt"
 )
@@ -37,37 +36,12 @@ func ingestCmd(args []string) error {
 	defer e.Close()
 	ctx := context.Background()
 
-	rootScope, err := iocfmt.ParseScopeID(*scope)
+	given, err := iocfmt.ParseScopeID(*scope)
 	if err != nil {
 		return err
 	}
-
-	// Remember which root scope a given absolute path was ingested under, so a
-	// later `ioc ingest <path>` (no -scope) reuses it and re-syncs in place.
-	abs, _ := filepath.Abs(root)
-	pathKey := "ingest:" + filepath.ToSlash(abs)
-
-	if rootScope.IsZero() {
-		if v, ok := e.Config(pathKey); ok {
-			if id, perr := core.ParseID(v); perr == nil {
-				if _, gerr := e.GetScope(ctx, id); gerr == nil {
-					rootScope = id // reuse remembered root that still exists
-				}
-			}
-		}
-	}
-	if rootScope.IsZero() {
-		t := *title
-		if t == "" {
-			t = filepath.Base(root)
-		}
-		s, cErr := e.CreateScope(ctx, core.NilID, core.RoleWorktree, t)
-		if cErr != nil {
-			return cErr
-		}
-		rootScope = s.ID
-	}
-	if err := e.SetConfig(pathKey, rootScope.String()); err != nil {
+	rootScope, err := ingest.RootScope(ctx, e, root, given, *title)
+	if err != nil {
 		return err
 	}
 
@@ -75,15 +49,7 @@ func ingestCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	return printJSON(map[string]any{
-		"root_scope":      rootScope.String(),
-		"files_added":     st.FilesAdded,
-		"files_updated":   st.FilesUpdated,
-		"files_unchanged": st.FilesUnchanged,
-		"files_removed":   st.FilesRemoved,
-		"chunks_added":    st.ChunksAdded,
-		"chunks_removed":  st.ChunksRemoved,
-		"scopes_created":  st.ScopesCreated,
-		"scopes_removed":  st.ScopesRemoved,
-	})
+	out := st.JSON()
+	out["root_scope"] = rootScope.String()
+	return printJSON(out)
 }

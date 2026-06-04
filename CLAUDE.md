@@ -50,10 +50,13 @@ Retrieval modes (`-mode` / `Query.Mode`+`Hierarchical`+`CoarseK`):
 endpoint) — the universal last-mile precision fix. More commands: `ioc query|drill|traces|trace|
 rollup|consolidate|crossversion|...`, `ioc gen-scenario -shape flat|tree`.
 
-**Ingestion (`ioc ingest <path>`, files as a first-class Kind):** mirrors the directory tree into
-nested scopes, chunks each text file into line-aligned windows (~1500 chars, ~200 overlap), and
-embeds the **raw chunk text** (`PushRequest.EmbedText`) while keeping a short `path:lines — first
-line` label as `Summary`. Each chunk is `KindDocument` with `Meta{path,lines,chunk}` and the chunk
+**Ingestion (`ioc ingest <path>` / MCP `ioc_ingest`, files as a first-class Kind):** mirrors the
+directory tree into nested scopes, chunks each text file at **language-aware semantic boundaries**
+(`SplitLang`: Go func/type, Python def/class+decorators, Markdown headings, JS/TS decls, generic
+paragraphs; doc-comments lifted to attach to their unit), packing units up to ~1500 chars and
+falling back to line-aligned char windows (~200 overlap) only for a single oversize unit. It embeds
+the **raw chunk text** (`PushRequest.EmbedText`) while keeping a short `path:lines — first line`
+label as `Summary`. Each chunk is `KindDocument` with `Meta{path,lines,chunk}` and the chunk
 bytes in CAS (so `drill` returns the source). Per-directory mechanical rollups (filenames) let
 hierarchical retrieval route by the file tree. Skips `.git`/`vendor`/`node_modules`/`bin`/binaries
 (NUL)/files >512KB. Use a SEPARATE `-dir` from reasoning data (one embedder per data-dir). The
@@ -63,8 +66,12 @@ reasoning write path (`Push` without `EmbedText`) is unchanged.
 changed files (detected via `Meta["sig"]` = content hash + chunk params) are re-chunked, new files
 added, vanished files' chunks removed, emptied directory scopes pruned; an unchanged re-run is a
 no-op (no new scopes/chunks/embeddings). Directory scopes are reused by `(parent, title)`. The
-abspath→root-scope mapping is remembered in the meta config bucket, so a later `ioc ingest <path>`
-without `-scope` re-syncs the same tree in place. Caveats: orphaned embeddings of
+abspath→root-scope mapping is remembered in the meta config bucket (shared resolver `ingest.RootScope`
+used by both the CLI and the MCP `ioc_ingest` tool), so a later `ioc ingest <path>` without `-scope`
+re-syncs the same tree in place. `ioc_ingest` writes into the MCP server's own store (IOC_DIR/IOC_EMBED);
+documents and reasoning coexist there, separated at query time by `kind=document`. Caveats: the
+chunk boundary detector is heuristic (line prefixes, not an AST) — odd formatting may misplace a
+boundary; semantic units carry no inter-chunk overlap. Orphaned embeddings of
 deleted/re-chunked artifacts stay in the append-only `EmbeddingStore` (dead weight, never surfaced
 in search — store compaction deferred); a mid-run crash can leave partial state (no transaction;
 `-force` deferred). Deferred: language-aware chunking, MCP `ioc_ingest`.
