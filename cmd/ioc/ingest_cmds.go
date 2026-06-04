@@ -29,7 +29,7 @@ func ingestCmd(args []string) error {
 	}
 	root := filepath.Clean(pos)
 
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}

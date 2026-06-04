@@ -2,8 +2,10 @@ package runtime
 
 import (
 	"context"
+	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DotBlood/ioc/internal/core"
 	"github.com/DotBlood/ioc/internal/embed"
@@ -132,4 +134,67 @@ func TestRuntimeConcurrentClients(t *testing.T) {
 	for err := range errs {
 		t.Fatalf("concurrent client error: %v", err)
 	}
+}
+
+func TestRuntimeShutdownRPC(t *testing.T) {
+	dir := t.TempDir()
+	_ = startDaemon(t, dir)
+
+	cli, err := Dial(dir)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	if err := cli.Shutdown(); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+	_ = cli.Close()
+
+	// The daemon stops asynchronously after replying; runtime.json should vanish.
+	gone := false
+	for i := 0; i < 100; i++ {
+		if _, err := Info(dir); os.IsNotExist(err) {
+			gone = true
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !gone {
+		t.Fatal("runtime.json was not removed after shutdown")
+	}
+	// Lock released: the store reopens.
+	e, err := engine.Open(context.Background(), dir, embed.NewMockEmbedder(32))
+	if err != nil {
+		t.Fatalf("reopen after shutdown: %v", err)
+	}
+	_ = e.Close()
+}
+
+func TestOpenFallbackAndClient(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	// No daemon → embedded engine.
+	svc, err := Open(dir, embed.NewMockEmbedder(32))
+	if err != nil {
+		t.Fatalf("open embedded: %v", err)
+	}
+	if _, isClient := svc.(*Client); isClient {
+		t.Fatal("expected embedded engine, got a client")
+	}
+	if _, err := svc.CreateScope(ctx, core.NilID, core.RoleWorktree, "root"); err != nil {
+		t.Fatalf("embedded create scope: %v", err)
+	}
+	_ = svc.Close()
+
+	// Daemon running → client.
+	srv := startDaemon(t, dir)
+	defer srv.Stop()
+	svc2, err := Open(dir, embed.NewMockEmbedder(32))
+	if err != nil {
+		t.Fatalf("open with daemon: %v", err)
+	}
+	if _, isClient := svc2.(*Client); !isClient {
+		t.Fatal("expected a client when a daemon is running")
+	}
+	_ = svc2.Close()
 }

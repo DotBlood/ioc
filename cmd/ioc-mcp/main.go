@@ -6,11 +6,12 @@
 //	IOC_DIR    persistent data directory (default ".ioc/mcp-data")
 //	IOC_EMBED  embedder endpoint (empty=mock; http://host:port or unix:/path)
 //
-// A single engine instance is guarded by a mutex (single-writer).
+// It routes through a runtime daemon when one owns IOC_DIR (so several agents
+// share one memory), else it opens the store embedded. A mutex guards the
+// embedded-fallback path (when remote, the daemon serializes).
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/DotBlood/ioc/internal/embed"
 	"github.com/DotBlood/ioc/internal/engine"
+	"github.com/DotBlood/ioc/internal/runtime"
 )
 
 // instructions is sent to the client on initialize so the LLM understands what
@@ -61,8 +63,8 @@ with a short "what this scope is about" summary, then query the parent with hier
 ranks the rollups first and searches only the best scopes (coarse→fine).`
 
 type ioc struct {
-	mu sync.Mutex
-	e  *engine.Engine
+	mu  sync.Mutex
+	svc runtime.Service
 }
 
 func main() {
@@ -80,13 +82,13 @@ func main() {
 	if endpoint != "" {
 		opts = append(opts, engine.WithReranker(embed.NewHTTPReranker(endpoint)))
 	}
-	e, err := engine.Open(context.Background(), dir, embedder, opts...)
+	svc, err := runtime.Open(dir, embedder, opts...)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "ioc-mcp: open engine:", err)
+		fmt.Fprintln(os.Stderr, "ioc-mcp: open store:", err)
 		os.Exit(1)
 	}
-	defer e.Close()
-	app := &ioc{e: e}
+	defer svc.Close()
+	app := &ioc{svc: svc}
 
 	s := server.NewMCPServer("ioc", "0.1.0",
 		server.WithToolCapabilities(false),

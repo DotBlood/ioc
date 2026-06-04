@@ -125,6 +125,12 @@ func (s *Server) serveConn(conn net.Conn) {
 		if err := writeFrame(conn, out); err != nil {
 			return
 		}
+		if req.Method == mShutdown && resp.Error == nil {
+			// Reply is sent; stop the daemon asynchronously (Stop closes this
+			// conn + drains, so it must not run on this goroutine).
+			go func() { _ = s.Stop() }()
+			return
+		}
 	}
 }
 

@@ -9,14 +9,13 @@ import (
 	"strings"
 
 	"github.com/DotBlood/ioc/internal/core"
-	"github.com/DotBlood/ioc/internal/engine"
 )
 
 // reconciler holds the in-memory index of the store (kept consistent with the
 // backing store as we create/delete) so a sync runs without repeated full scans.
 type reconciler struct {
 	ctx       context.Context
-	e         *engine.Engine
+	e         Store
 	root      string
 	rootScope core.ID
 	opt       Options

@@ -18,7 +18,7 @@ func (a *ioc) createScope(ctx context.Context, r mcp.CallToolRequest) (*mcp.Call
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	s, err := a.e.CreateScope(ctx, parent, iocfmt.ParseRole(r.GetString("role", "session")), r.GetString("title", ""))
+	s, err := a.svc.CreateScope(ctx, parent, iocfmt.ParseRole(r.GetString("role", "session")), r.GetString("title", ""))
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -40,7 +40,7 @@ func (a *ioc) push(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRes
 	if c := r.GetString("content", ""); c != "" {
 		content = []byte(c)
 	}
-	art, err := a.e.Push(ctx, core.PushRequest{
+	art, err := a.svc.Push(ctx, core.PushRequest{
 		Scope:   id,
 		Kind:    iocfmt.ParseKind(r.GetString("kind", "insight")),
 		Summary: summary,
@@ -64,11 +64,11 @@ func (a *ioc) ingest(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolR
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	rootScope, err := ingest.RootScope(ctx, a.e, path, given, r.GetString("title", ""))
+	rootScope, err := ingest.RootScope(ctx, a.svc, path, given, r.GetString("title", ""))
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	st, err := ingest.Ingest(ctx, a.e, path, rootScope, ingest.Options{
+	st, err := ingest.Ingest(ctx, a.svc, path, rootScope, ingest.Options{
 		MaxChars: r.GetInt("maxchars", ingest.DefaultMaxChars),
 		Overlap:  r.GetInt("overlap", ingest.DefaultOverlap),
 	})
@@ -98,7 +98,7 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 	if hier {
 		mode = core.ModeHybrid
 	}
-	qid, hits, err := a.e.Query(ctx, core.Query{
+	qid, hits, err := a.svc.Query(ctx, core.Query{
 		Scope:        id,
 		Text:         text,
 		Detail:       iocfmt.ParseDetail(r.GetString("detail", "overview")),
@@ -114,7 +114,7 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	return jsonResult(iocfmt.QueryOut(qid, hits, a.e.EmbModel()))
+	return jsonResult(iocfmt.QueryOut(qid, hits, a.svc.EmbModel()))
 }
 
 func (a *ioc) rollup(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -128,7 +128,7 @@ func (a *ioc) rollup(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolR
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	if err := a.e.RollupScope(ctx, id, summary); err != nil {
+	if err := a.svc.RollupScope(ctx, id, summary); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return jsonResult(map[string]any{"rolled_up": id.String()})
@@ -137,7 +137,7 @@ func (a *ioc) rollup(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolR
 func (a *ioc) listTraces(_ context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	trs, err := a.e.RecentTraces(r.GetInt("n", 10))
+	trs, err := a.svc.RecentTraces(r.GetInt("n", 10))
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -160,7 +160,7 @@ func (a *ioc) drill(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	h, err := a.e.Drill(ctx, id, iocfmt.ParseDetail(r.GetString("detail", "raw")))
+	h, err := a.svc.Drill(ctx, id, iocfmt.ParseDetail(r.GetString("detail", "raw")))
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -174,7 +174,7 @@ func (a *ioc) publish(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallTool
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	if err := a.e.Publish(ctx, id); err != nil {
+	if err := a.svc.Publish(ctx, id); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return jsonResult(map[string]any{"published": id.String()})
@@ -187,7 +187,7 @@ func (a *ioc) siblings(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToo
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	hits, err := a.e.SiblingOverview(ctx, id)
+	hits, err := a.svc.SiblingOverview(ctx, id)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -201,7 +201,7 @@ func (a *ioc) ancestors(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallTo
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	scs, err := a.e.Ancestors(ctx, id)
+	scs, err := a.svc.Ancestors(ctx, id)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -219,7 +219,7 @@ func (a *ioc) fork(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRes
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	s, err := a.e.Fork(ctx, id, r.GetString("title", ""))
+	s, err := a.svc.Fork(ctx, id, r.GetString("title", ""))
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -237,7 +237,7 @@ func (a *ioc) consolidate(ctx context.Context, r mcp.CallToolRequest) (*mcp.Call
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	art, err := a.e.Consolidate(ctx, id, summary)
+	art, err := a.svc.Consolidate(ctx, id, summary)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -251,7 +251,7 @@ func (a *ioc) crossversion(ctx context.Context, r mcp.CallToolRequest) (*mcp.Cal
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	s, err := a.e.CrossVersion(ctx, id, core.Seed{
+	s, err := a.svc.CrossVersion(ctx, id, core.Seed{
 		Constraints: r.GetString("constraints", ""),
 		Lessons:     r.GetString("lessons", ""),
 	})
@@ -268,7 +268,7 @@ func (a *ioc) trace(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	tr, err := a.e.Trace(ctx, id)
+	tr, err := a.svc.Trace(ctx, id)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}

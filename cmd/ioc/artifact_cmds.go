@@ -27,7 +27,7 @@ func push(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func drill(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func publish(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}

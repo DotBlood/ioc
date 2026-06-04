@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/DotBlood/ioc/internal/core"
-	"github.com/DotBlood/ioc/internal/engine"
 )
 
 // RootScope resolves the worktree scope to ingest under, so both the CLI and the
@@ -14,7 +13,7 @@ import (
 // (when that scope still exists); failing that, a new worktree is created. The
 // mapping is always (re)written so a later ingest of the same path re-syncs in
 // place. title (when creating) defaults to the base name of root.
-func RootScope(ctx context.Context, e *engine.Engine, root string, given core.ID, title string) (core.ID, error) {
+func RootScope(ctx context.Context, e Store, root string, given core.ID, title string) (core.ID, error) {
 	abs, _ := filepath.Abs(root)
 	key := "ingest:" + filepath.ToSlash(abs)
 

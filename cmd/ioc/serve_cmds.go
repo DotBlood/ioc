@@ -20,7 +20,7 @@ func serveCmd(args []string) error {
 
 	// rerank=true so Query rerank works through the daemon when a real embedder
 	// endpoint is configured (no-op for the mock).
-	e, err := openEngineRerank(*dir, *em, true)
+	e, err := openEngineEmbedded(*dir, *em, true)
 	if err != nil {
 		return err
 	}

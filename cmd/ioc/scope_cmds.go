@@ -20,7 +20,7 @@ func createScope(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func fork(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func consolidate(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func crossversion(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func rollupCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func siblings(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}
@@ -150,7 +150,7 @@ func ancestors(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}

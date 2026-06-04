@@ -39,6 +39,10 @@ const (
 	mConfig          = "config"
 	mSetConfig       = "set_config"
 	mEmbModel        = "emb_model"
+
+	// mShutdown is a control op (not part of Service): it asks the daemon to
+	// stop gracefully. Handled specially, never reaches the engine.
+	mShutdown = "shutdown"
 )
 
 // writeMethods mutate the store; the daemon flushes embeddings (eng.Sync) after

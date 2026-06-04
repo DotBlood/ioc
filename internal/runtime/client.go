@@ -78,6 +78,10 @@ func (c *Client) call(method string, params, out any) error {
 // Close disconnects from the daemon (it does NOT stop the daemon).
 func (c *Client) Close() error { return c.conn.Close() }
 
+// Shutdown asks the daemon to stop gracefully. It is a control op, not part of
+// Service.
+func (c *Client) Shutdown() error { return c.call(mShutdown, nil, nil) }
+
 func (c *Client) CreateScope(_ context.Context, parent core.ID, role core.Role, title string) (core.Scope, error) {
 	var sc core.Scope
 	err := c.call(mCreateScope, createScopeParams{Parent: parent, Role: role, Title: title}, &sc)

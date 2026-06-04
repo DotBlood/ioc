@@ -13,6 +13,11 @@ func (s *Server) handle(ctx context.Context, req request) response {
 	if req.Token != s.token {
 		return response{ID: req.ID, Error: &wireError{Code: codeAuth, Msg: "runtime: bad or missing token"}}
 	}
+	if req.Method == mShutdown {
+		// Acknowledge here; serveConn triggers the actual Stop after the reply
+		// is flushed (avoids closing the conn before the client reads OK).
+		return response{ID: req.ID}
+	}
 	result, err := s.invoke(ctx, req.Method, req.Params)
 	return response{ID: req.ID, Result: result, Error: errToWire(err)}
 }

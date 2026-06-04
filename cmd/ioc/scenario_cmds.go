@@ -39,7 +39,7 @@ func runScenario(args []string) int {
 		fmt.Fprintln(os.Stderr, "error: reset dir:", err)
 		return 1
 	}
-	e, err := openEngineRerank(*dir, *em, *rerank)
+	e, err := openEngineEmbedded(*dir, *em, *rerank)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: open engine:", err)
 		return 1

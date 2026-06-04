@@ -27,7 +27,7 @@ func query(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openEngineRerank(*dir, *em, *rerank)
+	e, err := openService(*dir, *em, *rerank)
 	if err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func traces(args []string) error {
 	dir, em := commonFlags(fs)
 	n := fs.Int("n", 10, "max recent traces")
 	_ = fs.Parse(args)
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func traceCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openEngine(*dir, *em)
+	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/DotBlood/ioc/internal/embed"
 	"github.com/DotBlood/ioc/internal/engine"
+	"github.com/DotBlood/ioc/internal/runtime"
 )
 
 const defaultDataDir = ".ioc/data"
@@ -21,18 +22,26 @@ func buildEmbedder(endpoint string) embed.Embedder {
 	return embed.NewHTTPEmbedder(endpoint)
 }
 
-func openEngine(dir, endpoint string) (*engine.Engine, error) {
-	return engine.Open(context.Background(), dir, buildEmbedder(endpoint))
+// rerankOpts attaches a reranker when requested against a real endpoint.
+func rerankOpts(rerank bool, endpoint string) []engine.Option {
+	if rerank && endpoint != "" {
+		return []engine.Option{engine.WithReranker(embed.NewHTTPReranker(endpoint))}
+	}
+	return nil
 }
 
-// openEngineRerank also attaches a reranker on the same endpoint (when rerank
-// is requested and the endpoint is a real service, not the mock).
-func openEngineRerank(dir, endpoint string, rerank bool) (*engine.Engine, error) {
-	var opts []engine.Option
-	if rerank && endpoint != "" {
-		opts = append(opts, engine.WithReranker(embed.NewHTTPReranker(endpoint)))
-	}
-	return engine.Open(context.Background(), dir, buildEmbedder(endpoint), opts...)
+// openEngineEmbedded opens the store DIRECTLY (no daemon) — for the daemon
+// itself (serve) and throwaway eval runs (run-scenario), which need to own the
+// concrete engine rather than a client.
+func openEngineEmbedded(dir, endpoint string, rerank bool) (*engine.Engine, error) {
+	return engine.Open(context.Background(), dir, buildEmbedder(endpoint), rerankOpts(rerank, endpoint)...)
+}
+
+// openService returns a daemon client when one owns dir, else an embedded
+// engine. Memory commands use this so they transparently route through a
+// running daemon (and never hit the "dir busy" lock).
+func openService(dir, endpoint string, rerank bool) (runtime.Service, error) {
+	return runtime.Open(dir, buildEmbedder(endpoint), rerankOpts(rerank, endpoint)...)
 }
 
 // commonFlags registers -dir and -embed on a flag set.

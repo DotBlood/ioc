@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/DotBlood/ioc/internal/core"
-	"github.com/DotBlood/ioc/internal/engine"
 )
 
 // MaxFileBytes caps the size of a file we will ingest; larger files are skipped.
@@ -44,7 +43,7 @@ type Stats struct {
 // filesystem changes is a no-op (no new scopes, chunks, or embeddings), because
 // each text file carries a content+params signature (Meta["sig"]) and directory
 // scopes are reused by (parent, title) rather than recreated.
-func Ingest(ctx context.Context, e *engine.Engine, root string, rootScope core.ID, opt Options) (Stats, error) {
+func Ingest(ctx context.Context, e Store, root string, rootScope core.ID, opt Options) (Stats, error) {
 	if opt.MaxChars <= 0 {
 		opt.MaxChars = DefaultMaxChars
 	}
