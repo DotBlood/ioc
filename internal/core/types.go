@@ -127,6 +127,13 @@ type Artifact struct {
 	Published   bool              `json:"published"`      // visible to siblings via parent blackboard
 	Meta        map[string]string `json:"meta,omitempty"` // e.g. file path, line range, chunk index
 	CreatedAt   time.Time         `json:"created_at"`
+
+	// SupersededBy, when non-zero, is the artifact that replaced this one. A
+	// superseded artifact is no longer "current": default retrieval excludes it
+	// (Query.IncludeSuperseded surfaces it with this back-link). Append-only — the
+	// atom is never deleted, so a wrong supersession is reversible and history is
+	// always reachable. See docs/SUPERSESSION.md.
+	SupersededBy ID `json:"superseded_by,omitempty"`
 }
 
 // PushRequest is how an external LLM writes content + a summary into IOC.
@@ -142,6 +149,11 @@ type PushRequest struct {
 	// chunks (embed the raw chunk text; keep Summary as a short display label).
 	EmbedText string
 	Meta      map[string]string // optional metadata (file path, line range, ...)
+	// Supersedes lists prior artifacts this push replaces (agent-declared at write,
+	// the cheapest reliable currency signal — the authoring LLM just reasoned about
+	// the change). Push marks each as SupersededBy this new artifact and records the
+	// lineage in DerivedFrom. See docs/SUPERSESSION.md.
+	Supersedes []ID
 }
 
 // QueryMode selects the retrieval strategy.
@@ -172,6 +184,11 @@ type Query struct {
 	Kinds        []ArtifactKind // restrict results to these kinds (empty = all)
 	Rerank       bool           // cross-encoder rerank the top RerankN candidates (needs a reranker)
 	RerankN      int            // # of candidates to rerank (default 20)
+
+	// IncludeSuperseded surfaces non-current memory: by default retrieval returns
+	// only the current view (drops artifacts with SupersededBy set and artifacts in
+	// Archived version scopes). Set true for a "show history" drill.
+	IncludeSuperseded bool
 }
 
 // matchesKind reports whether k is in the (possibly empty=all) filter set.
@@ -228,6 +245,9 @@ type Hit struct {
 	RerankScore *float64          `json:"rerank_score,omitempty"`
 	Meta        map[string]string `json:"meta,omitempty"`
 	Content     []byte            `json:"content,omitempty"`
+	// SupersededBy is set (non-zero) only on hits surfaced via IncludeSuperseded,
+	// so the caller can see the result is stale and which artifact replaced it.
+	SupersededBy ID `json:"superseded_by,omitempty"`
 }
 
 // Seed carries distilled constraints/lessons across a version boundary.

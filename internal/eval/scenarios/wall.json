@@ -62,7 +62,7 @@
 
     { "op": "push", "scope": "ioc", "as": "M_OLD", "kind": "reasoning",
       "summary": "In the original v0.1 design, IOC's memory was a knowledge-graph engine: explicit knowledge nodes and typed edges assembled and traversed by a dedicated graph and retrieval subsystem to build context for the model." },
-    { "op": "push", "scope": "ioc", "as": "M_NEW", "kind": "reasoning",
+    { "op": "push", "scope": "ioc", "as": "M_NEW", "kind": "reasoning", "supersedes": ["M_OLD"],
       "summary": "As of the current v0.2 direction, IOC's memory is a thin slice: a short mini-summary plus the embedding of that summary, retrieved by cosine, hybrid, or hierarchical search. There is no knowledge graph; the v0.1 graph engine was removed." }
   ],
   "questions": [

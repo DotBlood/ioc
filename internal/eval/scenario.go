@@ -44,6 +44,10 @@ type Turn struct {
 	Content string `json:"content,omitempty"`
 	Publish bool   `json:"publish,omitempty"`
 
+	// Supersedes lists artifact names (As bindings) this push replaces — exercises
+	// the currency mechanism in a scenario/wall build.
+	Supersedes []string `json:"supersedes,omitempty"`
+
 	Constraints string `json:"constraints,omitempty"`
 	Lessons     string `json:"lessons,omitempty"`
 

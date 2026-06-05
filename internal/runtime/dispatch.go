@@ -228,6 +228,12 @@ func (s *Server) call(ctx context.Context, method string, params json.RawMessage
 			return nil, err
 		}
 		return nil, s.eng.DeleteScope(ctx, p.ID)
+	case mSupersede:
+		var p supersedeParams
+		if err := decode(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, s.eng.Supersede(ctx, p.Old, p.Replacement)
 	case mConfig:
 		var p configParams
 		if err := decode(params, &p); err != nil {

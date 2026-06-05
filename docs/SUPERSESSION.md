@@ -1,5 +1,22 @@
 # Supersession & currency — the core unsolved problem (deep analysis)
 
+> **STATUS 2026-06-05 — IMPLEMENTED (phases 1–3 of §8) on `development/v0.2-review`.** The suppression
+> half now exists. Falsified on the real embedder via the currency probe: before, the superseded v0.1
+> belief outranked the current v0.2 one (rank 1 vs 2); after, the superseded artifact leaves the
+> candidate set entirely and the current one ranks #1 (`docs/WALL_EXPERIMENT.md`). What shipped:
+> - `core.Artifact.SupersededBy` (zero = current), `core.PushRequest.Supersedes`, `core.Query.IncludeSuperseded`, `core.Hit.SupersededBy`.
+> - `engine.Push` applies `Supersedes` (marks priors, records `DerivedFrom` lineage); standalone `engine.Supersede(old, new)` for post-hoc/batch.
+> - Retrieval excludes superseded artifacts AND `Scope.Archived` version scopes by default (the version-boundary reset); `IncludeSuperseded` surfaces them with the back-link for a history drill.
+> - Surface: CLI `ioc push -supersedes`, `ioc supersede -old -by`, `ioc query -include-superseded`, `ioc history -artifact`; MCP `ioc_push supersedes`, `ioc_supersede`, `ioc_query include_superseded`. Append-only — nothing is deleted; a wrong supersession is reversible.
+> - Append-only, never delete (principle held); detection stays with the agent (no LLM in core).
+>
+> Deliberately NOT built (documented limits, not silent gaps): per-claim/partial supersession (model is
+> whole-atom boolean — transitive chains work, partial overlap is lossy); automatic contradiction
+> detection (agent-declared only — the `Neighbors` assist helper and `Consolidate`-time batch
+> reconciliation from §4/§5 are deferred); recency tie-breaker among current atoms (§8 phase 4). These
+> are tracked here as the next increments; the core current-view mechanism and its falsification are done.
+
+
 This is the deepest risk in IOC, above any individual bug: an append-only store of LLM-authored
 summaries ranked by similarity will confidently surface **superseded** conclusions, because a stale
 decision is often the *best semantic match* for a query. If reasoning memory feeds an agent its own

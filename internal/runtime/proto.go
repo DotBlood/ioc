@@ -36,6 +36,7 @@ const (
 	mListArtifacts   = "list_artifacts"
 	mDeleteArtifact  = "delete_artifact"
 	mDeleteScope     = "delete_scope"
+	mSupersede       = "supersede"
 	mConfig          = "config"
 	mSetConfig       = "set_config"
 	mEmbModel        = "emb_model"
@@ -62,6 +63,7 @@ var writeMethods = map[string]bool{
 	mCreateScope: true, mPush: true, mPublish: true, mFork: true,
 	mConsolidate: true, mCrossVersion: true, mRollupScope: true,
 	mDeleteArtifact: true, mDeleteScope: true, mSetConfig: true,
+	mSupersede: true,
 }
 
 // --- envelopes ---
@@ -216,6 +218,11 @@ type configResult struct {
 type setConfigParams struct {
 	Key string `json:"key"`
 	Val string `json:"val"`
+}
+
+type supersedeParams struct {
+	Old         core.ID `json:"old"`
+	Replacement core.ID `json:"replacement"`
 }
 
 type embModelResult struct {

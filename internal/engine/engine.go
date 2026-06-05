@@ -257,6 +257,17 @@ func (e *Engine) Push(ctx context.Context, r core.PushRequest) (core.Artifact, e
 	if err != nil {
 		return core.Artifact{}, err
 	}
+	// Validate the superseded targets BEFORE writing the new artifact, so a bad id
+	// fails the whole push rather than leaving a half-applied supersession.
+	superseded := make([]core.Artifact, 0, len(r.Supersedes))
+	for _, sid := range r.Supersedes {
+		old, err := e.meta.GetArtifact(sid)
+		if err != nil {
+			return core.Artifact{}, fmt.Errorf("engine: push: supersedes %s: %w", sid, err)
+		}
+		superseded = append(superseded, old)
+	}
+
 	a := core.Artifact{
 		ID:          core.NewID(),
 		Scope:       r.Scope,
@@ -265,7 +276,7 @@ func (e *Engine) Push(ctx context.Context, r core.PushRequest) (core.Artifact, e
 		Summary:     r.Summary,
 		EmbRef:      ref,
 		Content:     content,
-		DerivedFrom: r.DerivedFrom,
+		DerivedFrom: unionIDs(r.DerivedFrom, r.Supersedes), // lineage records what it replaced
 		Published:   r.Publish,
 		Meta:        r.Meta,
 		CreatedAt:   time.Now(),
@@ -273,7 +284,54 @@ func (e *Engine) Push(ctx context.Context, r core.PushRequest) (core.Artifact, e
 	if err := e.meta.PutArtifact(a); err != nil {
 		return core.Artifact{}, err
 	}
+	// Mark the prior artifacts as superseded by the new one (append-only: they stay
+	// in the store, just excluded from the default "current" retrieval view).
+	for _, old := range superseded {
+		old.SupersededBy = a.ID
+		if err := e.meta.PutArtifact(old); err != nil {
+			return core.Artifact{}, err
+		}
+	}
 	return a, nil
+}
+
+// Supersede marks old as replaced by replacement (post-hoc supersession, the
+// batch/assist path; Push handles the at-write path via PushRequest.Supersedes).
+// Append-only: old is kept and merely excluded from the default current view.
+func (e *Engine) Supersede(_ context.Context, old, replacement core.ID) error {
+	if old == replacement {
+		return fmt.Errorf("engine: supersede: %w: an artifact cannot supersede itself", core.ErrInvalidInput)
+	}
+	if _, err := e.meta.GetArtifact(replacement); err != nil {
+		return fmt.Errorf("engine: supersede: replacement %s: %w", replacement, err)
+	}
+	a, err := e.meta.GetArtifact(old)
+	if err != nil {
+		return fmt.Errorf("engine: supersede: %s: %w", old, err)
+	}
+	a.SupersededBy = replacement
+	return e.meta.PutArtifact(a)
+}
+
+// unionIDs concatenates two ID slices, dropping zero and duplicate IDs, order-stable.
+func unionIDs(a, b []core.ID) []core.ID {
+	seen := make(map[core.ID]bool, len(a)+len(b))
+	var out []core.ID
+	for _, id := range a {
+		if id.IsZero() || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	for _, id := range b {
+		if id.IsZero() || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
 
 // Trace returns the recorded context a query saw.

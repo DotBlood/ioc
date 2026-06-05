@@ -100,6 +100,62 @@ func TestRuntimeRoundTrip(t *testing.T) {
 	}
 }
 
+// Supersede must round-trip over the RPC and take effect: a superseded artifact
+// leaves the default current view served by the daemon.
+func TestRuntimeSupersede(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	srv := startDaemon(t, dir)
+	defer srv.Stop()
+
+	cli, err := Dial(dir)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer cli.Close()
+
+	root, err := cli.CreateScope(ctx, core.NilID, core.RoleWorktree, "root")
+	if err != nil {
+		t.Fatalf("create scope: %v", err)
+	}
+	a, err := cli.Push(ctx, core.PushRequest{Scope: root.ID, Summary: "use sqlite for storage"})
+	if err != nil {
+		t.Fatalf("push a: %v", err)
+	}
+	b, err := cli.Push(ctx, core.PushRequest{Scope: root.ID, Summary: "use postgres, sqlite was rejected", Supersedes: []core.ID{a.ID}})
+	if err != nil {
+		t.Fatalf("push b: %v", err)
+	}
+
+	_, hits, err := cli.Query(ctx, core.Query{Scope: root.ID, Text: "storage engine", TopK: 5})
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	for _, h := range hits {
+		if h.Artifact == a.ID {
+			t.Fatalf("superseded artifact %s should not be in the default view", a.ID)
+		}
+	}
+
+	// Post-hoc Supersede RPC: mark b superseded by a fresh artifact, then b drops out.
+	c, err := cli.Push(ctx, core.PushRequest{Scope: root.ID, Summary: "use a managed cloud database"})
+	if err != nil {
+		t.Fatalf("push c: %v", err)
+	}
+	if err := cli.Supersede(ctx, b.ID, c.ID); err != nil {
+		t.Fatalf("supersede: %v", err)
+	}
+	_, hits2, err := cli.Query(ctx, core.Query{Scope: root.ID, Text: "storage engine", TopK: 5})
+	if err != nil {
+		t.Fatalf("query2: %v", err)
+	}
+	for _, h := range hits2 {
+		if h.Artifact == b.ID {
+			t.Fatalf("artifact %s superseded via RPC should be excluded", b.ID)
+		}
+	}
+}
+
 func TestRuntimeConcurrentClients(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

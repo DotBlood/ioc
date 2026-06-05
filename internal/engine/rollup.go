@@ -51,7 +51,7 @@ func (e *Engine) descendantScopes(root core.ID) ([]core.Scope, error) {
 // rollups against the query vector, keep the top coarseK scopes, and return the
 // artifacts within them (plus the viewpoint's own). Falls back to the flat
 // visible set if no scope has a rollup.
-func (e *Engine) coarseToFineCandidates(viewpoint core.ID, qvec []float32, coarseK int, tier core.Tier) ([]core.Artifact, error) {
+func (e *Engine) coarseToFineCandidates(viewpoint core.ID, qvec []float32, coarseK int, tier core.Tier, includeArchived bool) ([]core.Artifact, error) {
 	if coarseK <= 0 {
 		coarseK = 6 // sweet spot at ~18 clusters: narrow enough to cut cross-scope noise
 	}
@@ -61,6 +61,9 @@ func (e *Engine) coarseToFineCandidates(viewpoint core.ID, qvec []float32, coars
 	}
 	rset := search.New()
 	for _, sc := range descs {
+		if sc.Archived && !includeArchived {
+			continue // superseded version scope: not a coarse candidate
+		}
 		if sc.RollupEmbRef.IsZero() || e.emb == nil {
 			continue
 		}
@@ -71,7 +74,7 @@ func (e *Engine) coarseToFineCandidates(viewpoint core.ID, qvec []float32, coars
 		rset.Add(sc.ID.String(), vec)
 	}
 	if rset.Len() == 0 {
-		return e.visibleArtifacts(viewpoint, tier) // no rollups → flat
+		return e.visibleArtifacts(viewpoint, tier, includeArchived) // no rollups → flat
 	}
 
 	// Adaptive selection: always keep the top minK scopes, then keep more only

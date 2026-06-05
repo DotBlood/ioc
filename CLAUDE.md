@@ -143,6 +143,12 @@ Dependency direction (no cycles): `core` is a leaf; `embed`/`search` are leaves;
 - **Progressive disclosure** — `Query` at `DetailOverview` (cheap) → `Drill` to `DetailRaw` on demand.
 - **External LLM writes** — `Push` takes an LLM-authored summary; IOC embeds + stores; IOC never calls an LLM.
 - **Consolidation** at branch transition (`Consolidate`) and version boundary (`CrossVersion` + seed).
+- **Supersession / current-view** — append-only, but retrieval returns only the *current* truth by
+  default: artifacts with `SupersededBy` set and `Scope.Archived` version scopes are excluded.
+  The authoring agent declares replacement (`PushRequest.Supersedes`, or `Supersede(old,new)` post-hoc);
+  nothing is deleted, and `Query.IncludeSuperseded` (CLI `-include-superseded`, MCP `include_superseded`,
+  `ioc history`) surfaces the history with a `superseded_by` back-link. Detection stays with the LLM;
+  IOC keeps the bookkeeping + read-time view. See `docs/SUPERSESSION.md`.
 
 ## Conventions
 

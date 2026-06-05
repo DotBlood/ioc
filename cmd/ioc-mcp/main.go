@@ -127,13 +127,20 @@ func (a *ioc) register(s *server.MCPServer) {
 	), a.ingest)
 
 	s.AddTool(mcp.NewTool("ioc_push",
-		mcp.WithDescription("Write an artifact: a REQUIRED mini-summary (gets embedded) plus optional full content (stored cold)."),
+		mcp.WithDescription("Write an artifact: a REQUIRED mini-summary (gets embedded) plus optional full content (stored cold). If this insight replaces an earlier one, pass supersedes so the stale one stops competing in retrieval."),
 		mcp.WithString("scope", mcp.Required(), mcp.Description("scope ID")),
 		mcp.WithString("summary", mcp.Required(), mcp.Description("mini-summary; this is what gets embedded")),
 		mcp.WithString("kind", mcp.Description("answer|insight|summary|document|reasoning|seed (document = a file)")),
 		mcp.WithString("content", mcp.Description("optional full content (kept cold in CAS)")),
 		mcp.WithBoolean("publish", mcp.Description("make visible to sibling scopes")),
+		mcp.WithString("supersedes", mcp.Description("comma-separated artifact IDs this insight replaces (they leave the current view)")),
 	), a.push)
+
+	s.AddTool(mcp.NewTool("ioc_supersede",
+		mcp.WithDescription("Mark an existing artifact as superseded by another (post-hoc currency). The old one is kept for history but excluded from the default retrieval view."),
+		mcp.WithString("old", mcp.Required(), mcp.Description("artifact ID being superseded")),
+		mcp.WithString("by", mcp.Required(), mcp.Description("artifact ID that replaces it")),
+	), a.supersede)
 
 	s.AddTool(mcp.NewTool("ioc_query",
 		mcp.WithDescription("Progressive-disclosure semantic retrieval from a viewpoint scope. Start at detail=overview (cheap); drill only if needed. Returns query_id (for ioc_trace), weak_match, top_score, margin."),
@@ -147,6 +154,7 @@ func (a *ioc) register(s *server.MCPServer) {
 		mcp.WithBoolean("hierarchical", mcp.Description("coarse→fine: rank scope rollups, then search within top scopes (needs ioc_rollup on sub-scopes)")),
 		mcp.WithNumber("coarsek", mcp.Description("hierarchical coarse stage: # scopes to keep (0=default)")),
 		mcp.WithBoolean("rerank", mcp.Description("cross-encoder rerank the top candidates for higher precision")),
+		mcp.WithBoolean("include_superseded", mcp.Description("include superseded/archived (history); default false = current view only")),
 	), a.query)
 
 	s.AddTool(mcp.NewTool("ioc_list_traces",

@@ -44,6 +44,9 @@ func HitOut(h core.Hit) map[string]any {
 	if h.RerankScore != nil {
 		out["rerank_score"] = *h.RerankScore
 	}
+	if !h.SupersededBy.IsZero() {
+		out["superseded_by"] = h.SupersededBy.String()
+	}
 	if p := h.Meta["path"]; p != "" {
 		out["path"] = p
 	}

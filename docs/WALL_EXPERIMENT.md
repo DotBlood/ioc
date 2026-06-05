@@ -40,7 +40,8 @@
 | gold-ref recall@topK (objective) | 0.93 | — | — |
 | absent probe (no false confidence) | abstained correctly | abstain | **PASS** |
 | currency — answer level | current, not stale | current | **PASS** |
-| currency — retrieval rank | stale #1 > current #2 | current above | **FAIL** |
+| currency — retrieval rank (before #61) | stale #1 > current #2 | current above | **FAIL** |
+| currency — retrieval rank (after #61) | current #1, stale excluded | current above | **PASS** |
 
 **Reading it honestly:**
 
@@ -104,7 +105,20 @@ go run ./cmd/ioc wall internal/eval/scenarios/wall.json -embed http://127.0.0.1:
 
 The reasoning wall **holds at small scale on the real embedder** (0.96 answer-grounded,
 no false confidence), with the single miss attributable to recall, not to the overview
-being too thin. The decisive open item is **currency**: the experiment shows, on the real
-embedder, that a superseded artifact outranks the current one and is only saved at the
-answer level by self-marking summaries — which is not a mechanism, just luck. That result
-is the falsifiable baseline #61 (the supersession mechanism) must move.
+being too thin.
+
+**Currency — moved (#61).** The baseline showed, on the real embedder, that a superseded
+artifact outranked the current one and was only saved at the answer level by self-marking
+summaries (luck, not a mechanism). The supersession mechanism (`docs/SUPERSESSION.md`)
+fixed it: re-running the same spec with `M_NEW` declaring `supersedes: [M_OLD]`, the
+superseded v0.1 artifact is excluded from the candidate set entirely and the current v0.2
+one ranks #1 — currency 1/1 at the retrieval-rank level. The freed top-K slot is taken by
+a different useful artifact instead of a stale near-duplicate. This no longer depends on
+the summary self-marking its version.
+
+Re-run after #61 (only the currency line changes):
+
+```bash
+go run ./cmd/ioc wall internal/eval/scenarios/wall.json -embed http://127.0.0.1:8088 -out .ioc/wall
+# currency probes: 1/1 current outranked superseded (retrieval only)
+```

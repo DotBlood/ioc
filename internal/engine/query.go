@@ -47,12 +47,25 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 
 	var arts []core.Artifact
 	if q.Hierarchical {
-		arts, err = e.coarseToFineCandidates(q.Scope, qvec, q.CoarseK, q.Tier)
+		arts, err = e.coarseToFineCandidates(q.Scope, qvec, q.CoarseK, q.Tier, q.IncludeSuperseded)
 	} else {
-		arts, err = e.visibleArtifacts(q.Scope, q.Tier)
+		arts, err = e.visibleArtifacts(q.Scope, q.Tier, q.IncludeSuperseded)
 	}
 	if err != nil {
 		return core.NilID, nil, err
+	}
+
+	// Currency: drop superseded artifacts from the candidate set so the current
+	// distilled truth is what competes (the agent gets the up-to-date conclusion,
+	// not a stale-but-similar one). IncludeSuperseded opts into the full history.
+	if !q.IncludeSuperseded {
+		kept := arts[:0]
+		for _, a := range arts {
+			if a.SupersededBy.IsZero() {
+				kept = append(kept, a)
+			}
+		}
+		arts = kept
 	}
 
 	// Kind filter (e.g. only documents/files, or only reasonings).
@@ -241,14 +254,15 @@ func (e *Engine) Publish(_ context.Context, artifactID core.ID) error {
 
 func (e *Engine) buildHit(ctx context.Context, a core.Artifact, score float64, detail core.Detail) (core.Hit, error) {
 	h := core.Hit{
-		Artifact:  a.ID,
-		Scope:     a.Scope,
-		ScopePath: e.scopePath(a.Scope),
-		Kind:      a.Kind,
-		Tier:      a.Tier,
-		Summary:   a.Summary,
-		Score:     score,
-		Meta:      a.Meta,
+		Artifact:     a.ID,
+		Scope:        a.Scope,
+		ScopePath:    e.scopePath(a.Scope),
+		Kind:         a.Kind,
+		Tier:         a.Tier,
+		Summary:      a.Summary,
+		Score:        score,
+		Meta:         a.Meta,
+		SupersededBy: a.SupersededBy,
 	}
 	if detail >= core.DetailRaw && !a.Content.IsZero() {
 		data, err := e.cas.Load(ctx, a.Content)

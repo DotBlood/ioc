@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -10,6 +11,25 @@ import (
 	"github.com/DotBlood/ioc/internal/ingest"
 	"github.com/DotBlood/ioc/internal/iocfmt"
 )
+
+// parseIDList parses a comma-separated list of artifact IDs (empty => nil).
+func parseIDList(s string) ([]core.ID, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	var out []core.ID
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			id, err := core.ParseID(part)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}
 
 func (a *ioc) createScope(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	a.mu.Lock()
@@ -40,17 +60,39 @@ func (a *ioc) push(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRes
 	if c := r.GetString("content", ""); c != "" {
 		content = []byte(c)
 	}
+	sup, err := parseIDList(r.GetString("supersedes", ""))
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	art, err := a.svc.Push(ctx, core.PushRequest{
-		Scope:   id,
-		Kind:    iocfmt.ParseKind(r.GetString("kind", "insight")),
-		Summary: summary,
-		Content: content,
-		Publish: r.GetBool("publish", false),
+		Scope:      id,
+		Kind:       iocfmt.ParseKind(r.GetString("kind", "insight")),
+		Summary:    summary,
+		Content:    content,
+		Publish:    r.GetBool("publish", false),
+		Supersedes: sup,
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return jsonResult(iocfmt.ArtifactOut(art))
+}
+
+func (a *ioc) supersede(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	old, err := requireID(r, "old")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	by, err := requireID(r, "by")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if err := a.svc.Supersede(ctx, old, by); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return jsonResult(map[string]any{"superseded": old.String(), "by": by.String()})
 }
 
 func (a *ioc) ingest(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -99,17 +141,18 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 		mode = core.ModeHybrid
 	}
 	qid, hits, err := a.svc.Query(ctx, core.Query{
-		Scope:        id,
-		Text:         text,
-		Detail:       iocfmt.ParseDetail(r.GetString("detail", "overview")),
-		TopK:         r.GetInt("topk", 5),
-		Tier:         iocfmt.ParseTier(r.GetString("tier", "")),
-		Kinds:        iocfmt.ParseKinds(r.GetString("kind", "")),
-		MinScore:     r.GetFloat("min_score", 0),
-		Mode:         mode,
-		Hierarchical: hier,
-		CoarseK:      r.GetInt("coarsek", 0),
-		Rerank:       r.GetBool("rerank", false),
+		Scope:             id,
+		Text:              text,
+		Detail:            iocfmt.ParseDetail(r.GetString("detail", "overview")),
+		TopK:              r.GetInt("topk", 5),
+		Tier:              iocfmt.ParseTier(r.GetString("tier", "")),
+		Kinds:             iocfmt.ParseKinds(r.GetString("kind", "")),
+		MinScore:          r.GetFloat("min_score", 0),
+		Mode:              mode,
+		Hierarchical:      hier,
+		CoarseK:           r.GetInt("coarsek", 0),
+		Rerank:            r.GetBool("rerank", false),
+		IncludeSuperseded: r.GetBool("include_superseded", false),
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil

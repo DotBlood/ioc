@@ -56,6 +56,10 @@ func main() {
 		err = drill(args)
 	case "publish":
 		err = publish(args)
+	case "supersede":
+		err = supersede(args)
+	case "history":
+		err = history(args)
 	case "query":
 		err = query(args)
 	case "traces":
@@ -81,11 +85,13 @@ commands:
   gen-scenario -out F [-n N] [-clusters C] [-shape flat|tree]  generate a scale scenario
   embed-ping [-embed e]                          check the embedding service
   create-scope [-parent ID] -role R -title T     create a scope
-  push -scope ID -summary S [-kind K] [-content X|-content-file F] [-publish]
+  push -scope ID -summary S [-kind K] [-content X|-content-file F] [-publish] [-supersedes id1,id2]
+  supersede -old ID -by ID                       mark an artifact superseded by another (currency)
+  history -artifact ID                           show an artifact's supersession chain
   ingest <path> [-scope ID] [-title T] [-maxchars N] [-overlap N]  mirror a dir tree into scopes; chunk files as documents
   serve [-dir d] [-embed e]                      run the runtime daemon (single owner of -dir; clients connect via runtime.json)
   runtime status|stop [-dir d]                   inspect or stop the runtime daemon owning -dir
-  query -scope ID -text T [-detail overview|entry|raw] [-topk N] [-tier t] [-kind k] [-mode m]
+  query -scope ID -text T [-detail overview|entry|raw] [-topk N] [-tier t] [-kind k] [-mode m] [-include-superseded]
   drill -artifact ID [-detail raw]
   publish -artifact ID
   siblings -scope ID

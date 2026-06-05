@@ -7,8 +7,12 @@ import "github.com/DotBlood/ioc/internal/core"
 //   - all artifacts in ancestor scopes (drill-up lineage),
 //   - PUBLISHED artifacts in sibling scopes (the blackboard).
 //
-// tier != 0 filters to that tier.
-func (e *Engine) visibleArtifacts(scope core.ID, tier core.Tier) ([]core.Artifact, error) {
+// tier != 0 filters to that tier. Unless includeArchived is set, sibling scopes
+// that are Archived (superseded versions, e.g. the vN scope a CrossVersion left
+// behind) are skipped — otherwise old-version conclusions compete on equal cosine
+// footing with the current version (see docs/SUPERSESSION.md). The viewpoint and
+// its ancestors are always kept (you explicitly stand there / drill up your lineage).
+func (e *Engine) visibleArtifacts(scope core.ID, tier core.Tier, includeArchived bool) ([]core.Artifact, error) {
 	seen := make(map[core.ID]bool)
 	var out []core.Artifact
 	add := func(a core.Artifact, requirePublished bool) {
@@ -55,6 +59,9 @@ func (e *Engine) visibleArtifacts(scope core.ID, tier core.Tier) ([]core.Artifac
 		return nil, err
 	}
 	for _, s := range sibs {
+		if s.Archived && !includeArchived {
+			continue // superseded version: excluded from the current view
+		}
 		arts, err := e.meta.ArtifactsInScope(s.ID)
 		if err != nil {
 			return nil, err

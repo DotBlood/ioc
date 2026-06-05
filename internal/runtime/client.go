@@ -147,6 +147,10 @@ func (c *Client) CrossVersion(_ context.Context, scope core.ID, seed core.Seed) 
 	return sc, err
 }
 
+func (c *Client) Supersede(_ context.Context, old, replacement core.ID) error {
+	return c.call(mSupersede, supersedeParams{Old: old, Replacement: replacement}, nil)
+}
+
 func (c *Client) RollupScope(_ context.Context, scope core.ID, summary string) error {
 	return c.call(mRollupScope, scopeSummaryParams{Scope: scope, Summary: summary}, nil)
 }

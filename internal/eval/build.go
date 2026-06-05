@@ -49,12 +49,21 @@ func applyStructureTurn(ctx context.Context, e *engine.Engine, i int, t Turn, sc
 		if t.Content != "" {
 			content = []byte(t.Content)
 		}
+		var supersedes []core.ID
+		for _, name := range t.Supersedes {
+			id, ok := arts[name]
+			if !ok {
+				return true, fmt.Errorf("turn %d push: unknown supersedes artifact %q", i, name)
+			}
+			supersedes = append(supersedes, id)
+		}
 		a, err := e.Push(ctx, core.PushRequest{
-			Scope:   scope,
-			Kind:    iocfmt.ParseKind(t.Kind),
-			Summary: t.Summary,
-			Content: content,
-			Publish: t.Publish,
+			Scope:      scope,
+			Kind:       iocfmt.ParseKind(t.Kind),
+			Summary:    t.Summary,
+			Content:    content,
+			Publish:    t.Publish,
+			Supersedes: supersedes,
 		})
 		if err != nil {
 			return true, fmt.Errorf("turn %d push: %w", i, err)

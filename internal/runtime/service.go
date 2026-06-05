@@ -27,6 +27,7 @@ type Service interface {
 	Fork(ctx context.Context, source core.ID, title string) (core.Scope, error)
 	Consolidate(ctx context.Context, scope core.ID, summary string) (core.Artifact, error)
 	CrossVersion(ctx context.Context, scope core.ID, seed core.Seed) (core.Scope, error)
+	Supersede(ctx context.Context, old, replacement core.ID) error
 	RollupScope(ctx context.Context, scope core.ID, summary string) error
 	Trace(ctx context.Context, queryID core.ID) (core.TraceRecord, error)
 	RecentTraces(n int) ([]core.TraceRecord, error)
