@@ -301,7 +301,11 @@ func (a *ioc) consolidate(ctx context.Context, r mcp.CallToolRequest) (*mcp.Call
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	art, err := a.svc.Consolidate(ctx, id, summary)
+	sup, err := parseIDList(r.GetString("supersedes", ""))
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	art, err := a.svc.Consolidate(ctx, id, summary, sup)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}

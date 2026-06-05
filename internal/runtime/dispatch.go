@@ -228,11 +228,11 @@ func (s *Server) call(ctx context.Context, method string, params json.RawMessage
 		}
 		return marshalRaw(sc)
 	case mConsolidate:
-		var p scopeSummaryParams
+		var p consolidateParams
 		if err := decode(params, &p); err != nil {
 			return nil, err
 		}
-		a, err := s.eng.Consolidate(ctx, p.Scope, p.Summary)
+		a, err := s.eng.Consolidate(ctx, p.Scope, p.Summary, p.Supersedes)
 		if err != nil {
 			return nil, err
 		}

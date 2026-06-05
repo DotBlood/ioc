@@ -113,6 +113,47 @@ func TestSupersede_PushRejectsUnknownTarget(t *testing.T) {
 	require.Error(t, err)
 }
 
+// Consolidate with supersedes atomically retires the artifacts it folds in: they
+// leave the default current view and the consolidated summary records the lineage.
+func TestConsolidate_BatchSupersedes(t *testing.T) {
+	ctx := context.Background()
+	e, err := Open(ctx, t.TempDir(), embed.NewMockEmbedder(16))
+	require.NoError(t, err)
+	defer e.Close()
+
+	wt, err := e.CreateScope(ctx, core.NilID, core.RoleWorktree, "wt")
+	require.NoError(t, err)
+	ws, err := e.CreateScope(ctx, wt.ID, core.RoleWorkspace, "ws")
+	require.NoError(t, err)
+
+	a1, err := e.Push(ctx, core.PushRequest{Scope: ws.ID, Summary: "finding one about the gizmo", Publish: true})
+	require.NoError(t, err)
+	a2, err := e.Push(ctx, core.PushRequest{Scope: ws.ID, Summary: "finding two about the gizmo", Publish: true})
+	require.NoError(t, err)
+
+	cons, err := e.Consolidate(ctx, ws.ID, "consolidated: the gizmo conclusion", []core.ID{a1.ID, a2.ID})
+	require.NoError(t, err)
+	require.Contains(t, cons.DerivedFrom, a1.ID)
+	require.Contains(t, cons.DerivedFrom, a2.ID)
+
+	// The folded-in findings are superseded by the consolidated summary.
+	for _, id := range []core.ID{a1.ID, a2.ID} {
+		got, err := e.meta.GetArtifact(id)
+		require.NoError(t, err)
+		require.Equal(t, cons.ID, got.SupersededBy)
+	}
+
+	// Default query from the workspace no longer surfaces the retired findings.
+	_, hits, err := e.Query(ctx, core.Query{Scope: ws.ID, Text: "gizmo finding", TopK: 5})
+	require.NoError(t, err)
+	require.False(t, hitsContainID(hits, a1.ID))
+	require.False(t, hitsContainID(hits, a2.ID))
+
+	// A bad supersedes id aborts before writing anything.
+	_, err = e.Consolidate(ctx, ws.ID, "x", []core.ID{core.NewID()})
+	require.Error(t, err)
+}
+
 // Retrieval honors Scope.Archived: after a CrossVersion, the archived old-version
 // scope's published artifacts no longer compete from the new version's viewpoint
 // (unless IncludeSuperseded). This is the version-boundary reset.

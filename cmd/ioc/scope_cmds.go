@@ -59,8 +59,13 @@ func consolidate(args []string) error {
 	dir, em := commonFlags(fs)
 	scope := fs.String("scope", "", "scope ID")
 	summary := fs.String("summary", "", "consolidated summary")
+	supersedes := fs.String("supersedes", "", "comma-separated artifact IDs this consolidation replaces")
 	_ = fs.Parse(args)
 	scopeID, err := iocfmt.ParseScopeID(*scope)
+	if err != nil {
+		return err
+	}
+	sup, err := parseIDList(*supersedes)
 	if err != nil {
 		return err
 	}
@@ -69,7 +74,7 @@ func consolidate(args []string) error {
 		return err
 	}
 	defer e.Close()
-	a, err := e.Consolidate(context.Background(), scopeID, *summary)
+	a, err := e.Consolidate(context.Background(), scopeID, *summary, sup)
 	if err != nil {
 		return err
 	}

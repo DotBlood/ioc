@@ -76,7 +76,7 @@ func TestEngine_FullLoop(t *testing.T) {
 	require.Equal(t, "the wooden tool head splits under load", forkArts[0].Summary)
 
 	// Consolidate: a worktree-tier summary promoted to the parent (ws).
-	cons, err := e.Consolidate(ctx, s1.ID, "decision: the head must be metal")
+	cons, err := e.Consolidate(ctx, s1.ID, "decision: the head must be metal", nil)
 	require.NoError(t, err)
 	require.Equal(t, core.TierWorktree, cons.Tier)
 	require.Equal(t, ws.ID, cons.Scope)

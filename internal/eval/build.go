@@ -97,7 +97,15 @@ func applyStructureTurn(ctx context.Context, e *engine.Engine, i int, t Turn, sc
 		if err != nil {
 			return true, fmt.Errorf("turn %d: %w", i, err)
 		}
-		if _, err := e.Consolidate(ctx, scope, t.Summary); err != nil {
+		var supersedes []core.ID
+		for _, name := range t.Supersedes {
+			id, ok := arts[name]
+			if !ok {
+				return true, fmt.Errorf("turn %d consolidate: unknown supersedes artifact %q", i, name)
+			}
+			supersedes = append(supersedes, id)
+		}
+		if _, err := e.Consolidate(ctx, scope, t.Summary, supersedes); err != nil {
 			return true, fmt.Errorf("turn %d consolidate: %w", i, err)
 		}
 

@@ -364,13 +364,9 @@ func (e *Engine) Push(ctx context.Context, r core.PushRequest) (core.Artifact, e
 	}
 	// Validate the superseded targets BEFORE writing the new artifact, so a bad id
 	// fails the whole push rather than leaving a half-applied supersession.
-	superseded := make([]core.Artifact, 0, len(r.Supersedes))
-	for _, sid := range r.Supersedes {
-		old, err := e.meta.GetArtifact(sid)
-		if err != nil {
-			return core.Artifact{}, fmt.Errorf("engine: push: supersedes %s: %w", sid, err)
-		}
-		superseded = append(superseded, old)
+	superseded, err := e.loadSupersedeTargets(r.Supersedes)
+	if err != nil {
+		return core.Artifact{}, fmt.Errorf("engine: push: %w", err)
 	}
 
 	a := core.Artifact{
@@ -389,15 +385,36 @@ func (e *Engine) Push(ctx context.Context, r core.PushRequest) (core.Artifact, e
 	if err := e.meta.PutArtifact(a); err != nil {
 		return core.Artifact{}, err
 	}
-	// Mark the prior artifacts as superseded by the new one (append-only: they stay
-	// in the store, just excluded from the default "current" retrieval view).
-	for _, old := range superseded {
-		old.SupersededBy = a.ID
-		if err := e.meta.PutArtifact(old); err != nil {
-			return core.Artifact{}, err
-		}
+	if err := e.markSupersededBy(superseded, a.ID); err != nil {
+		return core.Artifact{}, err
 	}
 	return a, nil
+}
+
+// loadSupersedeTargets validates that every id exists, returning the artifacts (so
+// a bad id aborts the whole write before anything is persisted).
+func (e *Engine) loadSupersedeTargets(ids []core.ID) ([]core.Artifact, error) {
+	out := make([]core.Artifact, 0, len(ids))
+	for _, sid := range ids {
+		a, err := e.meta.GetArtifact(sid)
+		if err != nil {
+			return nil, fmt.Errorf("supersedes %s: %w", sid, err)
+		}
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+// markSupersededBy sets SupersededBy=newID on each target and persists it
+// (append-only: targets stay in the store, just excluded from the current view).
+func (e *Engine) markSupersededBy(targets []core.Artifact, newID core.ID) error {
+	for _, old := range targets {
+		old.SupersededBy = newID
+		if err := e.meta.PutArtifact(old); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Supersede marks old as replaced by replacement (post-hoc supersession, the

@@ -243,6 +243,12 @@ type scopeSummaryParams struct {
 	Summary string  `json:"summary"`
 }
 
+type consolidateParams struct {
+	Scope      core.ID   `json:"scope"`
+	Summary    string    `json:"summary"`
+	Supersedes []core.ID `json:"supersedes,omitempty"`
+}
+
 type crossVersionParams struct {
 	Scope core.ID   `json:"scope"`
 	Seed  core.Seed `json:"seed"`

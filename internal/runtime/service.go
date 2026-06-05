@@ -26,7 +26,7 @@ type Service interface {
 	SiblingOverview(ctx context.Context, scope core.ID) ([]core.Hit, error)
 	Ancestors(ctx context.Context, scope core.ID) ([]core.Scope, error)
 	Fork(ctx context.Context, source core.ID, title string) (core.Scope, error)
-	Consolidate(ctx context.Context, scope core.ID, summary string) (core.Artifact, error)
+	Consolidate(ctx context.Context, scope core.ID, summary string, supersedes []core.ID) (core.Artifact, error)
 	CrossVersion(ctx context.Context, scope core.ID, seed core.Seed) (core.Scope, error)
 	Supersede(ctx context.Context, old, replacement core.ID) error
 	RollupScope(ctx context.Context, scope core.ID, summary string) error

@@ -60,13 +60,23 @@ func (e *Engine) Fork(_ context.Context, source core.ID, title string) (core.Sco
 // Consolidate promotes a single consolidated summary (written by the external
 // LLM) into the parent scope's worktree tier — a branch-transition boundary.
 // If the scope has no parent, the summary is stored in the scope itself.
-func (e *Engine) Consolidate(ctx context.Context, scope core.ID, summary string) (core.Artifact, error) {
+//
+// supersedes names the prior artifacts this consolidation replaces (the §4/§5
+// reconciliation hook): they are marked superseded by the new summary in one
+// atomic call, so a branch transition can "consolidate + retire what it folded in".
+// Empty supersedes = the original behavior. Targets are validated before anything
+// is written.
+func (e *Engine) Consolidate(ctx context.Context, scope core.ID, summary string, supersedes []core.ID) (core.Artifact, error) {
 	if summary == "" {
 		return core.Artifact{}, fmt.Errorf("engine: consolidate: %w: empty summary", core.ErrInvalidInput)
 	}
 	s, err := e.meta.GetScope(scope)
 	if err != nil {
 		return core.Artifact{}, err
+	}
+	targets, err := e.loadSupersedeTargets(supersedes)
+	if err != nil {
+		return core.Artifact{}, fmt.Errorf("engine: consolidate: %w", err)
 	}
 	target := s.Parent
 	if target.IsZero() {
@@ -77,16 +87,20 @@ func (e *Engine) Consolidate(ctx context.Context, scope core.ID, summary string)
 		return core.Artifact{}, err
 	}
 	a := core.Artifact{
-		ID:        core.NewID(),
-		Scope:     target,
-		Kind:      core.KindSummary,
-		Tier:      core.TierWorktree,
-		Summary:   summary,
-		EmbRef:    ref,
-		Published: true,
-		CreatedAt: time.Now(),
+		ID:          core.NewID(),
+		Scope:       target,
+		Kind:        core.KindSummary,
+		Tier:        core.TierWorktree,
+		Summary:     summary,
+		EmbRef:      ref,
+		DerivedFrom: unionIDs(nil, supersedes), // lineage records what it folded in
+		Published:   true,
+		CreatedAt:   time.Now(),
 	}
 	if err := e.meta.PutArtifact(a); err != nil {
+		return core.Artifact{}, err
+	}
+	if err := e.markSupersededBy(targets, a.ID); err != nil {
 		return core.Artifact{}, err
 	}
 	return a, nil

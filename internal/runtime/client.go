@@ -201,9 +201,9 @@ func (c *Client) Fork(_ context.Context, source core.ID, title string) (core.Sco
 	return sc, err
 }
 
-func (c *Client) Consolidate(_ context.Context, scope core.ID, summary string) (core.Artifact, error) {
+func (c *Client) Consolidate(_ context.Context, scope core.ID, summary string, supersedes []core.ID) (core.Artifact, error) {
 	var a core.Artifact
-	err := c.call(mConsolidate, scopeSummaryParams{Scope: scope, Summary: summary}, &a)
+	err := c.call(mConsolidate, consolidateParams{Scope: scope, Summary: summary, Supersedes: supersedes}, &a)
 	return a, err
 }
 

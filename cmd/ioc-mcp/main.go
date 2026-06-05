@@ -227,9 +227,10 @@ func (a *ioc) register(s *server.MCPServer) {
 	), a.fork)
 
 	s.AddTool(mcp.NewTool("ioc_consolidate",
-		mcp.WithDescription("Promote a consolidated summary into the parent scope's worktree tier (branch-transition boundary)."),
+		mcp.WithDescription("Promote a consolidated summary into the parent scope's worktree tier (branch-transition boundary). Pass supersedes to atomically retire the artifacts this consolidation folds in (they leave the current view)."),
 		mcp.WithString("scope", mcp.Required(), mcp.Description("scope ID")),
 		mcp.WithString("summary", mcp.Required(), mcp.Description("consolidated summary text")),
+		mcp.WithString("supersedes", mcp.Description("comma-separated artifact IDs this consolidation replaces")),
 	), a.consolidate)
 
 	s.AddTool(mcp.NewTool("ioc_rollup",
