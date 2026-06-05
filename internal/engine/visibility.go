@@ -79,8 +79,15 @@ func (e *Engine) ancestorsOf(scope core.ID) ([]core.Scope, error) {
 	if err != nil {
 		return nil, err
 	}
+	// visited guards against a corrupt parent chain (self-parent or an N-cycle),
+	// which would otherwise loop forever. Seed with the start scope.
+	visited := map[core.ID]bool{scope: true}
 	cur := s.Parent
 	for !cur.IsZero() {
+		if visited[cur] {
+			break // cycle in the parent chain — stop, return what we have
+		}
+		visited[cur] = true
 		p, err := e.meta.GetScope(cur)
 		if err != nil {
 			break

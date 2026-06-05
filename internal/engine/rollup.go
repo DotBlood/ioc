@@ -28,9 +28,13 @@ func (e *Engine) RollupScope(ctx context.Context, scope core.ID, summary string)
 	return e.meta.PutScope(s)
 }
 
-// descendantScopes returns all scopes under root (children, recursively).
+// descendantScopes returns all scopes under root (children, recursively). A
+// visited set bounds the walk: a corrupt/cyclic scope graph (or a fork-diamond
+// DAG) would otherwise loop forever or duplicate scopes. visited is seeded with
+// root so root is never re-enqueued as its own descendant.
 func (e *Engine) descendantScopes(root core.ID) ([]core.Scope, error) {
 	var out []core.Scope
+	visited := map[core.ID]bool{root: true}
 	queue := []core.ID{root}
 	for len(queue) > 0 {
 		cur := queue[0]
@@ -40,6 +44,10 @@ func (e *Engine) descendantScopes(root core.ID) ([]core.Scope, error) {
 			return nil, err
 		}
 		for _, k := range kids {
+			if visited[k.ID] {
+				continue // cycle or shared child — don't revisit
+			}
+			visited[k.ID] = true
 			out = append(out, k)
 			queue = append(queue, k.ID)
 		}

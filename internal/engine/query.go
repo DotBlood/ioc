@@ -276,8 +276,13 @@ func (e *Engine) buildHit(ctx context.Context, a core.Artifact, score float64, d
 
 func (e *Engine) scopePath(scope core.ID) string {
 	var parts []string
+	visited := map[core.ID]bool{} // bound a corrupt/cyclic parent chain
 	cur := scope
 	for !cur.IsZero() {
+		if visited[cur] {
+			break
+		}
+		visited[cur] = true
 		s, err := e.meta.GetScope(cur)
 		if err != nil {
 			break
