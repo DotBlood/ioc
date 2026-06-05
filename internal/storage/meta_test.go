@@ -11,12 +11,12 @@ import (
 func TestOpenMetaBusyIsClear(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "meta.db")
 
-	m1, err := OpenMeta(path)
+	m1, err := OpenMeta(path, nil)
 	if err != nil {
 		t.Fatalf("first OpenMeta: %v", err)
 	}
 
-	_, err = OpenMeta(path)
+	_, err = OpenMeta(path, nil)
 	if err == nil {
 		t.Fatal("second OpenMeta on a locked dir should fail")
 	}
@@ -29,7 +29,7 @@ func TestOpenMetaBusyIsClear(t *testing.T) {
 	if err := m1.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	m2, err := OpenMeta(path)
+	m2, err := OpenMeta(path, nil)
 	if err != nil {
 		t.Fatalf("re-open after close: %v", err)
 	}

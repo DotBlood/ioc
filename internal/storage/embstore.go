@@ -27,12 +27,26 @@ type EmbeddingStore struct {
 	count   int
 	data    []byte
 	dirty   bool // records written but not yet fsynced
+	box     *Box // per-record encryption (nil = off)
 }
 
-const embHeaderSize = 16 // 8 bytes count + 4 bytes dims + 4 reserved
+const (
+	embHeaderSize    = 16 // 8 bytes count + 4 bytes dims + 4 flags
+	embFlagEncrypted = 1  // header[12:16]: records are AES-256-GCM sealed
+)
 
-// OpenEmbeddingStore opens or creates an embedding store file for a fixed dimension.
-func OpenEmbeddingStore(path string, dims int) (*EmbeddingStore, error) {
+// refAAD binds an encrypted record to its 1-indexed ref (8-byte LE), so a record
+// cannot be silently relocated to a different slot.
+func refAAD(ref int) []byte {
+	var b [8]byte
+	binary.LittleEndian.PutUint64(b[:], uint64(ref))
+	return b[:]
+}
+
+// OpenEmbeddingStore opens or creates an embedding store file for a fixed
+// dimension. A non-nil box encrypts each record at rest; the encrypted flag is
+// recorded in the header so reopening with a mismatching key/format fails loudly.
+func OpenEmbeddingStore(path string, dims int, box *Box) (*EmbeddingStore, error) {
 	if dims <= 0 || dims > 4096 {
 		return nil, fmt.Errorf("embedding store: invalid dims %d", dims)
 	}
@@ -60,13 +74,16 @@ func OpenEmbeddingStore(path string, dims int) (*EmbeddingStore, error) {
 		return nil, fmt.Errorf("embedding store: stat: %w", err)
 	}
 
-	recSize := dims * 4
+	recSize := dims*4 + box.Overhead() // encrypted records carry nonce+tag
 	var count, fileSize int
 
 	switch {
 	case fi.Size() == 0:
 		header := make([]byte, embHeaderSize)
 		binary.LittleEndian.PutUint32(header[8:12], uint32(dims))
+		if box.Enabled() {
+			binary.LittleEndian.PutUint32(header[12:16], embFlagEncrypted)
+		}
 		if _, err := file.WriteAt(header, 0); err != nil {
 			return nil, fmt.Errorf("embedding store: write header: %w", err)
 		}
@@ -81,6 +98,15 @@ func OpenEmbeddingStore(path string, dims int) (*EmbeddingStore, error) {
 		}
 		if fileDims := int(binary.LittleEndian.Uint32(header[8:12])); fileDims != dims {
 			return nil, fmt.Errorf("embedding store: dims mismatch: file=%d requested=%d", fileDims, dims)
+		}
+		// Encrypted-flag vs key must match (defense-in-depth; the file is self-
+		// describing so a direct caller can't silently read garbage).
+		fileEncrypted := binary.LittleEndian.Uint32(header[12:16]) == embFlagEncrypted
+		if fileEncrypted && !box.Enabled() {
+			return nil, fmt.Errorf("embedding store: file is encrypted but no key is set (%s)", EncryptionKeyEnv)
+		}
+		if !fileEncrypted && box.Enabled() {
+			return nil, fmt.Errorf("embedding store: file is plaintext but an encryption key is set; refusing to mix")
 		}
 		count = int(binary.LittleEndian.Uint32(header[0:8]))
 		// Clamp the header count to the records physically present. A crash
@@ -100,7 +126,7 @@ func OpenEmbeddingStore(path string, dims int) (*EmbeddingStore, error) {
 		}
 	}
 	ok = true
-	return &EmbeddingStore{path: path, file: file, dims: dims, recSize: recSize, count: count, data: buf}, nil
+	return &EmbeddingStore{path: path, file: file, dims: dims, recSize: recSize, count: count, data: buf, box: box}, nil
 }
 
 // Put appends a vector and returns its 1-indexed ref. It writes the record to the
@@ -122,9 +148,21 @@ func (s *EmbeddingStore) Put(vec []float32) (core.EmbeddingRef, error) {
 		s.data = newBuf
 	}
 	offset := embHeaderSize + oldCount*s.recSize
+	// Build the plaintext record, then encrypt it to exactly recSize bytes when a
+	// box is set (nonce+ct+tag == dims*4 + Overhead). s.data holds the on-disk
+	// (possibly ciphertext) bytes so a reopen reads back consistently.
+	rec := make([]byte, s.dims*4)
 	for i, v := range vec {
-		binary.LittleEndian.PutUint32(s.data[offset+i*4:offset+(i+1)*4], math.Float32bits(v))
+		binary.LittleEndian.PutUint32(rec[i*4:(i+1)*4], math.Float32bits(v))
 	}
+	if s.box.Enabled() {
+		sealed, err := s.box.Seal(rec, refAAD(newCount))
+		if err != nil {
+			return 0, fmt.Errorf("embedding store: encrypt: %w", err)
+		}
+		rec = sealed
+	}
+	copy(s.data[offset:offset+s.recSize], rec)
 	binary.LittleEndian.PutUint32(s.data[0:8], uint32(newCount))
 
 	// Persist incrementally: record first, then the count header (commit point).
@@ -154,9 +192,17 @@ func (s *EmbeddingStore) Get(ref core.EmbeddingRef) ([]float32, error) {
 		return nil, fmt.Errorf("embedding store: ref %d out of range (count=%d)", ref, s.count)
 	}
 	offset := embHeaderSize + idx*s.recSize
+	rec := s.data[offset : offset+s.recSize]
+	if s.box.Enabled() {
+		plain, err := s.box.Open(rec, refAAD(int(ref)))
+		if err != nil {
+			return nil, fmt.Errorf("embedding store: decrypt ref %d: %w", ref, err)
+		}
+		rec = plain
+	}
 	vec := make([]float32, s.dims)
 	for i := 0; i < s.dims; i++ {
-		bits := binary.LittleEndian.Uint32(s.data[offset+i*4 : offset+(i+1)*4])
+		bits := binary.LittleEndian.Uint32(rec[i*4 : (i+1)*4])
 		vec[i] = math.Float32frombits(bits)
 	}
 	return vec, nil

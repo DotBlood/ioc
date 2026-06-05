@@ -24,6 +24,7 @@ import (
 // large artifact appears). Deduplication is automatic by content hash.
 type CAS struct {
 	root string
+	box  *Box // at-rest encryption (nil = off)
 }
 
 // maxCASDecodedBytes bounds zstd decompression on Load to defend against a
@@ -32,8 +33,9 @@ type CAS struct {
 // this. Package var so tests can lower it.
 var maxCASDecodedBytes uint64 = 128 << 20 // 128 MiB
 
-// NewCAS creates a content-addressable store rooted at the given directory.
-func NewCAS(root string) *CAS { return &CAS{root: root} }
+// NewCAS creates a content-addressable store rooted at the given directory. A
+// non-nil box encrypts object payloads at rest (AES-256-GCM); nil = plaintext.
+func NewCAS(root string, box *Box) *CAS { return &CAS{root: root, box: box} }
 
 // StoreBytes stores content addressably and returns its hash.
 // If the content already exists it is not rewritten (dedup).
@@ -54,6 +56,14 @@ func (c *CAS) StoreBytes(_ context.Context, data []byte) (core.ContentHash, erro
 	}
 	compressed := enc.EncodeAll(data, nil)
 	enc.Close()
+	// Encrypt after compress (V4/at-rest): the content hash is of the PLAINTEXT, so
+	// dedup/Has/naming are unchanged; bind the ciphertext to its address via AAD.
+	if c.box.Enabled() {
+		compressed, err = c.box.Seal(compressed, h[:])
+		if err != nil {
+			return core.ContentHash{}, fmt.Errorf("cas store: encrypt: %w", err)
+		}
+	}
 	// Write to a temp file in the same directory, then rename into place (atomic
 	// on the same volume). The previous direct WriteFile could leave a truncated
 	// blob on a crash/concurrent read that has() then reported as present,
@@ -98,6 +108,13 @@ func (c *CAS) Load(_ context.Context, hash core.ContentHash) ([]byte, error) {
 			return nil, fmt.Errorf("cas load: %w", os.ErrNotExist)
 		}
 		return nil, fmt.Errorf("cas load: read: %w", err)
+	}
+	// Decrypt before decompress (the bomb cap still applies to the decoded size).
+	if c.box.Enabled() {
+		compressed, err = c.box.Open(compressed, hash[:])
+		if err != nil {
+			return nil, fmt.Errorf("cas load: %w", err)
+		}
 	}
 	dec, err := zstd.NewReader(nil, zstd.WithDecoderMaxMemory(maxCASDecodedBytes))
 	if err != nil {

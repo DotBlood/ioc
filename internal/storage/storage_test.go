@@ -12,7 +12,7 @@ import (
 
 func TestCAS_RoundtripAndDedup(t *testing.T) {
 	ctx := context.Background()
-	c := NewCAS(t.TempDir())
+	c := NewCAS(t.TempDir(), nil)
 
 	data := []byte("the wooden head splits under load")
 	h1, err := c.StoreBytes(ctx, data)
@@ -37,7 +37,7 @@ func TestCAS_RoundtripAndDedup(t *testing.T) {
 func TestCAS_AtomicStoreNoTempLeftover(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
-	c := NewCAS(root)
+	c := NewCAS(root, nil)
 
 	data := []byte("the metal head holds under load")
 	h, err := c.StoreBytes(ctx, data)
@@ -66,7 +66,7 @@ func TestCAS_DecompressionBombCapped(t *testing.T) {
 	maxCASDecodedBytes = 1 << 20 // 1 MiB cap for this test
 	defer func() { maxCASDecodedBytes = old }()
 
-	c := NewCAS(t.TempDir())
+	c := NewCAS(t.TempDir(), nil)
 	big := make([]byte, 8<<20) // 8 MiB of zeros — compresses tiny, expands past the cap
 	h, err := c.StoreBytes(ctx, big)
 	require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestCAS_DecompressionBombCapped(t *testing.T) {
 func TestEmbeddingStore_PutGetPersist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "emb.dat")
 
-	s, err := OpenEmbeddingStore(path, 4)
+	s, err := OpenEmbeddingStore(path, 4, nil)
 	require.NoError(t, err)
 
 	r1, err := s.Put([]float32{1, 0, 0, 0})
@@ -94,7 +94,7 @@ func TestEmbeddingStore_PutGetPersist(t *testing.T) {
 	require.NoError(t, s.Close())
 
 	// Reopen and verify persistence.
-	s2, err := OpenEmbeddingStore(path, 4)
+	s2, err := OpenEmbeddingStore(path, 4, nil)
 	require.NoError(t, err)
 	defer s2.Close()
 	require.Equal(t, 2, s2.Len())

@@ -21,19 +21,19 @@ func TestStorageFileModes0600(t *testing.T) {
 	dir := t.TempDir()
 
 	// meta.db
-	m, err := OpenMeta(filepath.Join(dir, "meta.db"))
+	m, err := OpenMeta(filepath.Join(dir, "meta.db"), nil)
 	require.NoError(t, err)
 	require.NoError(t, m.Close())
 	requireMode(t, filepath.Join(dir, "meta.db"), 0o600)
 
 	// emb.dat
-	es, err := OpenEmbeddingStore(filepath.Join(dir, "emb.dat"), 16)
+	es, err := OpenEmbeddingStore(filepath.Join(dir, "emb.dat"), 16, nil)
 	require.NoError(t, err)
 	require.NoError(t, es.Close())
 	requireMode(t, filepath.Join(dir, "emb.dat"), 0o600)
 
 	// CAS object + its dirs
-	cas := NewCAS(filepath.Join(dir, "cas"))
+	cas := NewCAS(filepath.Join(dir, "cas"), nil)
 	if _, err := cas.StoreBytes(context.Background(), []byte("secret reasoning")); err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -57,13 +57,13 @@ func TestStorageMigratesExistingMode(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "meta.db")
 
-	m, err := OpenMeta(path)
+	m, err := OpenMeta(path, nil)
 	require.NoError(t, err)
 	require.NoError(t, m.Close())
 	require.NoError(t, os.Chmod(path, 0o644)) // simulate an older build's loose mode
 	requireMode(t, path, 0o644)
 
-	m2, err := OpenMeta(path)
+	m2, err := OpenMeta(path, nil)
 	require.NoError(t, err)
 	require.NoError(t, m2.Close())
 	requireMode(t, path, 0o600)

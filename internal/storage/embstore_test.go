@@ -21,7 +21,7 @@ func TestEmbStorePutGetReopen(t *testing.T) {
 	const dims, n = 8, 1000
 	p := filepath.Join(t.TempDir(), "emb.dat")
 
-	s, err := OpenEmbeddingStore(p, dims)
+	s, err := OpenEmbeddingStore(p, dims, nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestEmbStorePutGetReopen(t *testing.T) {
 	}
 
 	// Reopen: count and vectors persist (append + fsync).
-	s2, err := OpenEmbeddingStore(p, dims)
+	s2, err := OpenEmbeddingStore(p, dims, nil)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestEmbStoreTornTailIgnored(t *testing.T) {
 	const dims, n = 4, 10
 	p := filepath.Join(t.TempDir(), "emb.dat")
 
-	s, err := OpenEmbeddingStore(p, dims)
+	s, err := OpenEmbeddingStore(p, dims, nil)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestEmbStoreTornTailIgnored(t *testing.T) {
 	f.Write([]byte{0xDE, 0xAD, 0xBE}) // not a whole record
 	f.Close()
 
-	s2, err := OpenEmbeddingStore(p, dims)
+	s2, err := OpenEmbeddingStore(p, dims, nil)
 	if err != nil {
 		t.Fatalf("reopen after torn tail: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestEmbStoreOverstatedCountClamped(t *testing.T) {
 	const dims, n = 4, 5
 	p := filepath.Join(t.TempDir(), "emb.dat")
 
-	s, err := OpenEmbeddingStore(p, dims)
+	s, err := OpenEmbeddingStore(p, dims, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestEmbStoreOverstatedCountClamped(t *testing.T) {
 	}
 	f.Close()
 
-	s2, err := OpenEmbeddingStore(p, dims)
+	s2, err := OpenEmbeddingStore(p, dims, nil)
 	if err != nil {
 		t.Fatalf("reopen with overstated count: %v", err)
 	}
@@ -169,13 +169,13 @@ func TestEmbStoreOverstatedCountClamped(t *testing.T) {
 
 func TestEmbStoreDimsMismatch(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "emb.dat")
-	s, err := OpenEmbeddingStore(p, 8)
+	s, err := OpenEmbeddingStore(p, 8, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, _ = s.Put(mkVec(8, 0))
 	s.Close()
-	if _, err := OpenEmbeddingStore(p, 16); err == nil {
+	if _, err := OpenEmbeddingStore(p, 16, nil); err == nil {
 		t.Fatal("expected dims-mismatch error on reopen with different dims")
 	}
 }

@@ -128,7 +128,7 @@ embedder requires recalibrating `core.ConfidenceFloor` (the weak_match threshold
 ```
 internal/core/     domain types (Scope, Artifact, Tier, Kind, Detail, Query, Hit, Seed, Trace)
 internal/embed/    Embedder iface + MockEmbedder + HTTPEmbedder
-internal/storage/  CAS (sha256+zstd), EmbeddingStore (float32), Meta (bbolt)
+internal/storage/  CAS (sha256+zstd), EmbeddingStore (float32), Meta (bbolt), crypto (opt-in AES-256-GCM at-rest, docs/encryption.md)
 internal/search/   brute-force cosine (leaf; no core import)
 internal/engine/   the public API (Open/Push/Query/Drill/Publish/Fork/Consolidate/CrossVersion/...)
 internal/eval/     scenario runner + metrics; eval/scenarios/hoe.json

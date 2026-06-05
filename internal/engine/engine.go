@@ -27,6 +27,8 @@ type Engine struct {
 	embedder embed.Embedder
 	reranker embed.Reranker // optional cross-encoder for last-mile rerank (nil = off)
 
+	box *storage.Box // at-rest encryption (nil = off)
+
 	// modelMu guards the one-time reconciliation of the embedder model against
 	// the persisted emb_model (so reads, which run concurrently, don't race).
 	modelMu sync.Mutex
@@ -34,10 +36,23 @@ type Engine struct {
 }
 
 // Option configures an Engine at Open time.
-type Option func(*Engine)
+type Option func(*openCfg)
+
+// openCfg accumulates Open-time options before the Engine is constructed.
+type openCfg struct {
+	reranker    embed.Reranker
+	key         []byte
+	keyExplicit bool
+}
 
 // WithReranker attaches a cross-encoder reranker (used when Query.Rerank is set).
-func WithReranker(r embed.Reranker) Option { return func(e *Engine) { e.reranker = r } }
+func WithReranker(r embed.Reranker) Option { return func(c *openCfg) { c.reranker = r } }
+
+// WithEncryptionKey enables at-rest encryption with a raw 32-byte key, overriding
+// the environment (IOC_ENCRYPTION_KEY / _KEYFILE). A nil key means "off" explicitly.
+func WithEncryptionKey(key []byte) Option {
+	return func(c *openCfg) { c.key = key; c.keyExplicit = true }
+}
 
 // Open opens (creating if needed) an IOC repository at dir, using embedder for
 // summary embeddings. Options can attach extras like a reranker.
@@ -53,19 +68,51 @@ func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option
 		return nil, fmt.Errorf("engine: mkdir: %w", err)
 	}
 	_ = os.Chmod(dir, 0o700)
-	meta, err := storage.OpenMeta(filepath.Join(dir, "meta.db"))
+
+	// Resolve the at-rest encryption key (explicit option beats env). Build the box
+	// BEFORE opening storage so meta/cas/emb get it.
+	cfg := openCfg{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	key := cfg.key
+	if !cfg.keyExplicit {
+		var lerr error
+		if key, lerr = storage.LoadKey(); lerr != nil {
+			return nil, lerr
+		}
+	}
+	var box *storage.Box
+	if len(key) > 0 {
+		var berr error
+		if box, berr = storage.NewBox(key); berr != nil {
+			return nil, berr
+		}
+	}
+
+	meta, err := storage.OpenMeta(filepath.Join(dir, "meta.db"), box)
 	if err != nil {
 		return nil, err
 	}
 	e := &Engine{
 		dir:      dir,
 		meta:     meta,
-		cas:      storage.NewCAS(filepath.Join(dir, "cas")),
+		cas:      storage.NewCAS(filepath.Join(dir, "cas"), box),
 		embedder: embedder,
+		reranker: cfg.reranker,
+		box:      box,
 	}
-	for _, opt := range opts {
-		opt(e)
+
+	// Encryption sentinel matrix (fail-closed, no silent mixing). The "enc" config
+	// value is always plaintext so it is readable without the key.
+	if err := e.checkEncryptionSentinel(); err != nil {
+		e.Close()
+		return nil, err
 	}
+	if box.Enabled() {
+		fmt.Fprintln(os.Stderr, "ioc: at-rest encryption ENABLED (AES-256-GCM) — losing the key means losing the data; there is no recovery")
+	}
+
 	// Refuse to open a store with an incompatible embedder. A store records its
 	// embedding dimension (emb_dims) and, once written, its embedder model
 	// (emb_model). Mixing embedders silently compares vectors across different
@@ -101,6 +148,28 @@ func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option
 		}
 	}
 	return e, nil
+}
+
+const encSentinelValue = "aes256gcm"
+
+// checkEncryptionSentinel enforces the fail-closed key/format matrix: an encrypted
+// store needs the key; a non-empty plaintext store must NOT be opened with a key
+// (no in-place migration); a brand-new store with a key is marked encrypted.
+func (e *Engine) checkEncryptionSentinel() error {
+	_, hasEnc := e.meta.GetConfig("enc") // "enc" is an always-plaintext config key
+	enabled := e.box.Enabled()
+	switch {
+	case hasEnc && !enabled:
+		return fmt.Errorf("engine: open %s: %w: store is encrypted; set %s to open it", e.dir, core.ErrInvalidInput, storage.EncryptionKeyEnv)
+	case !hasEnc && enabled:
+		if !e.meta.IsEmpty() {
+			return fmt.Errorf("engine: open %s: %w: store is plaintext but an encryption key is set (no in-place migration)", e.dir, core.ErrInvalidInput)
+		}
+		if err := e.meta.PutConfig("enc", encSentinelValue); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // reconcileModel persists the embedder's model on first use, or refuses if it
@@ -142,7 +211,7 @@ func (e *Engine) Close() error {
 }
 
 func (e *Engine) openEmb(dims int) error {
-	es, err := storage.OpenEmbeddingStore(filepath.Join(e.dir, "emb.dat"), dims)
+	es, err := storage.OpenEmbeddingStore(filepath.Join(e.dir, "emb.dat"), dims, e.box)
 	if err != nil {
 		return err
 	}
