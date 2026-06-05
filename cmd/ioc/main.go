@@ -24,6 +24,8 @@ func main() {
 	switch cmd {
 	case "run-scenario":
 		os.Exit(runScenario(args))
+	case "wall":
+		os.Exit(runWall(args))
 	case "embed-ping":
 		err = embedPing(args)
 	case "gen-scenario":
@@ -75,6 +77,7 @@ func usage() {
 
 commands:
   run-scenario <file.json> [-dir d] [-embed e] [-mode m]  run a scripted eval scenario
+  wall <spec.json> [-dir d] [-embed e] [-out D]  reasoning-wall: build corpus, emit blind judge packets + gold
   gen-scenario -out F [-n N] [-clusters C] [-shape flat|tree]  generate a scale scenario
   embed-ping [-embed e]                          check the embedding service
   create-scope [-parent ID] -role R -title T     create a scope
