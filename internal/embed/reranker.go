@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"math"
 	"net/http"
 	"sync/atomic"
 )
@@ -67,11 +69,17 @@ func (r *HTTPReranker) Rerank(ctx context.Context, query string, passages []stri
 		return nil, fmt.Errorf("reranker: server returned %d", resp.StatusCode)
 	}
 	var data rerankResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxEmbedRespBytes)).Decode(&data); err != nil {
 		return nil, fmt.Errorf("reranker: decode: %w", err)
 	}
 	if len(data.Scores) != len(passages) {
 		return nil, fmt.Errorf("reranker: got %d scores for %d passages", len(data.Scores), len(passages))
+	}
+	// A NaN/Inf score would poison the rerank ordering (sort comparator / sigmoid).
+	for i, s := range data.Scores {
+		if math.IsNaN(s) || math.IsInf(s, 0) {
+			return nil, fmt.Errorf("reranker: score %d is non-finite", i)
+		}
 	}
 	r.model.Store(data.Model)
 	return data.Scores, nil

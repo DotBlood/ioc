@@ -5,6 +5,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -198,6 +199,14 @@ func (e *Engine) storeSummaryEmbedding(ctx context.Context, summary string) (cor
 	vec, err := e.embedText(ctx, summary)
 	if err != nil {
 		return 0, err
+	}
+	// Defense-in-depth (V8): never persist a non-finite vector — a NaN/Inf would
+	// silently corrupt cosine for every future query. The HTTP embedder already
+	// validates its responses; this guards any Embedder implementation.
+	for i, c := range vec {
+		if math.IsNaN(float64(c)) || math.IsInf(float64(c), 0) {
+			return 0, fmt.Errorf("engine: %w: embedding component %d is non-finite", core.ErrInvalidInput, i)
+		}
 	}
 	if err := e.ensureEmb(len(vec)); err != nil {
 		return 0, err

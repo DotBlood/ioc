@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -12,6 +14,29 @@ import (
 	"sync/atomic"
 	"time"
 )
+
+// Response bounds (V8). A hostile/buggy embedder endpoint (see V2) could stream an
+// unbounded body (OOM) or return NaN/Inf components that poison cosine ranking, so
+// responses are size-capped before decode and every vector is validated finite.
+const (
+	maxEmbedRespBytes  = 64 << 20 // /embed and /rerank response cap
+	maxHealthRespBytes = 64 << 10 // /health is tiny
+)
+
+// validateVectors rejects a response whose vectors aren't all dims-long and finite.
+func validateVectors(vecs [][]float32, dims int) error {
+	for i, v := range vecs {
+		if len(v) != dims {
+			return fmt.Errorf("http embedder: vector %d has %d components, want %d", i, len(v), dims)
+		}
+		for j, c := range v {
+			if math.IsNaN(float64(c)) || math.IsInf(float64(c), 0) {
+				return fmt.Errorf("http embedder: vector %d component %d is non-finite", i, j)
+			}
+		}
+	}
+	return nil
+}
 
 // bgeQueryInstruction is bge-v1.5's recommended retrieval prefix for the QUERY
 // side (passages are encoded without it). Override via IOC_QUERY_INSTRUCTION.
@@ -111,7 +136,7 @@ func (e *HTTPEmbedder) Health(ctx context.Context) (model string, dims int, err 
 		return "", 0, fmt.Errorf("http embedder: health: server returned %d", resp.StatusCode)
 	}
 	var h healthResponse
-	if err := json.NewDecoder(resp.Body).Decode(&h); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxHealthRespBytes)).Decode(&h); err != nil {
 		return "", 0, fmt.Errorf("http embedder: health decode: %w", err)
 	}
 	if h.Dimension > 0 {
@@ -148,7 +173,7 @@ func (e *HTTPEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, 
 	}
 
 	var data embedResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxEmbedRespBytes)).Decode(&data); err != nil {
 		return nil, fmt.Errorf("http embedder: decode: %w", err)
 	}
 	if e.dims.Load() == 0 {
@@ -158,6 +183,10 @@ func (e *HTTPEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, 
 	}
 	if len(data.Vectors) != len(texts) {
 		return nil, fmt.Errorf("http embedder: got %d vectors for %d texts", len(data.Vectors), len(texts))
+	}
+	// Per-vector length + finiteness (a NaN/Inf component would corrupt cosine).
+	if err := validateVectors(data.Vectors, data.Dimension); err != nil {
+		return nil, err
 	}
 	e.model.Store(data.Model)
 	return data.Vectors, nil

@@ -90,6 +90,12 @@ requirement is dropped.
   out of the box. (HTTP API and library use are also possible.)
 - **Local-first now; SaaS later.** The top scope maps to a tenant. Implement single-writer now;
   design interfaces so MVCC can be added when multi-tenant concurrency is needed.
+- **Security gate (hard precondition for SaaS/multi-user).** The network-hardening items in
+  [`docs/SECURITY_AND_VULNERABILITIES.md`](docs/SECURITY_AND_VULNERABILITIES.md) — token/at-rest
+  modes, framing/conn/JSON DoS bounds, embed-endpoint policy, ingest containment + caps — must ALL be
+  in place before any multi-user/SaaS step. As of 2026-06 the Phase A + Phase B items there are
+  implemented; remaining TM2 work (at-rest encryption, mTLS/token-rotation/per-method ACLs) is the
+  next gate. Do not ship multi-tenant access until the deferred items are closed too.
 - **Runtime (planned):** a single long-lived daemon owns a store and serves many clients/agents over
   a local protocol, so CLI/MCP/sub-agents share one memory instead of fighting the bbolt lock. Phased
   plan in [`docs/RUNTIME_ROADMAP.md`](docs/RUNTIME_ROADMAP.md).
