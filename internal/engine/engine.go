@@ -44,9 +44,14 @@ func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option
 	if embedder == nil {
 		return nil, fmt.Errorf("engine: nil embedder")
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	// 0o700: the data dir holds the whole memory (meta.db, CAS, emb.dat). Owner-only
+	// is the strongest single confidentiality lever — even if an inner file were
+	// world-readable, a 0o700 parent blocks other local users from traversing in.
+	// Tighten a pre-existing dir too (best-effort; no-op on Windows).
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("engine: mkdir: %w", err)
 	}
+	_ = os.Chmod(dir, 0o700)
 	meta, err := storage.OpenMeta(filepath.Join(dir, "meta.db"))
 	if err != nil {
 		return nil, err

@@ -44,7 +44,8 @@ func (c *CAS) StoreBytes(_ context.Context, data []byte) (core.ContentHash, erro
 	}
 	path := c.objPath(h)
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	// 0o700 dirs: stored blobs may be proprietary; keep the object tree owner-only.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return core.ContentHash{}, fmt.Errorf("cas store: mkdir: %w", err)
 	}
 	enc, err := zstd.NewWriter(nil)
@@ -63,6 +64,7 @@ func (c *CAS) StoreBytes(_ context.Context, data []byte) (core.ContentHash, erro
 		return core.ContentHash{}, fmt.Errorf("cas store: temp: %w", err)
 	}
 	tmpName := tmp.Name()
+	_ = tmp.Chmod(0o600) // owner-only blob (CreateTemp is already 0o600, but be explicit vs umask)
 	if _, err := tmp.Write(compressed); err != nil {
 		tmp.Close()
 		os.Remove(tmpName)

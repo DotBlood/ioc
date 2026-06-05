@@ -28,16 +28,21 @@ var (
 
 // OpenMeta opens or creates the metadata store at path.
 func OpenMeta(path string) (*Meta, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("meta: mkdir: %w", err)
 	}
-	db, err := bolt.Open(path, 0o644, &bolt.Options{Timeout: time.Second})
+	// 0o600: meta.db is bbolt plaintext (scopes, summaries, the runtime token's
+	// neighbours) — keep it owner-only so other local users on a shared host can't
+	// read the memory. bolt.Open's mode applies only when CREATING the file, so
+	// also tighten an existing 0o644 db (best-effort; chmod is a no-op on Windows).
+	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: time.Second})
 	if err != nil {
 		if errors.Is(err, bolt.ErrTimeout) {
 			return nil, fmt.Errorf("meta: data dir %q is busy — locked by another ioc/ioc-mcp process (close it or use a different -dir): %w", path, err)
 		}
 		return nil, fmt.Errorf("meta: open: %w", err)
 	}
+	_ = os.Chmod(path, 0o600)
 	err = db.Update(func(tx *bolt.Tx) error {
 		for _, b := range [][]byte{bkConfig, bkScopes, bkArtifacts, bkTraces} {
 			if _, err := tx.CreateBucketIfNotExists(b); err != nil {

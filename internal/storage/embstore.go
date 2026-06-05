@@ -36,13 +36,18 @@ func OpenEmbeddingStore(path string, dims int) (*EmbeddingStore, error) {
 	if dims <= 0 || dims > 4096 {
 		return nil, fmt.Errorf("embedding store: invalid dims %d", dims)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("embedding store: %w", err)
 	}
-	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
+	// 0o600: the embedding file (and the whole store) may hold proprietary
+	// reasoning; keep it owner-only. Tighten a pre-existing file too (umask/older
+	// builds may have left it 0o644); best-effort — ignore on platforms (Windows)
+	// where chmod is a no-op.
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("embedding store: open: %w", err)
 	}
+	_ = file.Chmod(0o600)
 	ok := false
 	defer func() {
 		if !ok {
