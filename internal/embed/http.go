@@ -57,10 +57,15 @@ func dialClient(endpoint string) (*http.Client, string) {
 	}, "http://unix"
 }
 
-// NewHTTPEmbedder builds an embedder for a TCP URL or a Unix socket endpoint.
-func NewHTTPEmbedder(endpoint string) *HTTPEmbedder {
+// NewHTTPEmbedder builds an embedder for a TCP URL or a Unix socket endpoint. It
+// enforces the endpoint policy (V2): a non-loopback target needs https and
+// allowRemote, plaintext-remote is always refused. NOTE: never log embedded content.
+func NewHTTPEmbedder(endpoint string, allowRemote bool) (*HTTPEmbedder, error) {
+	if err := validateEndpoint(endpoint, allowRemote); err != nil {
+		return nil, err
+	}
 	c, base := dialClient(endpoint)
-	return &HTTPEmbedder{client: c, baseURL: base, queryInstr: defaultQueryInstruction()}
+	return &HTTPEmbedder{client: c, baseURL: base, queryInstr: defaultQueryInstruction()}, nil
 }
 
 // EmbedQuery prepends the retrieval query instruction to each text, then embeds.

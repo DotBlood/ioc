@@ -76,7 +76,10 @@ func embedPing(args []string) error {
 		m := embed.NewMockEmbedder(384)
 		return printJSON(map[string]any{"model": m.Model(), "dims": m.Dims(), "transport": "mock"})
 	}
-	h := embed.NewHTTPEmbedder(*em)
+	h, err := embed.NewHTTPEmbedder(*em, allowRemoteEmbed())
+	if err != nil {
+		return err
+	}
 	model, dims, err := h.Health(context.Background())
 	if err != nil {
 		return err

@@ -24,10 +24,14 @@ type HTTPReranker struct {
 	model   atomic.Value // string
 }
 
-// NewHTTPReranker dials the same endpoint shape as NewHTTPEmbedder.
-func NewHTTPReranker(endpoint string) *HTTPReranker {
+// NewHTTPReranker dials the same endpoint shape as NewHTTPEmbedder and enforces the
+// same endpoint policy (V2).
+func NewHTTPReranker(endpoint string, allowRemote bool) (*HTTPReranker, error) {
+	if err := validateEndpoint(endpoint, allowRemote); err != nil {
+		return nil, err
+	}
 	c, base := dialClient(endpoint)
-	return &HTTPReranker{client: c, baseURL: base}
+	return &HTTPReranker{client: c, baseURL: base}, nil
 }
 
 type rerankRequest struct {

@@ -14,6 +14,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -75,16 +76,30 @@ func main() {
 	dir := envOr("IOC_DIR", ".ioc/mcp-data")
 	endpoint := os.Getenv("IOC_EMBED")
 
+	// V2: allow a non-loopback embedder only when explicitly opted in; plaintext
+	// remote is always refused by the embed package.
+	allowRemote := envTrue("IOC_ALLOW_REMOTE_EMBED")
+
 	var embedder embed.Embedder
 	if endpoint == "" {
 		embedder = embed.NewMockEmbedder(384)
 	} else {
-		embedder = embed.NewHTTPEmbedder(endpoint)
+		he, err := embed.NewHTTPEmbedder(endpoint, allowRemote)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "ioc-mcp:", err)
+			os.Exit(1)
+		}
+		embedder = he
 	}
 
 	var opts []engine.Option
 	if endpoint != "" {
-		opts = append(opts, engine.WithReranker(embed.NewHTTPReranker(endpoint)))
+		rr, err := embed.NewHTTPReranker(endpoint, allowRemote)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "ioc-mcp:", err)
+			os.Exit(1)
+		}
+		opts = append(opts, engine.WithReranker(rr))
 	}
 	svc, err := runtime.Open(dir, embedder, opts...)
 	if err != nil {
@@ -111,6 +126,14 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func envTrue(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes":
+		return true
+	}
+	return false
 }
 
 func (a *ioc) register(s *server.MCPServer) {

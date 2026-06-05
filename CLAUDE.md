@@ -42,6 +42,9 @@ go run ./cmd/ioc runtime status -dir .ioc/data    # also: runtime stop
 
 Embedder `-embed`: empty = deterministic mock (pipeline only, not real wall numbers);
 `http://host:port` (TCP, Windows-ok) or `unix:/path` = external `py/embed_server.py`.
+**Endpoint policy (V2):** IOC POSTs all embedded text to `-embed`, so a non-loopback target is
+refused unless `IOC_ALLOW_REMOTE_EMBED=1`, and a plaintext (http) remote is refused outright (https
+required); unix/loopback always allowed. Loopback is judged by literal host (no DNS).
 
 Retrieval modes (`-mode` / `Query.Mode`+`Hierarchical`+`CoarseK`):
 - `vector` (default) — cosine; best at small scale.
