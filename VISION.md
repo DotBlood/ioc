@@ -105,6 +105,11 @@ The value of everything above rests on two things, and both are **empirical, not
 Graph, versioning, CAS, and snapshotting are plumbing around these. They matter (especially for
 SaaS), but they do not decide whether IOC works. Summary quality + memory navigability decide it.
 
+A first dogfood (IOC studying its own repo) confirmed this risk empirically and surfaced concrete
+retrieval/ingest bugs plus errors in the wall theory itself (e.g. document chunks embed raw content
+but the lexical/rerank stages run on a label, not the content). Root-cause analysis and the corrected,
+measured fix plan live in [`docs/RETRIEVAL_AND_WALL_FIXES.md`](docs/RETRIEVAL_AND_WALL_FIXES.md).
+
 ## Recommended next step
 
 Before rewriting the formal specs or investing further in storage, **prove the wall on a real
