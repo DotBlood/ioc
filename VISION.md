@@ -93,9 +93,11 @@ requirement is dropped.
 - **Security gate (hard precondition for SaaS/multi-user).** The network-hardening items in
   [`docs/SECURITY_AND_VULNERABILITIES.md`](docs/SECURITY_AND_VULNERABILITIES.md) — token/at-rest
   modes, framing/conn/JSON DoS bounds, embed-endpoint policy, ingest containment + caps — must ALL be
-  in place before any multi-user/SaaS step. As of 2026-06 the Phase A + Phase B items there are
-  implemented; remaining TM2 work (at-rest encryption, mTLS/token-rotation/per-method ACLs) is the
-  next gate. Do not ship multi-tenant access until the deferred items are closed too.
+  in place before any multi-user/SaaS step. As of 2026-06 those Phase A + Phase B items are implemented,
+  AND the first TM2 layer: opt-in at-rest encryption (AES-256-GCM, `docs/encryption.md`), a 2-principal
+  runtime ACL + token rotation, and opt-in mTLS. Still required before true multi-tenant SaaS:
+  per-tenant principals/ACLs (beyond full/read-only), MVCC/multi-writer, key management (KMS/keyring),
+  and distinct per-client certs / cert rotation. Do not ship multi-tenant access until those land.
 - **Runtime (planned):** a single long-lived daemon owns a store and serves many clients/agents over
   a local protocol, so CLI/MCP/sub-agents share one memory instead of fighting the bbolt lock. Phased
   plan in [`docs/RUNTIME_ROADMAP.md`](docs/RUNTIME_ROADMAP.md).

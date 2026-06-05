@@ -175,5 +175,8 @@ V18 (govulncheck), V4 (file modes).
   defense-in-depth finite-check at vector ingress.
 - **B8 / V18** `govulncheck` CI job (pinned, blocking on default branch).
 
-Follow-ups (not bundled): at-rest encryption (TM2), persisted `ingest_root` config, python test harness,
-mTLS/token-rotation/per-method ACLs, DNS endpoint allow-listing, the explicit "Phase B before SaaS" gate doc.
+Follow-ups: **DONE 2026-06 (TM2 layer 1):** persisted `ingest_root` config, python test harness, opt-in
+at-rest encryption (`docs/encryption.md`), 2-principal runtime ACL + token rotation, opt-in mTLS, the
+VISION SaaS gate. **Still deferred (TM2 layer 2):** per-tenant principals/ACLs (beyond full/read-only),
+KMS/keyring key management + passphrase/KDF, a plaintext↔encrypted re-encrypt tool, distinct per-client
+certs / cert rotation, DNS endpoint allow-listing.
