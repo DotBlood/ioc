@@ -128,6 +128,9 @@ func (a *ioc) register(s *server.MCPServer) {
 		mcp.WithString("title", mcp.Description("title for the created root scope (default: base name of path)")),
 		mcp.WithNumber("maxchars", mcp.Description("chunk window size in chars (default 1500)")),
 		mcp.WithNumber("overlap", mcp.Description("chunk overlap in chars for oversize units (default 200)")),
+		mcp.WithNumber("max_files", mcp.Description("cap on files processed per run (0=default ~50k)")),
+		mcp.WithNumber("max_chunks", mcp.Description("cap on chunks pushed per run (0=default ~500k)")),
+		mcp.WithNumber("max_depth", mcp.Description("cap on directory nesting (0=default 64)")),
 	), a.ingest)
 
 	s.AddTool(mcp.NewTool("ioc_push",

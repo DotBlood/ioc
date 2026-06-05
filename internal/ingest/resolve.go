@@ -60,5 +60,6 @@ func (s Stats) JSON() map[string]any {
 		"chunks_removed":  s.ChunksRemoved,
 		"scopes_created":  s.ScopesCreated,
 		"scopes_removed":  s.ScopesRemoved,
+		"limit_hit":       s.LimitHit,
 	}
 }

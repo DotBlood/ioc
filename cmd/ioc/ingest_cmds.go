@@ -22,6 +22,9 @@ func ingestCmd(args []string) error {
 	title := fs.String("title", "", "title for the created root scope (default: base of path)")
 	maxchars := fs.Int("maxchars", ingest.DefaultMaxChars, "chunk window size in chars")
 	overlap := fs.Int("overlap", ingest.DefaultOverlap, "chunk overlap in chars")
+	maxfiles := fs.Int("max-files", 0, "cap on files processed per run (0=default)")
+	maxchunks := fs.Int("max-chunks", 0, "cap on chunks pushed per run (0=default)")
+	maxdepth := fs.Int("max-depth", 0, "cap on directory nesting (0=default)")
 	_ = fs.Parse(rest)
 
 	if pos == "" {
@@ -45,7 +48,10 @@ func ingestCmd(args []string) error {
 		return err
 	}
 
-	st, err := ingest.Ingest(ctx, e, root, rootScope, ingest.Options{MaxChars: *maxchars, Overlap: *overlap})
+	st, err := ingest.Ingest(ctx, e, root, rootScope, ingest.Options{
+		MaxChars: *maxchars, Overlap: *overlap,
+		MaxFiles: *maxfiles, MaxChunks: *maxchunks, MaxDepth: *maxdepth,
+	})
 	if err != nil {
 		return err
 	}

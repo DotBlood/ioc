@@ -111,8 +111,11 @@ func (a *ioc) ingest(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolR
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	st, err := ingest.Ingest(ctx, a.svc, path, rootScope, ingest.Options{
-		MaxChars: r.GetInt("maxchars", ingest.DefaultMaxChars),
-		Overlap:  r.GetInt("overlap", ingest.DefaultOverlap),
+		MaxChars:  r.GetInt("maxchars", ingest.DefaultMaxChars),
+		Overlap:   r.GetInt("overlap", ingest.DefaultOverlap),
+		MaxFiles:  r.GetInt("max_files", 0),
+		MaxChunks: r.GetInt("max_chunks", 0),
+		MaxDepth:  r.GetInt("max_depth", 0),
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil

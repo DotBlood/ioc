@@ -3,6 +3,7 @@ package ingest
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"path/filepath"
 
 	"github.com/DotBlood/ioc/internal/core"
@@ -19,10 +20,31 @@ var skipDirs = map[string]bool{
 	".idea": true, ".vscode": true,
 }
 
-// Options tunes an ingest run.
+// Default resource caps (V9): generous enough that normal repos never hit them,
+// but bounded so a pathologically large/deep tree cannot exhaust memory or create
+// a runaway number of scopes. 0 in Options means "use the default" (never unlimited).
+const (
+	DefaultMaxFiles          = 50_000
+	DefaultMaxChunks         = 500_000
+	DefaultMaxDepth          = 64
+	DefaultMaxIndexArtifacts = 1_000_000
+)
+
+// ErrIngestLimit is returned when an ingest run exceeds a configured resource cap.
+// It wraps ErrInvalidInput. The run stops at a FILE boundary (no mid-file partial),
+// commits what completed, sets Stats.LimitHit, and reports this error — so the
+// truncation is explicit, never silent, and a re-run with a higher cap converges.
+var ErrIngestLimit = fmt.Errorf("%w: ingest resource limit exceeded", core.ErrInvalidInput)
+
+// Options tunes an ingest run. Zero values fall back to the Default* caps.
 type Options struct {
 	MaxChars int // chunk window size in chars (0 => DefaultMaxChars)
 	Overlap  int // chunk overlap in chars (<0 => DefaultOverlap)
+
+	MaxFiles          int // max text files processed per run (0 => DefaultMaxFiles)
+	MaxChunks         int // max chunks pushed per run (0 => DefaultMaxChunks)
+	MaxDepth          int // max directory nesting under root (0 => DefaultMaxDepth)
+	MaxIndexArtifacts int // refuse to build the in-memory index above this (0 => default)
 }
 
 // Stats summarizes a reconcile run.
@@ -35,6 +57,9 @@ type Stats struct {
 	ChunksRemoved  int `json:"chunks_removed"`
 	ScopesCreated  int `json:"scopes_created"`
 	ScopesRemoved  int `json:"scopes_removed"`
+	// LimitHit names the resource cap that stopped the run early (V9), e.g.
+	// "max_files"; empty when the run completed. Surfaced so truncation is visible.
+	LimitHit string `json:"limit_hit,omitempty"`
 }
 
 // Ingest synchronizes the store under rootScope to match the file tree at root:
@@ -56,6 +81,18 @@ func Ingest(ctx context.Context, e Store, root string, rootScope core.ID, opt Op
 	}
 	if opt.Overlap < 0 || opt.Overlap >= opt.MaxChars {
 		opt.Overlap = DefaultOverlap
+	}
+	if opt.MaxFiles <= 0 {
+		opt.MaxFiles = DefaultMaxFiles
+	}
+	if opt.MaxChunks <= 0 {
+		opt.MaxChunks = DefaultMaxChunks
+	}
+	if opt.MaxDepth <= 0 {
+		opt.MaxDepth = DefaultMaxDepth
+	}
+	if opt.MaxIndexArtifacts <= 0 {
+		opt.MaxIndexArtifacts = DefaultMaxIndexArtifacts
 	}
 	r := &reconciler{
 		ctx: ctx, e: e, root: filepath.Clean(root), rootScope: rootScope, opt: opt,

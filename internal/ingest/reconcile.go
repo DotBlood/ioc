@@ -28,6 +28,7 @@ type reconciler struct {
 	dirFiles  map[string][]string         // relDir -> filenames present this run
 	dirty     map[string]bool             // relDirs whose rollup must be recomputed
 	wantPaths map[string]bool             // relSlash paths seen this run
+	filesSeen int                         // text files processed this run (V9 cap)
 	st        Stats
 }
 
@@ -46,6 +47,11 @@ func (r *reconciler) buildIndex() error {
 	arts, err := r.e.ListArtifacts(r.ctx)
 	if err != nil {
 		return err
+	}
+	// Bound the in-memory index (V9): refuse to load an unbounded store into maps.
+	if len(arts) > r.opt.MaxIndexArtifacts {
+		r.st.LimitHit = "max_index_artifacts"
+		return fmt.Errorf("%w: store has %d artifacts (> max_index_artifacts %d)", ErrIngestLimit, len(arts), r.opt.MaxIndexArtifacts)
 	}
 	r.byScope = make(map[core.ID][]core.Artifact)
 	for _, a := range arts {
@@ -74,6 +80,15 @@ func (r *reconciler) walk() error {
 	})
 }
 
+// depthOf returns the directory nesting of a relative path ("." = 0).
+func depthOf(relDir string) int {
+	relDir = filepath.Clean(relDir)
+	if relDir == "." || relDir == "" {
+		return 0
+	}
+	return strings.Count(relDir, string(filepath.Separator)) + 1
+}
+
 // reconcileFile syncs one file: unchanged (sig match) → skip; else delete its
 // stale chunks and push fresh ones.
 func (r *reconciler) reconcileFile(path, rel string) error {
@@ -93,6 +108,17 @@ func (r *reconciler) reconcileFile(path, rel string) error {
 	}
 	relSlash := filepath.ToSlash(rel)
 	relDir := filepath.Dir(rel)
+	// Resource caps (V9), checked at the FILE boundary so a file is never left
+	// half-chunked (which would reintroduce the H1 partial-write under-indexing).
+	if d := depthOf(relDir); d > r.opt.MaxDepth {
+		r.st.LimitHit = "max_depth"
+		return fmt.Errorf("%w: %q is at depth %d (> max_depth %d)", ErrIngestLimit, relSlash, d, r.opt.MaxDepth)
+	}
+	r.filesSeen++
+	if r.filesSeen > r.opt.MaxFiles {
+		r.st.LimitHit = "max_files"
+		return fmt.Errorf("%w: more than max_files %d", ErrIngestLimit, r.opt.MaxFiles)
+	}
 	dirScope, err := r.ensureDirScope(relDir)
 	if err != nil {
 		return err
@@ -111,6 +137,14 @@ func (r *reconciler) reconcileFile(path, rel string) error {
 	if chunksComplete(existing, sig, len(chunks)) {
 		r.st.FilesUnchanged++
 		return nil
+	}
+	// Chunk cap (V9), also at the file boundary: refuse to push this file's chunks
+	// if doing so would exceed the run budget — checked BEFORE deleting the stale
+	// set, so a capped run leaves the file's prior (complete) chunks intact rather
+	// than half-rewritten.
+	if r.st.ChunksAdded+len(chunks) > r.opt.MaxChunks {
+		r.st.LimitHit = "max_chunks"
+		return fmt.Errorf("%w: would exceed max_chunks %d", ErrIngestLimit, r.opt.MaxChunks)
 	}
 	wasUpdate := len(existing) > 0
 	for _, a := range existing {
