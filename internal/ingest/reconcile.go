@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/DotBlood/ioc/internal/core"
@@ -101,8 +102,13 @@ func (r *reconciler) reconcileFile(path, rel string) error {
 
 	lang := DetectLanguage(relSlash)
 	sig := Sig(data, lang, r.opt.MaxChars, r.opt.Overlap)
+	chunks := SplitLang(string(data), lang, r.opt.MaxChars, r.opt.Overlap)
 	existing := r.chunksForPath(dirScope, relSlash)
-	if len(existing) > 0 && existing[0].Meta["sig"] == sig {
+	// Skip only if the stored chunk set is COMPLETE for this sig (right count,
+	// every chunk's sig matches, indices 0..n-1 all present). Trusting a single
+	// chunk's sig would mask a partial prior write (a mid-file push failure left
+	// some chunks with the new sig) and the file would stay under-indexed forever.
+	if chunksComplete(existing, sig, len(chunks)) {
 		r.st.FilesUnchanged++
 		return nil
 	}
@@ -112,7 +118,7 @@ func (r *reconciler) reconcileFile(path, rel string) error {
 			return err
 		}
 	}
-	for i, c := range SplitLang(string(data), lang, r.opt.MaxChars, r.opt.Overlap) {
+	for i, c := range chunks {
 		if err := r.pushChunk(dirScope, relSlash, c, i, sig); err != nil {
 			return err
 		}
@@ -124,6 +130,32 @@ func (r *reconciler) reconcileFile(path, rel string) error {
 		r.st.FilesAdded++
 	}
 	return nil
+}
+
+// chunksComplete reports whether the existing chunk set is a COMPLETE, consistent
+// representation of a file that produces n chunks under sig: exactly n chunks, all
+// carrying sig, with chunk indices 0..n-1 each present once. A partial prior write
+// (fewer chunks, a stale/leftover chunk, or a missing index) returns false so the
+// file is fully re-chunked rather than wrongly skipped as "unchanged".
+func chunksComplete(existing []core.Artifact, sig string, n int) bool {
+	if len(existing) != n {
+		return false
+	}
+	if n == 0 {
+		return true
+	}
+	seen := make([]bool, n)
+	for _, a := range existing {
+		if a.Meta["sig"] != sig {
+			return false
+		}
+		idx, err := strconv.Atoi(a.Meta["chunk"])
+		if err != nil || idx < 0 || idx >= n || seen[idx] {
+			return false
+		}
+		seen[idx] = true
+	}
+	return true
 }
 
 // chunksForPath returns the Document chunks in scope that belong to relSlash.
