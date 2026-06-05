@@ -50,10 +50,14 @@ Retrieval modes (`-mode` / `Query.Mode`+`Hierarchical`+`CoarseK`):
   needs `RollupScope` on sub-scopes. **Best at scale:** recall@topK ~0.94 at 180 artifacts vs 0.33
   vector-only / 0.67 flat-hybrid (real bge-small). Pure-vector hierarchy does NOT help.
 
-`query` returns `query_id`, `weak_match` (per-embedder `core.ConfidenceFloor`, ~0.68 bge-small),
-`top_score`, `margin`. `-kind document,reasoning` restricts results by Kind (files vs thoughts).
-`-rerank` (CLI) / `rerank` (MCP) cross-encoder reranks the top-N candidates (needs the py `/rerank`
-endpoint) — the universal last-mile precision fix. More commands: `ioc query|drill|traces|trace|
+`query` returns `query_id`, `weak_match`, `top_score`, `margin`, and `ranked_by` — these read the
+signal that actually ordered the hits: cosine (per-embedder `core.ConfidenceFloor`, ~0.68 bge-small)
+by default, or the cross-encoder rerank score (sigmoid-normalized, vs `core.RerankFloor` ~0.5) when
+`-rerank` is set. `-kind document,reasoning` restricts results by Kind (files vs thoughts).
+`-rerank` (CLI) / `rerank` (MCP) cross-encoder reranks the top-N candidates **over their content**
+(document chunk text from CAS, not the `path:lines` label; reasoning uses its summary) — the
+universal last-mile precision fix; each hit then carries a `rerank_score`. Hybrid BM25 likewise
+ranks document content. More commands: `ioc query|drill|traces|trace|
 rollup|consolidate|crossversion|...`, `ioc gen-scenario -shape flat|tree`.
 
 **Ingestion (`ioc ingest <path>` / MCP `ioc_ingest`, files as a first-class Kind):** mirrors the
@@ -142,6 +146,9 @@ Dependency direction (no cycles): `core` is a leaf; `embed`/`search` are leaves;
 
 ## Conventions
 
+- **No quick/minimal/fast fixes.** Approach every problem in depth: root-cause it, enumerate every
+  interacting code path and edge case, decide each consciously, document the decision, cover with
+  tests. A deliberately deferred corner must be stated explicitly, never silently skipped.
 - All public APIs take `context.Context` first. Return errors, no panics.
 - Table-driven tests with `testify/require`.
 - `internal/` for implementation; `cmd/` for binaries. One `-dir` = one embedder (vector spaces differ).

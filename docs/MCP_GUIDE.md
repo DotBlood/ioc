@@ -54,9 +54,11 @@ summaries; IOC embeds, stores, and serves them.
 - Visibility is **bottom-up**: you see your own scope, your ancestors, and siblings' *published*
   artifacts — not other scopes' private reasoning.
 - One IOC data directory must use one embedder consistently (mock vs real are different vector spaces).
-- `ioc_query` returns `query_id` (inspect with `ioc_trace` / `ioc_list_traces`) and `weak_match`.
-  **If `weak_match` is true (top cosine score below ~0.45), there is no specific stored artifact** —
-  don't present the returned general context as a precise answer; say you don't have it, or push it.
+- `ioc_query` returns `query_id` (inspect with `ioc_trace` / `ioc_list_traces`), `weak_match`, and
+  `ranked_by` (`cosine` or `rerank`). **If `weak_match` is true, there is no specific stored
+  artifact** — don't present the returned general context as a precise answer; say you don't have it,
+  or push it. `weak_match`/`top_score`/`margin` read whichever signal ordered the hits: cosine vs the
+  per-embedder floor (~0.68 bge-small) normally, or the cross-encoder score vs ~0.5 when `rerank=true`.
 - Retrieval is semantic (vector) by default. **At scale (many artifacts), split into sub-scopes,
   `ioc_rollup` each, and query the parent with `hierarchical=true`** — this runs a coarse rollup
   rank then a hybrid (vector+BM25) fine search and recovers recall (≈0.94 vs 0.33 vector-only at

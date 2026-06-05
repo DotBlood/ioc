@@ -47,6 +47,16 @@ from `hits[0].Score`/`hits[1].Score`, so after a rerank reorder `margin` can be 
 `top_score` understated. This is exactly the dogfood Q2 false-confidence (0.747, `weak=false`, wrong
 hit). Fix: carry the rerank score into the hit (or both), compute confidence from the active signal,
 and rerank/BM25 over **content** for documents (this is also design-doc W1/W4).
+> **FIXED** (`development/v0.2-review`): `engine/rerank.go` `rankText` ranks document CONTENT from CAS
+> (reasoning ranks its summary, which IS its embedded text); rerank + hybrid-BM25 use it. The
+> cross-encoder logit is sigmoid-normalized into `core.Hit.RerankScore` and `iocfmt.QueryOut` derives
+> `weak_match`/`margin`/`top_score` from the active signal (rerank vs `core.RerankFloor` 0.5 when
+> reranked, else cosine vs `ConfidenceFloor`) and reports `ranked_by`. `MinScore` was made a cosine
+> PRE-gate (before rerank) so the cross-encoder can't be undone by a post-rerank cosine drop.
+> Deliberately left: rerank only sees the top-RerankN cosine window; NaN/Inf reranker output guarding
+> is V8 (input-validation hardening, pre-TM2); hybrid BM25 decompresses all visible docs per query.
+> Tests: `engine/rerank_test.go` (content-not-label, rerank-ordered confidence, weak-when-rejected,
+> MinScore pre-gate, cosine path unchanged).
 
 **H4 — `go test -race ./internal/runtime/` fails intermittently. [verified]**
 Reproduced at `-count=20` and `-count=40`. The race is a Write by `sync.(*Once).doSlow` from
@@ -188,7 +198,9 @@ apply. The 0/4 was relocated, not exonerated; the reasoning wall remains unteste
 
 1. **P0 correctness bugs first (strategy-independent):** H1 (ingest partial-write), H2 (emb_model guard +
    query dim check), H3 (rerank/confidence coherence + content-based rerank/BM25), H4 (runtime race).
-   These cause silent wrong results / data loss / false confidence today.
+   These cause silent wrong results / data loss / false confidence today. — **ALL DONE** on
+   `development/v0.2-review` (H1 `0cbf4a0`, H2 `b63a686`, M1 `aea8c8f`, M2 `be6ef17`, V5 `40fb33f`,
+   H4 `a3ffc80`, H3 this change); suite + `-race` green.
 2. **P1 — test the reasoning wall BEFORE polishing document retrieval.** Build the falsifiable experiment:
    real distilled decisions from this repo's own history across ≥1 version boundary (~100–300 artifacts),
    ~25 **blind, independently-authored** questions, scored by an LLM judge answering **from overview text

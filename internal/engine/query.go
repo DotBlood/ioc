@@ -16,8 +16,12 @@ const defaultTopK = 5
 // Query runs progressive-disclosure retrieval from a viewpoint scope and returns
 // the trace's query ID alongside the hits (use it with Trace). Mode selects
 // hybrid (vector+BM25 via RRF, default) or vector-only. Hit.Score is always the
-// cosine similarity (the confidence signal), regardless of fusion order; MinScore
-// drops hits below it. Visibility is bottom-up (see visibleArtifacts).
+// cosine similarity, regardless of fusion order; MinScore is a cosine pre-gate on
+// candidates (applied before rerank, not a post-rerank drop).
+// When q.Rerank is set, Hit.RerankScore carries the (sigmoid-normalized)
+// cross-encoder score — the signal that actually ordered the hits, and the one
+// confidence (weak_match/margin) should read. Visibility is bottom-up (see
+// visibleArtifacts).
 func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, error) {
 	if _, err := e.meta.GetScope(q.Scope); err != nil {
 		return core.NilID, nil, err
@@ -76,7 +80,15 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 			continue
 		}
 		set.Add(a.ID.String(), vec)
-		bm.Add(a.ID.String(), a.Summary)
+		// BM25 ranks the document CONTENT, not the "path:lines — first line"
+		// label (rankText loads CAS for documents); only build it in hybrid mode
+		// so vector-only queries pay no decompression cost. Deliberate cost: in
+		// hybrid this decompresses every visible document chunk per query (O(N)
+		// CAS loads) — acceptable for hybrid (opt-in, and label-only BM25 is simply
+		// wrong for documents); a lexical-text cache is the lever if it ever bites.
+		if q.Mode == core.ModeHybrid {
+			bm.Add(a.ID.String(), e.rankText(ctx, a))
+		}
 		byID[a.ID.String()] = a
 	}
 
@@ -92,11 +104,41 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 	if q.Mode == core.ModeHybrid {
 		ordered = search.RRF(60, vecRanked, bm.Search(q.Text, bm.Len()))
 	}
-	// Optional cross-encoder rerank of the top candidates (reorders only; Hit.Score
-	// stays cosine). On rerank error, keep the existing order rather than fail.
+
+	// MinScore is a COSINE gate, applied here on the candidate set — before rerank,
+	// not as a post-rerank drop. Applying it after rerank would let the cross-encoder
+	// promote a low-cosine artifact to the top and then silently delete it by cosine
+	// (the same cross-signal incoherence H3 fixes for weak_match/margin). As a
+	// pre-gate the semantics stay "remove low-cosine candidates," and rerank only
+	// reorders what survives.
+	if q.MinScore > 0 {
+		kept := ordered[:0]
+		for _, r := range ordered {
+			if cosineByID[r.ID] >= q.MinScore {
+				kept = append(kept, r)
+			}
+		}
+		ordered = kept
+	}
+
+	// Optional cross-encoder rerank of the top candidates over their CONTENT
+	// (rerankTop → rankText). It reorders; Hit.Score stays cosine, but the
+	// (sigmoid-normalized) rerank score is carried into each Hit so confidence
+	// (weak_match/margin) reads the signal that actually ordered the results.
+	// On rerank error, keep the existing order rather than fail.
+	//
+	// Known, deliberate limit: rerank only sees the top RerankN cosine candidates,
+	// so an artifact that cosine ranks below that window is never promoted (inherent
+	// to retrieve-then-rerank; widen RerankN to trade compute for recall). NaN/Inf
+	// guarding on reranker output is deferred to the V8 input-validation hardening.
+	rerankByID := map[string]float64(nil)
 	if q.Rerank && e.reranker != nil {
 		if reranked, rerr := e.rerankTop(ctx, q.Text, ordered, byID, q.RerankN); rerr == nil {
 			ordered = reranked
+			rerankByID = make(map[string]float64, len(reranked))
+			for _, r := range reranked {
+				rerankByID[r.ID] = sigmoid(r.Score)
+			}
 		}
 	}
 
@@ -110,12 +152,12 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 			continue
 		}
 		score := cosineByID[r.ID]
-		if q.MinScore > 0 && score < q.MinScore {
-			continue
-		}
 		h, err := e.buildHit(ctx, a, score, q.Detail)
 		if err != nil {
 			return core.NilID, nil, err
+		}
+		if rs, ok := rerankByID[r.ID]; ok {
+			h.RerankScore = &rs
 		}
 		hits = append(hits, h)
 	}

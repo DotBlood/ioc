@@ -41,6 +41,9 @@ func HitOut(h core.Hit) map[string]any {
 		"summary":    h.Summary,
 		"score":      h.Score,
 	}
+	if h.RerankScore != nil {
+		out["rerank_score"] = *h.RerankScore
+	}
 	if p := h.Meta["path"]; p != "" {
 		out["path"] = p
 	}
@@ -62,19 +65,46 @@ func HitsOut(hits []core.Hit) []map[string]any {
 	return out
 }
 
-// QueryOut builds a query response: weak_match uses a per-embedder confidence
-// floor; top_score and margin (top1-top2) are a relative signal.
+// QueryOut builds a query response. top_score and margin (top1-top2) are a
+// relative signal, and weak_match flags "no specific match" — all read from the
+// signal that ACTUALLY ordered the hits: the cross-encoder rerank score (vs
+// core.RerankFloor) when the query was reranked, else cosine (vs the per-embedder
+// core.ConfidenceFloor). Mixing them — e.g. cosine margin over rerank-ordered
+// hits — produces negative margins and false confidence (the H3 bug), so the
+// ranked_by field names which signal is in force.
 func QueryOut(queryID core.ID, hits []core.Hit, model string) map[string]any {
+	reranked := len(hits) > 0 && hits[0].RerankScore != nil
+
 	var top, margin float64
+	score := func(h core.Hit) float64 {
+		if reranked && h.RerankScore != nil {
+			return *h.RerankScore
+		}
+		return h.Score
+	}
 	if len(hits) > 0 {
-		top = hits[0].Score
+		top = score(hits[0])
 	}
-	if len(hits) > 1 {
-		margin = hits[0].Score - hits[1].Score
+	// Only a margin between two hits ranked by the SAME signal is meaningful.
+	// Caveat: the rerank margin is on sigmoid-normalized scores, which saturate near
+	// 1 — two very confident hits can show a tiny margin even when the cross-encoder
+	// clearly prefers one. Treat rerank margin as a soft separation hint; weak_match
+	// (an absolute floor) is the actionable signal.
+	if len(hits) > 1 && (!reranked || hits[1].RerankScore != nil) {
+		margin = score(hits[0]) - score(hits[1])
 	}
+
+	floor := core.ConfidenceFloor(model)
+	rankedBy := "cosine"
+	if reranked {
+		floor = core.RerankFloor(model)
+		rankedBy = "rerank"
+	}
+
 	return map[string]any{
 		"query_id":   queryID.String(),
-		"weak_match": len(hits) == 0 || top < core.ConfidenceFloor(model),
+		"ranked_by":  rankedBy,
+		"weak_match": len(hits) == 0 || top < floor,
 		"top_score":  top,
 		"margin":     margin,
 		"hits":       HitsOut(hits),

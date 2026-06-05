@@ -165,7 +165,7 @@ type Query struct {
 	TopK     int       //
 	Tier     Tier      // 0 = both tiers
 	Mode     QueryMode // vector (default) or hybrid
-	MinScore float64   // drop hits whose cosine score < MinScore (0 = keep all)
+	MinScore float64   // cosine gate: drop candidates with cosine < MinScore before rerank (0 = keep all)
 
 	Hierarchical bool           // coarse→fine: rank scope rollups, then search within top scopes
 	CoarseK      int            // # of scopes to keep in the coarse stage (default 6)
@@ -201,17 +201,33 @@ func ConfidenceFloor(model string) float64 {
 	}
 }
 
+// RerankFloor returns the cross-encoder relevance score (sigmoid-normalized to
+// [0,1]) below which a top reranked hit is treated as weak_match. A bge-reranker
+// logit crosses 0 — sigmoid 0.5 — at the relevant/not-relevant boundary, so 0.5
+// is the natural floor regardless of which cross-encoder produced the score.
+// When results are reranked, weak_match/margin must use THIS signal, not the
+// cosine ConfidenceFloor: rerank logits and cosine live on different scales.
+// model is reserved for future per-reranker calibration.
+func RerankFloor(model string) float64 {
+	_ = model
+	return 0.5
+}
+
 // Hit is one retrieval result. Content is populated only at DetailRaw.
 type Hit struct {
-	Artifact  ID                `json:"artifact"`
-	Scope     ID                `json:"scope"`
-	ScopePath string            `json:"scope_path"`
-	Kind      ArtifactKind      `json:"kind"`
-	Tier      Tier              `json:"tier"`
-	Summary   string            `json:"summary"`
-	Score     float64           `json:"score"`
-	Meta      map[string]string `json:"meta,omitempty"`
-	Content   []byte            `json:"content,omitempty"`
+	Artifact  ID           `json:"artifact"`
+	Scope     ID           `json:"scope"`
+	ScopePath string       `json:"scope_path"`
+	Kind      ArtifactKind `json:"kind"`
+	Tier      Tier         `json:"tier"`
+	Summary   string       `json:"summary"`
+	Score     float64      `json:"score"` // cosine similarity (the semantic-similarity signal), always
+	// RerankScore is the cross-encoder relevance (sigmoid-normalized to [0,1]),
+	// set only when the query was reranked. When present it — not Score — is the
+	// signal that ordered the hits, so confidence (weak_match/margin) reads from it.
+	RerankScore *float64          `json:"rerank_score,omitempty"`
+	Meta        map[string]string `json:"meta,omitempty"`
+	Content     []byte            `json:"content,omitempty"`
 }
 
 // Seed carries distilled constraints/lessons across a version boundary.
