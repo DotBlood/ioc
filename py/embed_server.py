@@ -10,6 +10,10 @@
 # Endpoints:
 #   GET  /health                 → health check
 #   POST /embed                  → batch embedding inference
+#
+# Security (V10): default bind is the Unix socket. A non-loopback TCP bind
+# (IOC_EMBED_HOST) is REFUSED unless IOC_EMBED_ALLOW_REMOTE=1 (the service is
+# unauthenticated). Request bodies over IOC_EMBED_MAX_BODY (default 16 MiB) → 413.
 
 import logging
 import os
@@ -34,6 +38,35 @@ model = SentenceTransformer(MODEL_NAME)
 logger.info("model loaded: %s, dimension=%d", MODEL_NAME, model.get_sentence_embedding_dimension())
 
 app = FastAPI(title="IOC Embedder", version="0.1.0")
+
+# Max request body in bytes (V10): reject oversized uploads with 413. Override via
+# IOC_EMBED_MAX_BODY. Far above any real embedding batch.
+MAX_BODY = int(os.environ.get("IOC_EMBED_MAX_BODY", str(16 * 1024 * 1024)))
+
+
+@app.middleware("http")
+async def limit_body(request, call_next):
+    cl = request.headers.get("content-length")
+    if cl is not None:
+        try:
+            if int(cl) > MAX_BODY:
+                return Response(status_code=413, content=b"payload too large")
+        except ValueError:
+            return Response(status_code=400, content=b"bad content-length")
+    return await call_next(request)
+
+
+def _is_loopback(host: str) -> bool:
+    """Literal-loopback check — the Python mirror of isLoopbackHost in
+    internal/embed/endpoint.go (no DNS resolution). Keep the two in sync."""
+    if host in ("localhost", "127.0.0.1", "::1"):
+        return True
+    try:
+        import ipaddress
+
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 class EmbedRequest(BaseModel):
@@ -119,6 +152,24 @@ if __name__ == "__main__":
     host = os.environ.get("IOC_EMBED_HOST")
     if host:
         port = int(os.environ.get("IOC_EMBED_PORT", "8088"))
+        # Fail-closed (V10): this service is UNAUTHENTICATED. Refuse to bind a
+        # non-loopback host (e.g. 0.0.0.0) unless the operator explicitly opts in,
+        # so a misconfig can't expose a public, unauthenticated compute/embedding
+        # endpoint. Mirrors IOC's Go embed-endpoint policy (IOC_ALLOW_REMOTE_EMBED).
+        allow_remote = os.environ.get("IOC_EMBED_ALLOW_REMOTE", "").lower() in ("1", "true", "yes")
+        if not _is_loopback(host) and not allow_remote:
+            logger.error(
+                "refusing to bind non-loopback host %r without IOC_EMBED_ALLOW_REMOTE=1 "
+                "(this embedder is unauthenticated)",
+                host,
+            )
+            raise SystemExit(2)
+        if not _is_loopback(host):
+            logger.warning(
+                "binding NON-LOOPBACK host %r — this embedder is UNAUTHENTICATED; "
+                "ensure the network is trusted and access-controlled",
+                host,
+            )
         logger.info("serving on http://%s:%d", host, port)
         uvicorn.run(app, host=host, port=port, log_level="info")
     else:
