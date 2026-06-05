@@ -2,7 +2,9 @@ package storage
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,6 +30,32 @@ func TestCAS_RoundtripAndDedup(t *testing.T) {
 	h2, err := c.StoreBytes(ctx, data)
 	require.NoError(t, err)
 	require.Equal(t, h1, h2)
+}
+
+// M2: StoreBytes writes atomically (temp + rename) and leaves no temp files;
+// the stored object round-trips.
+func TestCAS_AtomicStoreNoTempLeftover(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	c := NewCAS(root)
+
+	data := []byte("the metal head holds under load")
+	h, err := c.StoreBytes(ctx, data)
+	require.NoError(t, err)
+	got, err := c.Load(ctx, h)
+	require.NoError(t, err)
+	require.Equal(t, data, got)
+
+	// No "tmp-*" remnants under the CAS root.
+	require.NoError(t, filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasPrefix(d.Name(), "tmp-") {
+			t.Fatalf("leftover temp file: %s", p)
+		}
+		return nil
+	}))
 }
 
 func TestEmbeddingStore_PutGetPersist(t *testing.T) {

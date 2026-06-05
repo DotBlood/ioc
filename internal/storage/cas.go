@@ -37,7 +37,8 @@ func (c *CAS) StoreBytes(_ context.Context, data []byte) (core.ContentHash, erro
 		return h, nil
 	}
 	path := c.objPath(h)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return core.ContentHash{}, fmt.Errorf("cas store: mkdir: %w", err)
 	}
 	enc, err := zstd.NewWriter(nil)
@@ -46,8 +47,28 @@ func (c *CAS) StoreBytes(_ context.Context, data []byte) (core.ContentHash, erro
 	}
 	compressed := enc.EncodeAll(data, nil)
 	enc.Close()
-	if err := os.WriteFile(path, compressed, 0o644); err != nil {
+	// Write to a temp file in the same directory, then rename into place (atomic
+	// on the same volume). The previous direct WriteFile could leave a truncated
+	// blob on a crash/concurrent read that has() then reported as present,
+	// permanently poisoning the entry (StoreBytes would dedup-skip it and Load
+	// would fail forever). Rename makes the object appear only when complete.
+	tmp, err := os.CreateTemp(dir, "tmp-*")
+	if err != nil {
+		return core.ContentHash{}, fmt.Errorf("cas store: temp: %w", err)
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(compressed); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
 		return core.ContentHash{}, fmt.Errorf("cas store: write: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return core.ContentHash{}, fmt.Errorf("cas store: close: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		os.Remove(tmpName)
+		return core.ContentHash{}, fmt.Errorf("cas store: rename: %w", err)
 	}
 	return h, nil
 }
