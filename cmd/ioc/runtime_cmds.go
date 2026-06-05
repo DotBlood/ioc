@@ -13,7 +13,7 @@ import (
 // `ioc runtime stop`. The daemon itself is started with `ioc serve`.
 func runtimeCmd(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("runtime: need a subcommand: status|stop")
+		return fmt.Errorf("runtime: need a subcommand: status|stop|rotate|mint-read-token")
 	}
 	sub, rest := args[0], args[1:]
 	fs := flag.NewFlagSet("runtime "+sub, flag.ExitOnError)
@@ -25,9 +25,47 @@ func runtimeCmd(args []string) error {
 		return runtimeStatus(*dir)
 	case "stop":
 		return runtimeStop(*dir)
+	case "rotate":
+		return runtimeRotate(*dir)
+	case "mint-read-token":
+		return runtimeMintReadToken(*dir)
 	default:
-		return fmt.Errorf("runtime: unknown subcommand %q (use status|stop)", sub)
+		return fmt.Errorf("runtime: unknown subcommand %q (use status|stop|rotate|mint-read-token)", sub)
 	}
+}
+
+// runtimeRotate regenerates the daemon's token(s); old tokens stop working and
+// other live clients must re-connect (runtime.json is updated with the new token).
+func runtimeRotate(dir string) error {
+	c, err := runtime.Dial(dir)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	full, read, err := c.RotateToken()
+	if err != nil {
+		return err
+	}
+	out := map[string]any{"rotated": true, "full_token": full}
+	if read != "" {
+		out["read_token"] = read
+	}
+	return printJSON(out)
+}
+
+// runtimeMintReadToken mints a read-only token (read methods only), revoking any
+// prior read token.
+func runtimeMintReadToken(dir string) error {
+	c, err := runtime.Dial(dir)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	read, err := c.MintReadToken()
+	if err != nil {
+		return err
+	}
+	return printJSON(map[string]any{"read_token": read})
 }
 
 func runtimeStatus(dir string) error {

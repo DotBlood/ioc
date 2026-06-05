@@ -55,7 +55,37 @@ const (
 	mShutdown = "shutdown"
 	// mStats is a control op returning live daemon stats (conns, uptime, ...).
 	mStats = "stats"
+	// mRotateToken regenerates the daemon's token(s) and republishes runtime.json.
+	mRotateToken = "rotate_token"
+	// mMintReadToken mints (replacing any prior) a read-only token.
+	mMintReadToken = "mint_read_token"
 )
+
+// controlMethods are full-token-only ops handled before the engine switch.
+var controlMethods = map[string]bool{
+	mShutdown: true, mStats: true, mRotateToken: true, mMintReadToken: true,
+}
+
+// tier classifies a method for ACL: control & write require the full token; read
+// also accepts the read-only token.
+type tier int
+
+const (
+	tierRead tier = iota
+	tierWrite
+	tierControl
+)
+
+func tierOf(method string) tier {
+	switch {
+	case controlMethods[method]:
+		return tierControl
+	case writeMethods[method]:
+		return tierWrite
+	default:
+		return tierRead
+	}
+}
 
 // serverStats is the daemon's self-report (control op mStats).
 type serverStats struct {
@@ -236,6 +266,15 @@ type supersedeParams struct {
 
 type embModelResult struct {
 	Model string `json:"model"`
+}
+
+type rotateTokenResult struct {
+	Full string `json:"full_token"`
+	Read string `json:"read_token,omitempty"`
+}
+
+type mintReadTokenResult struct {
+	Read string `json:"read_token"`
 }
 
 // marshalRaw is a small helper for building result payloads.

@@ -24,8 +24,9 @@ type Client struct {
 	id uint64
 }
 
-// Dial connects to the daemon that owns dir (reads <dir>/runtime.json). The
-// caller treats any error as "no daemon" and falls back to an embedded engine.
+// Dial connects to the daemon that owns dir (reads <dir>/runtime.json), using the
+// published full token. The caller treats any error as "no daemon" and falls back
+// to an embedded engine.
 func Dial(dir string) (*Client, error) {
 	info, err := readRuntimeInfo(dir)
 	if err != nil {
@@ -36,6 +37,43 @@ func Dial(dir string) (*Client, error) {
 		return nil, fmt.Errorf("runtime: dial %s: %w", info.Addr, err)
 	}
 	return &Client{conn: conn, tok: info.Token}, nil
+}
+
+// DialWithToken connects like Dial but authenticates with the given token (e.g. a
+// read-only token from MintReadToken instead of the runtime.json full token).
+func DialWithToken(dir, token string) (*Client, error) {
+	info, err := readRuntimeInfo(dir)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := net.Dial(info.Net, info.Addr)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: dial %s: %w", info.Addr, err)
+	}
+	return &Client{conn: conn, tok: token}, nil
+}
+
+// RotateToken regenerates the daemon's token(s) (control op, full token only). It
+// updates this client's token in-place to the new full token so the same client
+// keeps working; OTHER live clients holding the old token are now invalid and must
+// re-Dial (reading the updated runtime.json). Returns the new full + read tokens.
+func (c *Client) RotateToken() (full, read string, err error) {
+	var res rotateTokenResult
+	if err = c.call(mRotateToken, nil, &res); err != nil {
+		return "", "", err
+	}
+	c.mu.Lock()
+	c.tok = res.Full
+	c.mu.Unlock()
+	return res.Full, res.Read, nil
+}
+
+// MintReadToken mints a fresh read-only token (control op, full token only),
+// revoking any previously minted read token.
+func (c *Client) MintReadToken() (string, error) {
+	var res mintReadTokenResult
+	err := c.call(mMintReadToken, nil, &res)
+	return res.Read, err
 }
 
 // call sends one request and decodes the result into out (out may be nil).

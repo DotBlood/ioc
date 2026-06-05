@@ -25,12 +25,23 @@ func (s *Server) handle(ctx context.Context, req request) (resp response) {
 	if req.V != 0 && req.V != ProtoVersion {
 		return response{ID: req.ID, Error: &wireError{Code: codeInvalid, Msg: fmt.Sprintf("runtime: protocol version mismatch (client %d, server %d)", req.V, ProtoVersion)}}
 	}
-	// Constant-time compare (V3) so token verification doesn't leak length/prefix
-	// timing. (Cosmetic on a loopback-only socket today, but correct, and it
-	// matters the moment the surface widens.)
-	if subtle.ConstantTimeCompare([]byte(req.Token), []byte(s.token)) != 1 {
+	// Tiered ACL (V3 + 2-principal model). Run BOTH constant-time compares
+	// unconditionally so timing doesn't reveal which token matched: control & write
+	// require the full token; reads also accept the read-only token.
+	ts := s.tokens.Load()
+	full := subtle.ConstantTimeCompare([]byte(req.Token), []byte(ts.full)) == 1
+	readOK := ts.read != "" && subtle.ConstantTimeCompare([]byte(req.Token), []byte(ts.read)) == 1
+	authed := false
+	switch tierOf(req.Method) {
+	case tierControl, tierWrite:
+		authed = full
+	default: // tierRead
+		authed = full || readOK
+	}
+	if !authed {
 		return response{ID: req.ID, Error: &wireError{Code: codeAuth, Msg: "runtime: bad or missing token"}}
 	}
+
 	switch req.Method {
 	case mShutdown:
 		// Acknowledge here; serveConn triggers the actual Stop after the reply
@@ -41,6 +52,20 @@ func (s *Server) handle(ctx context.Context, req request) (resp response) {
 			ProtoVersion: ProtoVersion, Conns: s.connCount(), Requests: s.reqCount.Load(),
 			StartedAt: s.startedAt, EmbedModel: s.eng.EmbModel(),
 		})
+		return response{ID: req.ID, Result: raw}
+	case mRotateToken:
+		ns, err := s.rotateTokens()
+		if err != nil {
+			return response{ID: req.ID, Error: errToWire(err)}
+		}
+		raw, _ := marshalRaw(rotateTokenResult{Full: ns.full, Read: ns.read})
+		return response{ID: req.ID, Result: raw}
+	case mMintReadToken:
+		read, err := s.mintReadToken()
+		if err != nil {
+			return response{ID: req.ID, Error: errToWire(err)}
+		}
+		raw, _ := marshalRaw(mintReadTokenResult{Read: read})
 		return response{ID: req.ID, Result: raw}
 	}
 	result, err := s.invoke(ctx, req.Method, req.Params)

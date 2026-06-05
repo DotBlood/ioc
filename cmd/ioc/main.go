@@ -96,7 +96,7 @@ commands:
   ingest <path> [-scope ID] [-title T] [-maxchars N] [-overlap N]  mirror a dir tree into scopes; chunk files as documents (path must be inside IOC_INGEST_ROOT or cwd)
   config set-ingest-root <path> | get-ingest-root   pin/show the persisted ingest sandbox root
   serve [-dir d] [-embed e]                      run the runtime daemon (single owner of -dir; clients connect via runtime.json)
-  runtime status|stop [-dir d]                   inspect or stop the runtime daemon owning -dir
+  runtime status|stop|rotate|mint-read-token [-dir d]   inspect/stop daemon; rotate token(s); mint a read-only token
   query -scope ID -text T [-detail overview|entry|raw] [-topk N] [-tier t] [-kind k] [-mode m] [-include-superseded]
   drill -artifact ID [-detail raw]
   publish -artifact ID

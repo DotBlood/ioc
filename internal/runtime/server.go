@@ -41,7 +41,8 @@ type Server struct {
 	// its own write txns — including the trace append a Query makes).
 	mu sync.RWMutex
 
-	token     string
+	tokens    atomic.Pointer[tokenSet]    // full (owner) + optional read-only; swapped on rotation
+	info      atomic.Pointer[RuntimeInfo] // base descriptor, re-published on rotate
 	ln        net.Listener
 	ready     chan struct{}
 	stopped   chan struct{} // closed when Stop has fully finished cleanup
@@ -56,9 +57,69 @@ type Server struct {
 	stopOnce sync.Once
 }
 
+// tokenSet is the daemon's auth credentials. It is immutable once stored; rotation
+// swaps the whole pointer so concurrent readers never see a torn value.
+type tokenSet struct {
+	full string // owner: all methods
+	read string // read-only ("" = none minted)
+}
+
 // NewServer wraps an open engine; the daemon takes ownership (Stop closes it).
 func NewServer(eng *engine.Engine, dir string) *Server {
 	return &Server{eng: eng, dir: dir, conns: map[net.Conn]struct{}{}, ready: make(chan struct{}), stopped: make(chan struct{})}
+}
+
+// newToken returns a fresh random hex token.
+func newToken() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// rotateTokens regenerates the full token (and the read token if one exists) and
+// republishes runtime.json with the new full token. Old tokens stop authenticating.
+func (s *Server) rotateTokens() (tokenSet, error) {
+	cur := s.tokens.Load()
+	full, err := newToken()
+	if err != nil {
+		return tokenSet{}, err
+	}
+	ns := tokenSet{full: full}
+	if cur != nil && cur.read != "" {
+		if ns.read, err = newToken(); err != nil {
+			return tokenSet{}, err
+		}
+	}
+	s.tokens.Store(&ns)
+	if err := s.publishInfo(ns.full); err != nil {
+		return tokenSet{}, err
+	}
+	return ns, nil
+}
+
+// mintReadToken mints a fresh read-only token, replacing (revoking) any prior one.
+// The full token is unchanged; runtime.json is not rewritten (it carries the full
+// token only).
+func (s *Server) mintReadToken() (string, error) {
+	cur := s.tokens.Load()
+	read, err := newToken()
+	if err != nil {
+		return "", err
+	}
+	ns := tokenSet{full: cur.full, read: read}
+	s.tokens.Store(&ns)
+	return read, nil
+}
+
+// publishInfo rewrites runtime.json with the given full token (other fields from
+// the stored base descriptor).
+func (s *Server) publishInfo(full string) error {
+	base := s.info.Load()
+	info := *base
+	info.Token = full
+	return writeRuntimeInfo(s.dir, info)
 }
 
 // Ready is closed once the daemon is listening and runtime.json is published.
@@ -87,20 +148,21 @@ func (s *Server) Serve() error {
 	}
 	s.ln = ln
 
-	tok := make([]byte, 16)
-	if _, err := rand.Read(tok); err != nil {
+	full, err := newToken()
+	if err != nil {
 		ln.Close()
 		return err
 	}
-	s.token = hex.EncodeToString(tok)
+	s.tokens.Store(&tokenSet{full: full}) // read token is opt-in (mint_read_token)
 	s.startedAt = time.Now().UTC().Format(time.RFC3339)
 
-	info := RuntimeInfo{
-		PID: os.Getpid(), Net: "tcp", Addr: ln.Addr().String(), Token: s.token,
+	base := RuntimeInfo{
+		PID: os.Getpid(), Net: "tcp", Addr: ln.Addr().String(), Token: full,
 		StartedAt: s.startedAt, DataDir: s.dir,
 		EmbedModel: s.eng.EmbModel(),
 	}
-	if err := writeRuntimeInfo(s.dir, info); err != nil {
+	s.info.Store(&base)
+	if err := writeRuntimeInfo(s.dir, base); err != nil {
 		ln.Close()
 		return fmt.Errorf("runtime: write runtime.json: %w", err)
 	}
