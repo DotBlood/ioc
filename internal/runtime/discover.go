@@ -27,7 +27,10 @@ func writeRuntimeInfo(dir string, info RuntimeInfo) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(runtimePath(dir), append(b, '\n'), 0o644)
+	// 0o600 (V3): runtime.json carries the daemon's bearer token. World-readable
+	// (0o644) let any local user on a shared host read it and drive the full RPC
+	// (shutdown, delete_scope, ingest, drill any content). Keep it owner-only.
+	return os.WriteFile(runtimePath(dir), append(b, '\n'), 0o600)
 }
 
 // readRuntimeInfo loads the descriptor; os.IsNotExist(err) means "no daemon".

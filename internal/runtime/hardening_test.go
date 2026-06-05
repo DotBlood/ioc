@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -39,6 +42,80 @@ func TestProtoVersionMismatch(t *testing.T) {
 	}
 	if resp.Error == nil || resp.Error.Code != codeInvalid {
 		t.Fatalf("expected invalid (version) error, got %+v", resp.Error)
+	}
+}
+
+// rawRequest sends one framed request over a fresh connection and returns the response.
+func rawRequest(t *testing.T, dir string, req request) response {
+	t.Helper()
+	info, err := Info(dir)
+	if err != nil {
+		t.Fatalf("info: %v", err)
+	}
+	conn, err := net.Dial(info.Net, info.Addr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	b, _ := json.Marshal(req)
+	if err := writeFrame(conn, b); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	raw, err := readFrame(conn)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	var resp response
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	return resp
+}
+
+// V3: the token is checked with a constant-time compare; bad/missing/wrong-length
+// tokens are rejected with codeAuth, a correct token passes.
+func TestTokenAuth(t *testing.T) {
+	dir := t.TempDir()
+	defer startDaemon(t, dir).Stop()
+	info, err := Info(dir)
+	if err != nil {
+		t.Fatalf("info: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		tok  string
+		auth bool // true => expect codeAuth rejection
+	}{
+		{"correct", info.Token, false},
+		{"empty", "", true},
+		{"wrong-same-length", strings.Repeat("0", len(info.Token)), true},
+		{"wrong-different-length", "short", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := rawRequest(t, dir, request{ID: 1, V: ProtoVersion, Method: mEmbModel, Token: tc.tok})
+			gotAuth := resp.Error != nil && resp.Error.Code == codeAuth
+			if gotAuth != tc.auth {
+				t.Fatalf("token %q: got error %+v, want codeAuth=%v", tc.name, resp.Error, tc.auth)
+			}
+		})
+	}
+}
+
+// V3: runtime.json (which holds the bearer token) is owner-only (POSIX-gated).
+func TestRuntimeInfoMode0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file modes not enforced on Windows")
+	}
+	dir := t.TempDir()
+	defer startDaemon(t, dir).Stop()
+	fi, err := os.Stat(runtimePath(dir))
+	if err != nil {
+		t.Fatalf("stat runtime.json: %v", err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Fatalf("runtime.json mode = %o, want 0600", fi.Mode().Perm())
 	}
 }
 

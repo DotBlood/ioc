@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 
@@ -22,7 +23,10 @@ func (s *Server) handle(ctx context.Context, req request) (resp response) {
 	if req.V != 0 && req.V != ProtoVersion {
 		return response{ID: req.ID, Error: &wireError{Code: codeInvalid, Msg: fmt.Sprintf("runtime: protocol version mismatch (client %d, server %d)", req.V, ProtoVersion)}}
 	}
-	if req.Token != s.token {
+	// Constant-time compare (V3) so token verification doesn't leak length/prefix
+	// timing. (Cosmetic on a loopback-only socket today, but correct, and it
+	// matters the moment the surface widens.)
+	if subtle.ConstantTimeCompare([]byte(req.Token), []byte(s.token)) != 1 {
 		return response{ID: req.ID, Error: &wireError{Code: codeAuth, Msg: "runtime: bad or missing token"}}
 	}
 	switch req.Method {
