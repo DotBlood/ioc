@@ -66,6 +66,8 @@ func main() {
 		err = history(args)
 	case "query":
 		err = query(args)
+	case "neighbors":
+		err = neighbors(args)
 	case "traces":
 		err = traces(args)
 	case "trace":
@@ -98,6 +100,7 @@ commands:
   serve [-dir d] [-embed e]                      run the runtime daemon (single owner of -dir; clients connect via runtime.json)
   runtime status|stop|rotate|mint-read-token [-dir d]   inspect/stop daemon; rotate token(s); mint a read-only token
   query -scope ID -text T [-detail overview|entry|raw] [-topk N] [-tier t] [-kind k] [-mode m] [-include-superseded]
+  neighbors -scope ID -text T [-topk N]          similar CURRENT memory (run before push to find supersede candidates)
   drill -artifact ID [-detail raw]
   publish -artifact ID
   siblings -scope ID

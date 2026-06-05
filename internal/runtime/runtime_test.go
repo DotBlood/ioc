@@ -156,6 +156,41 @@ func TestRuntimeSupersede(t *testing.T) {
 	}
 }
 
+// Neighbors round-trips over the RPC and returns current artifacts.
+func TestRuntimeNeighbors(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	srv := startDaemon(t, dir)
+	defer srv.Stop()
+
+	cli, err := Dial(dir)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer cli.Close()
+	root, err := cli.CreateScope(ctx, core.NilID, core.RoleWorktree, "root")
+	if err != nil {
+		t.Fatalf("create scope: %v", err)
+	}
+	a, err := cli.Push(ctx, core.PushRequest{Scope: root.ID, Summary: "alpha beta neighbor probe"})
+	if err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	hits, err := cli.Neighbors(ctx, root.ID, "alpha beta", 5)
+	if err != nil {
+		t.Fatalf("neighbors: %v", err)
+	}
+	found := false
+	for _, h := range hits {
+		if h.Artifact == a.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("neighbors did not return the pushed artifact: %+v", hits)
+	}
+}
+
 func TestRuntimeConcurrentClients(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

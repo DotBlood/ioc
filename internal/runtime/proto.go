@@ -30,6 +30,7 @@ const (
 	mCreateScope     = "create_scope"
 	mPush            = "push"
 	mQuery           = "query"
+	mNeighbors       = "neighbors"
 	mDrill           = "drill"
 	mPublish         = "publish"
 	mSiblingOverview = "sibling_overview"
@@ -211,6 +212,12 @@ type queryParams struct {
 type queryResult struct {
 	QueryID core.ID    `json:"query_id"`
 	Hits    []core.Hit `json:"hits"`
+}
+
+type neighborsParams struct {
+	Scope core.ID `json:"scope"`
+	Text  string  `json:"text"`
+	K     int     `json:"k"`
 }
 
 type drillParams struct {

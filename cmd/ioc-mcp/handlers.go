@@ -163,6 +163,24 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 	return jsonResult(iocfmt.QueryOut(qid, hits, a.svc.EmbModel()))
 }
 
+func (a *ioc) neighbors(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	id, err := requireID(r, "scope")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	text, err := r.RequireString("text")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	hits, err := a.svc.Neighbors(ctx, id, text, r.GetInt("k", 5))
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return jsonResult(iocfmt.HitsOut(hits))
+}
+
 func (a *ioc) rollup(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

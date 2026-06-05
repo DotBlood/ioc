@@ -20,6 +20,7 @@ type Service interface {
 	CreateScope(ctx context.Context, parent core.ID, role core.Role, title string) (core.Scope, error)
 	Push(ctx context.Context, r core.PushRequest) (core.Artifact, error)
 	Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, error)
+	Neighbors(ctx context.Context, scope core.ID, text string, k int) ([]core.Hit, error)
 	Drill(ctx context.Context, artifactID core.ID, to core.Detail) (core.Hit, error)
 	Publish(ctx context.Context, artifactID core.ID) error
 	SiblingOverview(ctx context.Context, scope core.ID) ([]core.Hit, error)

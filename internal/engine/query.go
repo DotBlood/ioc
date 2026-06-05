@@ -188,6 +188,20 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 	return queryID, hits, nil
 }
 
+// Neighbors returns the top-k most similar CURRENT artifacts visible from scope —
+// the "what existing memory might this replace?" lookup an agent runs BEFORE
+// pushing a new conclusion, so it can declare PushRequest.Supersedes (or pass the
+// ids to Consolidate). It is a plain overview Query restricted to the current view
+// (superseded/archived excluded); the returned Hit.Artifact ids feed straight into
+// Supersedes. See docs/SUPERSESSION.md §4/§5.
+func (e *Engine) Neighbors(ctx context.Context, scope core.ID, text string, k int) ([]core.Hit, error) {
+	if k <= 0 {
+		k = defaultTopK
+	}
+	_, hits, err := e.Query(ctx, core.Query{Scope: scope, Text: text, Detail: core.DetailOverview, TopK: k})
+	return hits, err
+}
+
 // RecentTraces returns up to n most recent query traces, newest first.
 func (e *Engine) RecentTraces(n int) ([]core.TraceRecord, error) {
 	all, err := e.meta.ListTraces()

@@ -167,6 +167,12 @@ func (c *Client) Query(_ context.Context, q core.Query) (core.ID, []core.Hit, er
 	return res.QueryID, res.Hits, err
 }
 
+func (c *Client) Neighbors(_ context.Context, scope core.ID, text string, k int) ([]core.Hit, error) {
+	var hits []core.Hit
+	err := c.call(mNeighbors, neighborsParams{Scope: scope, Text: text, K: k}, &hits)
+	return hits, err
+}
+
 func (c *Client) Drill(_ context.Context, artifactID core.ID, to core.Detail) (core.Hit, error) {
 	var h core.Hit
 	err := c.call(mDrill, drillParams{Artifact: artifactID, Detail: to}, &h)

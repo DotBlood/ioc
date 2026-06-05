@@ -55,6 +55,32 @@ func query(args []string) error {
 	return printJSON(iocfmt.QueryOut(qid, hits, e.EmbModel()))
 }
 
+// neighbors finds the most similar CURRENT artifacts to text — the dedup/supersede
+// lookup to run before pushing a new conclusion.
+func neighbors(args []string) error {
+	fs := flag.NewFlagSet("neighbors", flag.ExitOnError)
+	dir, em := commonFlags(fs)
+	scope := fs.String("scope", "", "viewpoint scope ID")
+	text := fs.String("text", "", "the conclusion you're about to write")
+	topk := fs.Int("topk", 5, "max neighbors")
+	_ = fs.Parse(args)
+
+	scopeID, err := iocfmt.ParseScopeID(*scope)
+	if err != nil {
+		return err
+	}
+	e, err := openService(*dir, *em, false)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	hits, err := e.Neighbors(context.Background(), scopeID, *text, *topk)
+	if err != nil {
+		return err
+	}
+	return printJSON(map[string]any{"neighbors": iocfmt.HitsOut(hits)})
+}
+
 // traces lists recent query traces (newest first) so a query_id can be inspected.
 func traces(args []string) error {
 	fs := flag.NewFlagSet("traces", flag.ExitOnError)

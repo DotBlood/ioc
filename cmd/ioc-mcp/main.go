@@ -187,6 +187,13 @@ func (a *ioc) register(s *server.MCPServer) {
 		mcp.WithBoolean("include_superseded", mcp.Description("include superseded/archived (history); default false = current view only")),
 	), a.query)
 
+	s.AddTool(mcp.NewTool("ioc_neighbors",
+		mcp.WithDescription("Find the most similar CURRENT memory to some text — run this BEFORE ioc_push-ing a new conclusion to see what existing artifacts it might replace, then push with supersedes=<their ids> (keeps memory current, avoids duplicates). Superseded/archived items are excluded."),
+		mcp.WithString("scope", mcp.Required(), mcp.Description("viewpoint scope ID")),
+		mcp.WithString("text", mcp.Required(), mcp.Description("the conclusion you're about to write")),
+		mcp.WithNumber("k", mcp.Description("max neighbors (default 5)")),
+	), a.neighbors)
+
 	s.AddTool(mcp.NewTool("ioc_list_traces",
 		mcp.WithDescription("List recent query traces (newest first); each has a query_id you can pass to ioc_trace."),
 		mcp.WithNumber("n", mcp.Description("max traces (default 10)")),

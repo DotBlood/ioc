@@ -171,6 +171,16 @@ func (s *Server) call(ctx context.Context, method string, params json.RawMessage
 			return nil, err
 		}
 		return marshalRaw(queryResult{QueryID: qid, Hits: hits})
+	case mNeighbors:
+		var p neighborsParams
+		if err := decode(params, &p); err != nil {
+			return nil, err
+		}
+		hits, err := s.eng.Neighbors(ctx, p.Scope, p.Text, p.K)
+		if err != nil {
+			return nil, err
+		}
+		return marshalRaw(hits)
 	case mDrill:
 		var p drillParams
 		if err := decode(params, &p); err != nil {
