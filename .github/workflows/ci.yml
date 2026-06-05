@@ -38,6 +38,11 @@ jobs:
       - run: go test -race -count=1 ./...
         env:
           CGO_ENABLED: "1"
+      # Repeat-count stress to catch intermittent races (e.g. the runtime
+      # daemon lifecycle) that a single pass can miss.
+      - run: go test -race -count=20 ./internal/runtime/...
+        env:
+          CGO_ENABLED: "1"
 
   gofmt:
     name: gofmt

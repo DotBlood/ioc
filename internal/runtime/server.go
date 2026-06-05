@@ -110,9 +110,17 @@ func (s *Server) Serve() error {
 			return fmt.Errorf("runtime: accept: %w", err)
 		}
 		s.connsMu.Lock()
+		if s.closing {
+			// Stop won the race: it already set closing (and is about to / has
+			// begun wg.Wait). Don't Add — a wg.Add concurrent with wg.Wait is a
+			// data race / WaitGroup misuse. Drop this late connection.
+			s.connsMu.Unlock()
+			conn.Close()
+			continue
+		}
 		s.conns[conn] = struct{}{}
+		s.wg.Add(1) // under connsMu, gated by !closing → ordered before Stop's wg.Wait
 		s.connsMu.Unlock()
-		s.wg.Add(1)
 		go s.serveConn(conn)
 	}
 }

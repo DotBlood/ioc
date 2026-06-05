@@ -14,15 +14,25 @@ import (
 
 // startDaemon opens an engine on dir and serves it; returns the running server.
 func startDaemon(t *testing.T, dir string) *Server {
+	srv, _ := startDaemonDone(t, dir)
+	return srv
+}
+
+// startDaemonDone also returns a channel closed when Serve has fully returned.
+// Serve returns only after Stop closes its `stopped` channel — which Stop does
+// after the cleanup (Sync/Close/removeRuntimeInfo) — so receiving on done is a
+// deterministic "the daemon has fully shut down" signal (no polling).
+func startDaemonDone(t *testing.T, dir string) (*Server, <-chan struct{}) {
 	t.Helper()
 	e, err := engine.Open(context.Background(), dir, embed.NewMockEmbedder(32))
 	if err != nil {
 		t.Fatalf("open engine: %v", err)
 	}
 	srv := NewServer(e, dir)
-	go func() { _ = srv.Serve() }()
+	done := make(chan struct{})
+	go func() { defer close(done); _ = srv.Serve() }()
 	<-srv.Ready()
-	return srv
+	return srv, done
 }
 
 func TestRuntimeRoundTrip(t *testing.T) {
@@ -138,7 +148,7 @@ func TestRuntimeConcurrentClients(t *testing.T) {
 
 func TestRuntimeShutdownRPC(t *testing.T) {
 	dir := t.TempDir()
-	_ = startDaemon(t, dir)
+	_, done := startDaemonDone(t, dir)
 
 	cli, err := Dial(dir)
 	if err != nil {
@@ -149,17 +159,16 @@ func TestRuntimeShutdownRPC(t *testing.T) {
 	}
 	_ = cli.Close()
 
-	// The daemon stops asynchronously after replying; runtime.json should vanish.
-	gone := false
-	for i := 0; i < 100; i++ {
-		if _, err := Info(dir); os.IsNotExist(err) {
-			gone = true
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
+	// The daemon stops asynchronously after replying. Wait for Serve to return
+	// (deterministic; closed only after Stop's cleanup incl. removeRuntimeInfo) —
+	// no flaky polling.
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("daemon did not fully shut down after shutdown RPC")
 	}
-	if !gone {
-		t.Fatal("runtime.json was not removed after shutdown")
+	if _, err := Info(dir); !os.IsNotExist(err) {
+		t.Fatalf("runtime.json was not removed after shutdown (err=%v)", err)
 	}
 	// Lock released: the store reopens.
 	e, err := engine.Open(context.Background(), dir, embed.NewMockEmbedder(32))
