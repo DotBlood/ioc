@@ -230,6 +230,31 @@ func TestIdleTimeout(t *testing.T) {
 	}
 }
 
+// V7: deeply nested params are rejected (codeInvalid) before json.Unmarshal, while
+// a normal flat request decodes fine.
+func TestJSONDepthLimit(t *testing.T) {
+	dir := t.TempDir()
+	defer startDaemon(t, dir).Stop()
+	info, err := Info(dir)
+	if err != nil {
+		t.Fatalf("info: %v", err)
+	}
+
+	deep := json.RawMessage(strings.Repeat("[", maxJSONDepth+5) + strings.Repeat("]", maxJSONDepth+5))
+	resp := rawRequest(t, dir, request{ID: 1, V: ProtoVersion, Method: mPush, Token: info.Token, Params: deep})
+	if resp.Error == nil || resp.Error.Code != codeInvalid {
+		t.Fatalf("expected codeInvalid for deeply nested params, got %+v", resp.Error)
+	}
+
+	// A shallow (normal-depth) params value passes the depth check (it then fails on
+	// the engine for an unknown scope, NOT with a depth/parse error).
+	shallow := json.RawMessage(`{"req":{"scope":"x","summary":"s"}}`)
+	resp2 := rawRequest(t, dir, request{ID: 2, V: ProtoVersion, Method: mPush, Token: info.Token, Params: shallow})
+	if resp2.Error != nil && resp2.Error.Code == codeInvalid && strings.Contains(resp2.Error.Msg, "nested too deep") {
+		t.Fatalf("shallow params wrongly rejected by depth check: %+v", resp2.Error)
+	}
+}
+
 func TestStatsControl(t *testing.T) {
 	srv := startDaemon(t, t.TempDir())
 	defer srv.Stop()

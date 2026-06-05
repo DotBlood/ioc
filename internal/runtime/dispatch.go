@@ -1,10 +1,12 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/DotBlood/ioc/internal/core"
 )
@@ -66,11 +68,49 @@ func (s *Server) invoke(ctx context.Context, method string, params json.RawMessa
 	return s.call(ctx, method, params)
 }
 
+// maxJSONDepth bounds nesting in request params (V7). IOC's params are flat
+// (PushRequest/Query etc.), so 64 is far beyond any real payload; it only stops a
+// pathologically deep object/array from burning CPU/stack in json.Unmarshal.
+// (Params SIZE is already bounded by the frame cap in proto.go — V6 — so no extra
+// byte cap here, which would otherwise break a legitimately large Push.Content.)
+const maxJSONDepth = 64
+
 func decode(params json.RawMessage, v any) error {
+	if err := checkJSONDepth(params, maxJSONDepth); err != nil {
+		return err
+	}
 	if err := json.Unmarshal(params, v); err != nil {
 		return fmt.Errorf("%w: bad params: %v", core.ErrInvalidInput, err)
 	}
 	return nil
+}
+
+// checkJSONDepth rejects params whose object/array nesting exceeds max. It walks
+// tokens (string-aware via encoding/json), so it counts real structural depth, not
+// braces inside strings.
+func checkJSONDepth(raw json.RawMessage, max int) error {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	depth := 0
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("%w: malformed params json: %v", core.ErrInvalidInput, err)
+		}
+		if d, ok := tok.(json.Delim); ok {
+			switch d {
+			case '{', '[':
+				depth++
+				if depth > max {
+					return fmt.Errorf("%w: params nested too deep (> %d)", core.ErrInvalidInput, max)
+				}
+			case '}', ']':
+				depth--
+			}
+		}
+	}
 }
 
 // call routes one method to the engine. Must be invoked under s.mu.
