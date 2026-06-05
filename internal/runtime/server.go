@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -55,6 +56,8 @@ type Server struct {
 
 	wg       sync.WaitGroup
 	stopOnce sync.Once
+
+	tlsConfig *tls.Config // non-nil => mTLS listener (opt-in; off by default)
 }
 
 // tokenSet is the daemon's auth credentials. It is immutable once stored; rotation
@@ -67,6 +70,14 @@ type tokenSet struct {
 // NewServer wraps an open engine; the daemon takes ownership (Stop closes it).
 func NewServer(eng *engine.Engine, dir string) *Server {
 	return &Server{eng: eng, dir: dir, conns: map[net.Conn]struct{}{}, ready: make(chan struct{}), stopped: make(chan struct{})}
+}
+
+// NewServerTLS is NewServer with mTLS enabled (the listener requires+verifies
+// client certs). A nil cfg is equivalent to NewServer (plaintext).
+func NewServerTLS(eng *engine.Engine, dir string, cfg *tls.Config) *Server {
+	s := NewServer(eng, dir)
+	s.tlsConfig = cfg
+	return s
 }
 
 // newToken returns a fresh random hex token.
@@ -146,6 +157,11 @@ func (s *Server) Serve() error {
 	if err != nil {
 		return fmt.Errorf("runtime: listen: %w", err)
 	}
+	if s.tlsConfig != nil {
+		// tls.Conn satisfies net.Conn, so the accept loop / framing / idle deadline
+		// downstream are unchanged.
+		ln = tls.NewListener(ln, s.tlsConfig)
+	}
 	s.ln = ln
 
 	full, err := newToken()
@@ -160,6 +176,10 @@ func (s *Server) Serve() error {
 		PID: os.Getpid(), Net: "tcp", Addr: ln.Addr().String(), Token: full,
 		StartedAt: s.startedAt, DataDir: s.dir,
 		EmbedModel: s.eng.EmbModel(),
+	}
+	if s.tlsConfig != nil {
+		base.TLS = true
+		base.TLSServerName = "localhost"
 	}
 	s.info.Store(&base)
 	if err := writeRuntimeInfo(s.dir, base); err != nil {

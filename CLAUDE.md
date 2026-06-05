@@ -107,8 +107,12 @@ interface so it works over either path. Concurrency is in-process: `RWMutex` (pa
 serialized writes); writes flush embeddings (`engine.Sync`) for durability; per-request panic
 recovery; graceful shutdown via signal or the `shutdown` control op (`ioc runtime stop`). One daemon
 = one data-dir; **sharing = same `-dir`**. Multi-process access to one store is deliberately rejected
-in favor of the daemon (see `docs/RUNTIME_ROADMAP.md`). Deferred: MVCC/multi-tenant, networked
-MCP/HTTP, auto-start, auth beyond the loopback token.
+in favor of the daemon (see `docs/RUNTIME_ROADMAP.md`). **Auth:** a full (owner) token in runtime.json
+plus an optional read-only token (`ioc runtime mint-read-token`) gated by method tier (control/write =
+full, read = either); `ioc runtime rotate` regenerates the token(s). **mTLS** is opt-in and OFF by
+default (`IOC_RUNTIME_TLS=1` + `IOC_RUNTIME_TLS_CERT`/`_KEY`/`_CA`) — honest caveat: it is loopback-prep
+and does NOT replace the token. Deferred: MVCC/multi-tenant, networked MCP/HTTP, auto-start,
+full per-tenant principals/ACLs.
 
 **Scale levers — measured (real, 180 artifacts, top-5, recall@topK):**
 

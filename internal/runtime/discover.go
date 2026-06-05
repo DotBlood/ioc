@@ -11,13 +11,15 @@ const runtimeFile = "runtime.json"
 
 // RuntimeInfo is the published descriptor of a running daemon (one per data dir).
 type RuntimeInfo struct {
-	PID        int    `json:"pid"`
-	Net        string `json:"net"`  // "tcp"
-	Addr       string `json:"addr"` // e.g. 127.0.0.1:54321
-	Token      string `json:"token"`
-	StartedAt  string `json:"started_at"` // RFC3339
-	DataDir    string `json:"data_dir"`
-	EmbedModel string `json:"embed_model"`
+	PID           int    `json:"pid"`
+	Net           string `json:"net"`  // "tcp"
+	Addr          string `json:"addr"` // e.g. 127.0.0.1:54321
+	Token         string `json:"token"`
+	StartedAt     string `json:"started_at"` // RFC3339
+	DataDir       string `json:"data_dir"`
+	EmbedModel    string `json:"embed_model"`
+	TLS           bool   `json:"tls,omitempty"`             // daemon requires mTLS (off by default)
+	TLSServerName string `json:"tls_server_name,omitempty"` // SNI / cert name to verify
 }
 
 func runtimePath(dir string) string { return filepath.Join(dir, runtimeFile) }

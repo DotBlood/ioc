@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -32,9 +33,9 @@ func Dial(dir string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.Dial(info.Net, info.Addr)
+	conn, err := dialConn(info)
 	if err != nil {
-		return nil, fmt.Errorf("runtime: dial %s: %w", info.Addr, err)
+		return nil, err
 	}
 	return &Client{conn: conn, tok: info.Token}, nil
 }
@@ -46,11 +47,32 @@ func DialWithToken(dir, token string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	conn, err := dialConn(info)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{conn: conn, tok: token}, nil
+}
+
+// dialConn opens the transport to the daemon: plain TCP, or mTLS when the daemon
+// advertises it (RuntimeInfo.TLS), using the client cert/CA from the environment.
+func dialConn(info RuntimeInfo) (net.Conn, error) {
+	if info.TLS {
+		cfg, err := clientTLSConfig(info.TLSServerName)
+		if err != nil {
+			return nil, err
+		}
+		conn, err := tls.Dial(info.Net, info.Addr, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("runtime: tls dial %s: %w", info.Addr, err)
+		}
+		return conn, nil
+	}
 	conn, err := net.Dial(info.Net, info.Addr)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: dial %s: %w", info.Addr, err)
 	}
-	return &Client{conn: conn, tok: token}, nil
+	return conn, nil
 }
 
 // RotateToken regenerates the daemon's token(s) (control op, full token only). It

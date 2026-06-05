@@ -30,7 +30,17 @@ func serveCmd(args []string) error {
 	if err != nil {
 		return fmt.Errorf("%w (if a daemon is running here, run `ioc runtime stop -dir %s`)", err, *dir)
 	}
-	srv := runtime.NewServer(e, *dir)
+	var srv *runtime.Server
+	if runtime.TLSEnabled() {
+		cfg, terr := runtime.ServerTLSConfig()
+		if terr != nil {
+			return terr
+		}
+		srv = runtime.NewServerTLS(e, *dir, cfg)
+		fmt.Fprintln(os.Stderr, "ioc runtime: mTLS ENABLED")
+	} else {
+		srv = runtime.NewServer(e, *dir)
+	}
 
 	go func() {
 		<-srv.Ready()
