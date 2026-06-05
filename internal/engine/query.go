@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -32,6 +33,12 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 	qvec, err := e.embedQuery(ctx, q.Text)
 	if err != nil {
 		return core.NilID, nil, err
+	}
+	// Defensive: a query vector whose dimension differs from the store means a
+	// wrong embedder slipped past the Open/model guards; cosine would silently
+	// return 0 for every artifact, so fail loudly instead.
+	if e.emb != nil && len(qvec) != e.emb.Dims() {
+		return core.NilID, nil, fmt.Errorf("engine: query: %w: query is %d-dim but store is %d-dim", core.ErrInvalidInput, len(qvec), e.emb.Dims())
 	}
 
 	var arts []core.Artifact

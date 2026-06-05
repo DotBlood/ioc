@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/DotBlood/ioc/internal/core"
@@ -24,6 +25,11 @@ type Engine struct {
 	emb      *storage.EmbeddingStore // opened lazily once the embedding dim is known
 	embedder embed.Embedder
 	reranker embed.Reranker // optional cross-encoder for last-mile rerank (nil = off)
+
+	// modelMu guards the one-time reconciliation of the embedder model against
+	// the persisted emb_model (so reads, which run concurrently, don't race).
+	modelMu sync.Mutex
+	modelOK bool
 }
 
 // Option configures an Engine at Open time.
@@ -54,22 +60,69 @@ func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option
 	for _, opt := range opts {
 		opt(e)
 	}
-	// Open the embedding store eagerly if the dimension is already known
-	// (persisted from a prior run, or fixed by the embedder).
+	// Refuse to open a store with an incompatible embedder. A store records its
+	// embedding dimension (emb_dims) and, once written, its embedder model
+	// (emb_model). Mixing embedders silently compares vectors across different
+	// spaces and returns garbage — the worst case is two embedders that share a
+	// dimension (e.g. the 384-dim mock vs bge-small), which the dim check alone
+	// would miss; the model check catches it.
 	if v, ok := meta.GetConfig("emb_dims"); ok {
-		if dims, err := strconv.Atoi(v); err == nil {
+		dims, convErr := strconv.Atoi(v)
+		if convErr == nil {
+			if d := embedder.Dims(); d > 0 && d != dims {
+				e.Close()
+				return nil, fmt.Errorf("engine: open %s: %w: store is %d-dim but embedder is %d-dim (one -dir = one embedder)", dir, core.ErrInvalidInput, dims, d)
+			}
 			if err := e.openEmb(dims); err != nil {
-				meta.Close()
+				e.Close()
 				return nil, err
 			}
 		}
 	} else if d := embedder.Dims(); d > 0 {
 		if err := e.openEmb(d); err != nil {
-			meta.Close()
+			e.Close()
 			return nil, err
 		}
 	}
+	// Eager model check when the embedder reports its model up front (e.g. mock);
+	// HTTP embedders report "" until the first call, so they are checked lazily in
+	// reconcileModel (first embed). e.Close() (not meta.Close()) so the now-open
+	// embedding-store file handle is released on the refuse path.
+	if m := embedder.Model(); m != "" {
+		if stored, ok := meta.GetConfig("emb_model"); ok && stored != m {
+			e.Close()
+			return nil, fmt.Errorf("engine: open %s: %w: store built with embedder %q, got %q (one -dir = one embedder)", dir, core.ErrInvalidInput, stored, m)
+		}
+	}
 	return e, nil
+}
+
+// reconcileModel persists the embedder's model on first use, or refuses if it
+// disagrees with the model the store was built with. It is safe to call from
+// concurrent read paths (guarded by modelMu; a no-op after the first success).
+func (e *Engine) reconcileModel() error {
+	e.modelMu.Lock()
+	defer e.modelMu.Unlock()
+	if e.modelOK {
+		return nil
+	}
+	m := e.embedder.Model()
+	if m == "" {
+		return nil // model not known yet (HTTP embedder before its first response)
+	}
+	stored, ok := e.meta.GetConfig("emb_model")
+	if !ok {
+		if err := e.meta.PutConfig("emb_model", m); err != nil {
+			return err
+		}
+		e.modelOK = true
+		return nil
+	}
+	if stored != m {
+		return fmt.Errorf("engine: %w: store built with embedder %q but %q is in use (one -dir = one embedder)", core.ErrInvalidInput, stored, m)
+	}
+	e.modelOK = true
+	return nil
 }
 
 // Close releases resources.
@@ -103,12 +156,26 @@ func (e *Engine) ensureEmb(dims int) error {
 
 // embedText embeds a single document/passage into a vector.
 func (e *Engine) embedText(ctx context.Context, text string) ([]float32, error) {
-	return one(e.embedder.Embed(ctx, []string{text}))
+	vec, err := one(e.embedder.Embed(ctx, []string{text}))
+	if err != nil {
+		return nil, err
+	}
+	if err := e.reconcileModel(); err != nil {
+		return nil, err
+	}
+	return vec, nil
 }
 
 // embedQuery embeds a single search query (instruction-prefixed for bge).
 func (e *Engine) embedQuery(ctx context.Context, text string) ([]float32, error) {
-	return one(e.embedder.EmbedQuery(ctx, []string{text}))
+	vec, err := one(e.embedder.EmbedQuery(ctx, []string{text}))
+	if err != nil {
+		return nil, err
+	}
+	if err := e.reconcileModel(); err != nil {
+		return nil, err
+	}
+	return vec, nil
 }
 
 func one(batch [][]float32, err error) ([]float32, error) {
