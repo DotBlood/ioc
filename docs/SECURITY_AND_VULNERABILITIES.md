@@ -135,7 +135,14 @@ recording as an explicit gate in VISION/roadmap.
 
 ---
 
-## Remediation roadmap (planned 2026-06-05; NOT yet implemented)
+## Remediation roadmap (planned 2026-06-05) — **IMPLEMENTED 2026-06-05**
+
+> **STATUS: all Phase A + Phase B items below are DONE** on `development/v0.2-review`, one commit each
+> with tests; full suite + `-race` green, `govulncheck` clean (toolchain bumped to go1.26.4). Commits:
+> V16 cycle guard, V18 govulncheck+toolchain, V4 file modes, V1+V17 ingest containment+provenance,
+> V9 ingest caps, V3 token, V6 framing/conns, V7 JSON depth, V2 embed-endpoint policy, V10 py server,
+> V8 embed response bounds. The VISION SaaS gate now points to the remaining TM2 follow-ups
+> (at-rest encryption, mTLS/token-rotation/per-method ACLs).
 
 Phased plan for the deferred items (V5/V11–V15 already fixed — see `REVIEW_FINDINGS.md` status). Each
 item = one commit with table-driven tests; honor the no-quick-fix rule (root-cause, edge cases,
