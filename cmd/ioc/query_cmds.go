@@ -22,6 +22,7 @@ func query(args []string) error {
 	minScore := fs.Float64("min-score", 0, "drop hits with cosine score below this")
 	rerank := fs.Bool("rerank", false, "cross-encoder rerank the top candidates (needs a real -embed)")
 	includeSuperseded := fs.Bool("include-superseded", false, "include superseded/archived (history) — default current view only")
+	recencyHalfLife := fs.Float64("recency-halflife-days", 0, "opt-in recency tie-breaker half-life in days (0=off; vector mode only)")
 	_ = fs.Parse(args)
 
 	scopeID, err := iocfmt.ParseScopeID(*scope)
@@ -36,18 +37,19 @@ func query(args []string) error {
 
 	qm, hier := iocfmt.ParseModeSpec(*mode)
 	qid, hits, err := e.Query(context.Background(), core.Query{
-		Scope:             scopeID,
-		Text:              *text,
-		Detail:            iocfmt.ParseDetail(*detail),
-		TopK:              *topk,
-		Tier:              iocfmt.ParseTier(*tier),
-		Kinds:             iocfmt.ParseKinds(*kind),
-		Mode:              qm,
-		Hierarchical:      hier,
-		CoarseK:           *coarseK,
-		MinScore:          *minScore,
-		Rerank:            *rerank,
-		IncludeSuperseded: *includeSuperseded,
+		Scope:               scopeID,
+		Text:                *text,
+		Detail:              iocfmt.ParseDetail(*detail),
+		TopK:                *topk,
+		Tier:                iocfmt.ParseTier(*tier),
+		Kinds:               iocfmt.ParseKinds(*kind),
+		Mode:                qm,
+		Hierarchical:        hier,
+		CoarseK:             *coarseK,
+		MinScore:            *minScore,
+		Rerank:              *rerank,
+		IncludeSuperseded:   *includeSuperseded,
+		RecencyHalfLifeDays: *recencyHalfLife,
 	})
 	if err != nil {
 		return err

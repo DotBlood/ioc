@@ -144,18 +144,19 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 		mode = core.ModeHybrid
 	}
 	qid, hits, err := a.svc.Query(ctx, core.Query{
-		Scope:             id,
-		Text:              text,
-		Detail:            iocfmt.ParseDetail(r.GetString("detail", "overview")),
-		TopK:              r.GetInt("topk", 5),
-		Tier:              iocfmt.ParseTier(r.GetString("tier", "")),
-		Kinds:             iocfmt.ParseKinds(r.GetString("kind", "")),
-		MinScore:          r.GetFloat("min_score", 0),
-		Mode:              mode,
-		Hierarchical:      hier,
-		CoarseK:           r.GetInt("coarsek", 0),
-		Rerank:            r.GetBool("rerank", false),
-		IncludeSuperseded: r.GetBool("include_superseded", false),
+		Scope:               id,
+		Text:                text,
+		Detail:              iocfmt.ParseDetail(r.GetString("detail", "overview")),
+		TopK:                r.GetInt("topk", 5),
+		Tier:                iocfmt.ParseTier(r.GetString("tier", "")),
+		Kinds:               iocfmt.ParseKinds(r.GetString("kind", "")),
+		MinScore:            r.GetFloat("min_score", 0),
+		Mode:                mode,
+		Hierarchical:        hier,
+		CoarseK:             r.GetInt("coarsek", 0),
+		Rerank:              r.GetBool("rerank", false),
+		IncludeSuperseded:   r.GetBool("include_superseded", false),
+		RecencyHalfLifeDays: r.GetFloat("recency_halflife_days", 0),
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil

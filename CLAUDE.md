@@ -162,7 +162,11 @@ Dependency direction (no cycles): `core` is a leaf; `embed`/`search` are leaves;
   The authoring agent declares replacement (`PushRequest.Supersedes`, or `Supersede(old,new)` post-hoc);
   nothing is deleted, and `Query.IncludeSuperseded` (CLI `-include-superseded`, MCP `include_superseded`,
   `ioc history`) surfaces the history with a `superseded_by` back-link. Detection stays with the LLM;
-  IOC keeps the bookkeeping + read-time view. See `docs/SUPERSESSION.md`.
+  IOC keeps the bookkeeping + read-time view. See `docs/SUPERSESSION.md`. Layer-2 ergonomics:
+  `Neighbors`/`ioc_neighbors` finds the most similar CURRENT memory to run BEFORE a push (so the agent
+  declares `supersedes=<ids>`); `Consolidate`/`ioc_consolidate` takes `supersedes` to retire what it
+  folds in atomically; `Query.RecencyHalfLifeDays` (`-recency-halflife-days` / `recency_halflife_days`)
+  is an **opt-in, off-by-default** recency tie-breaker (vector mode; demotes stable old truths — sparingly).
 
 ## Conventions
 

@@ -185,6 +185,7 @@ func (a *ioc) register(s *server.MCPServer) {
 		mcp.WithNumber("coarsek", mcp.Description("hierarchical coarse stage: # scopes to keep (0=default)")),
 		mcp.WithBoolean("rerank", mcp.Description("cross-encoder rerank the top candidates for higher precision")),
 		mcp.WithBoolean("include_superseded", mcp.Description("include superseded/archived (history); default false = current view only")),
+		mcp.WithNumber("recency_halflife_days", mcp.Description("opt-in recency tie-breaker half-life in days (0=off; demotes stable old truths, use sparingly)")),
 	), a.query)
 
 	s.AddTool(mcp.NewTool("ioc_neighbors",

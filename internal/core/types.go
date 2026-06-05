@@ -199,6 +199,14 @@ type Query struct {
 	// only the current view (drops artifacts with SupersededBy set and artifacts in
 	// Archived version scopes). Set true for a "show history" drill.
 	IncludeSuperseded bool
+
+	// RecencyHalfLifeDays, when > 0, blends a small recency term into the cosine
+	// ranking as a TIE-BREAKER among current atoms: score = α·cosine + (1−α)·decay,
+	// decay = 0.5^(ageDays/halfLife). 0 (default) = OFF, pure cosine. CAVEAT: this
+	// down-weights stable canonical truths just because they are old, so it is
+	// opt-in — supersession (not age) is the real currency signal. Ignored when
+	// reranking (the cross-encoder already orders). See docs/SUPERSESSION.md §8.
+	RecencyHalfLifeDays float64
 }
 
 // matchesKind reports whether k is in the (possibly empty=all) filter set.

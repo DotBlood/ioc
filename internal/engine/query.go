@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -12,6 +13,36 @@ import (
 )
 
 const defaultTopK = 5
+
+// recencyWeight is the (1−α) blend factor for the optional recency tie-breaker: the
+// recency term contributes at most this fraction, cosine the rest — small enough to
+// only break near-ties, not override a clearly-stronger semantic match.
+const recencyWeight = 0.15
+
+// clockNow is the time source for the recency tie-breaker; a var so tests can pin it.
+var clockNow = time.Now
+
+// blendRecency re-sorts candidates by α·cosine + (1−α)·0.5^(ageDays/halfLife). It
+// only reorders — the displayed Hit.Score stays cosine (like the rerank path).
+func blendRecency(ordered []search.Result, cosineByID map[string]float64, byID map[string]core.Artifact, halfLifeDays float64) []search.Result {
+	now := clockNow()
+	out := make([]search.Result, len(ordered))
+	for i, r := range ordered {
+		ageDays := now.Sub(byID[r.ID].CreatedAt).Hours() / 24
+		if ageDays < 0 {
+			ageDays = 0
+		}
+		decay := math.Pow(0.5, ageDays/halfLifeDays)
+		out[i] = search.Result{ID: r.ID, Score: (1-recencyWeight)*cosineByID[r.ID] + recencyWeight*decay}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Score != out[j].Score {
+			return out[i].Score > out[j].Score
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
 
 // Query runs progressive-disclosure retrieval from a viewpoint scope and returns
 // the trace's query ID alongside the hits (use it with Trace). Mode selects
@@ -116,6 +147,15 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 	ordered := vecRanked
 	if q.Mode == core.ModeHybrid {
 		ordered = search.RRF(60, vecRanked, bm.Search(q.Text, bm.Len()))
+	}
+
+	// Optional recency tie-breaker (opt-in, OFF by default): blend a small age-decay
+	// term into the cosine order among current atoms. Only on the pure-cosine path
+	// and only when NOT reranking (the cross-encoder already orders); see the caveat
+	// on Query.RecencyHalfLifeDays. Hit.Score stays cosine — this only reorders.
+	willRerank := q.Rerank && e.reranker != nil
+	if q.RecencyHalfLifeDays > 0 && q.Mode == core.ModeVector && !willRerank {
+		ordered = blendRecency(ordered, cosineByID, byID, q.RecencyHalfLifeDays)
 	}
 
 	// MinScore is a COSINE gate, applied here on the candidate set — before rerank,

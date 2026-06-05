@@ -10,11 +10,20 @@
 > - Surface: CLI `ioc push -supersedes`, `ioc supersede -old -by`, `ioc query -include-superseded`, `ioc history -artifact`; MCP `ioc_push supersedes`, `ioc_supersede`, `ioc_query include_superseded`. Append-only — nothing is deleted; a wrong supersession is reversible.
 > - Append-only, never delete (principle held); detection stays with the agent (no LLM in core).
 >
-> Deliberately NOT built (documented limits, not silent gaps): per-claim/partial supersession (model is
-> whole-atom boolean — transitive chains work, partial overlap is lossy); automatic contradiction
-> detection (agent-declared only — the `Neighbors` assist helper and `Consolidate`-time batch
-> reconciliation from §4/§5 are deferred); recency tie-breaker among current atoms (§8 phase 4). These
-> are tracked here as the next increments; the core current-view mechanism and its falsification are done.
+> **UPDATE 2026-06 — layer-2 IMPLEMENTED (§8 phases 2–4):**
+> - `engine.Neighbors(scope, text, k)` + `ioc_neighbors` / `ioc neighbors` — the dedup/supersede lookup
+>   to run BEFORE pushing (the §4/§5 agent-driven detection assist).
+> - `engine.Consolidate(..., supersedes)` + `ioc_consolidate supersedes` / `ioc consolidate -supersedes`
+>   — batch reconciliation at a branch transition (atomically retire what a consolidation folds in;
+>   shared `loadSupersedeTargets`/`markSupersededBy` with Push).
+> - Recency tie-breaker `Query.RecencyHalfLifeDays` (CLI `-recency-halflife-days`, MCP
+>   `recency_halflife_days`) — **opt-in, OFF by default** (α·cos + small age-decay, vector mode, skipped
+>   when reranking). Honest caveat in the field doc: it demotes stable canonical truths, so supersession
+>   (not age) stays the real currency signal. Smoke-validated on the real embedder.
+>
+> Still NOT built (documented limits, not silent gaps): per-claim/partial supersession (model is
+> whole-atom boolean — transitive chains work, partial overlap is lossy); automatic (non-agent-declared)
+> contradiction detection (IOC never calls an LLM — detection stays with the caller, assisted by Neighbors).
 
 
 This is the deepest risk in IOC, above any individual bug: an append-only store of LLM-authored
