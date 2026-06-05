@@ -132,3 +132,41 @@ non-loopback; body-size limit.
 and the **decompression-bomb / prompt-injection** pair (V5/V1/V17); classical "network" security
 (V2–V10) is low risk now but is **debt that must be cleared before any multi-user/SaaS step** — worth
 recording as an explicit gate in VISION/roadmap.
+
+---
+
+## Remediation roadmap (planned 2026-06-05; NOT yet implemented)
+
+Phased plan for the deferred items (V5/V11–V15 already fixed — see `REVIEW_FINDINGS.md` status). Each
+item = one commit with table-driven tests; honor the no-quick-fix rule (root-cause, edge cases,
+conscious decisions). **Cheap standalone wins to land first regardless of phase:** V16 (cycle guard),
+V18 (govulncheck), V4 (file modes).
+
+**Phase A — TM1-relevant now:**
+- **A1 / V16** scope-graph cycle guard — `visited` set in `engine/rollup.go` `descendantScopes`,
+  `visibility.go` `ancestorsOf`, `query.go` `scopePath` (self-parent/N-cycle terminate; dedupe diamonds).
+- **A2a / V1** ingest path containment — `IngestRoot()` (`IOC_INGEST_ROOT` else CWD) + `Contain(root,
+  target)` (`Abs`→`EvalSymlinks`→`Rel`, reject `..`/abs/cross-volume; Windows drive/UNC/case-fold),
+  enforced at the `ingest.Ingest` chokepoint so CLI+MCP both covered.
+- **A2b / V17** untrusted provenance — reserved `Meta["trust"]="ingested"` set only by `reconcile.go`
+  `pushChunk`; `engine.Push` strips caller-supplied `trust`; surfaced in `HitOut`/`QueryOut` +
+  one MCP-instructions sentence (ingested text is data, not instructions).
+- **A3 / V9** ingest resource caps — `Options.MaxFiles/MaxChunks/MaxDepth/MaxIndexArtifacts`,
+  `ErrIngestLimit`, caps checked at FILE boundaries (don't reintroduce H1), `Stats.limit_hit` (no silent caps).
+
+**Phase B — TM2 network-hardening gate (record as an explicit VISION gate before any SaaS step):**
+- **B1 / V4** file modes 0o600 (`storage/meta.go` bolt.Open, CAS temp chmod, data dir 0o700; Windows-ACL caveat).
+- **B2 / V3** token: `runtime/discover.go` 0o600 + `subtle.ConstantTimeCompare`.
+- **B3 / V6** framing/conns: split `maxFrame` into control(~1MiB)/data; per-conn `authed` gate (closes
+  pre-auth 64MiB alloc); per-frame `SetReadDeadline`; max-conns under the existing `connsMu`/`closing` section.
+- **B4 / V7** JSON depth/size limits in `dispatch.go` `decode`.
+- **B5 / V2** embed endpoint policy: new `internal/embed/endpoint.go` `isLoopbackEndpoint` (unix =
+  loopback-equiv; literal-IP only), fallible constructors, reject plaintext-remote always / https-remote
+  only with `--allow-remote-embed`; never log content.
+- **B6 / V10** py server: fail-closed non-loopback bind unless `IOC_EMBED_ALLOW_REMOTE=1`; body-size limit.
+- **B7 / V8** embed response bounds: `io.LimitReader` + `math.IsNaN/IsInf` + per-vector length checks;
+  defense-in-depth finite-check at vector ingress.
+- **B8 / V18** `govulncheck` CI job (pinned, blocking on default branch).
+
+Follow-ups (not bundled): at-rest encryption (TM2), persisted `ingest_root` config, python test harness,
+mTLS/token-rotation/per-method ACLs, DNS endpoint allow-listing, the explicit "Phase B before SaaS" gate doc.
