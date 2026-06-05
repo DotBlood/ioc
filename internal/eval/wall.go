@@ -2,6 +2,7 @@ package eval
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,23 @@ import (
 	"github.com/DotBlood/ioc/internal/core"
 	"github.com/DotBlood/ioc/internal/engine"
 )
+
+// realWallSeed is the hand-authored reasoning-wall corpus (the 28 real distilled
+// decisions + 27 blind questions + currency pair). gen-wall reuses it as the
+// "real" seed and pads it with synthetic distractors to reach scale, so the
+// questions/gold stay genuine while the corpus grows.
+//
+//go:embed scenarios/wall.json
+var realWallSeed []byte
+
+// RealWallSpec returns the embedded hand-authored wall corpus.
+func RealWallSpec() (*WallSpec, error) {
+	var s WallSpec
+	if err := json.Unmarshal(realWallSeed, &s); err != nil {
+		return nil, fmt.Errorf("eval: parse embedded wall seed: %w", err)
+	}
+	return &s, nil
+}
 
 // The reasoning-wall experiment (docs/WALL_EXPERIMENT.md).
 //
@@ -91,8 +109,10 @@ type WallReport struct {
 
 // WallRun builds the corpus, runs overview-only retrieval for each question, and
 // writes the judging packets and gold sidecar. It returns the retrieval-level
-// report (answer scoring happens externally against the gold file).
-func WallRun(ctx context.Context, e *engine.Engine, spec *WallSpec, packetsW, goldW io.Writer) (*WallReport, error) {
+// report (answer scoring happens externally against the gold file). mode/
+// hierarchical/coarseK/rerank select the retrieval configuration so the same
+// corpus+questions can be measured flat-vector vs hierarchical vs +rerank at scale.
+func WallRun(ctx context.Context, e *engine.Engine, spec *WallSpec, packetsW, goldW io.Writer, mode core.QueryMode, hierarchical bool, coarseK int, rerank bool) (*WallReport, error) {
 	topK := spec.TopK
 	if topK <= 0 {
 		topK = 5
@@ -118,7 +138,10 @@ func WallRun(ctx context.Context, e *engine.Engine, spec *WallSpec, packetsW, go
 		if err != nil {
 			return nil, fmt.Errorf("question %q: %w", q.ID, err)
 		}
-		_, hits, err := e.Query(ctx, core.Query{Scope: scope, Text: q.Question, Detail: core.DetailOverview, TopK: topK})
+		_, hits, err := e.Query(ctx, core.Query{
+			Scope: scope, Text: q.Question, Detail: core.DetailOverview, TopK: topK,
+			Mode: mode, Hierarchical: hierarchical, CoarseK: coarseK, Rerank: rerank,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("question %q: %w", q.ID, err)
 		}

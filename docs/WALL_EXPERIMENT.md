@@ -101,11 +101,61 @@ go run ./cmd/ioc wall internal/eval/scenarios/wall.json -embed http://127.0.0.1:
 # objective retrieval facts (gold-ref ranks, current-vs-superseded) are in gold.jsonl
 ```
 
+## Scale (~180 artifacts, 2026-06-05)
+
+To test whether the wall survives the recall drop at the known hard scale, the **same 27
+real questions + gold + their real artifacts** were padded with **~152 synthetic distractor**
+reasoning artifacts (generic infra decisions) to 180, via a reusable generator
+(`ioc gen-wall`, `internal/eval/scenarios/wall-180-{flat,tree}.json`). The questions/gold
+stay genuine; the distractors create the recall pressure. `ioc wall` gained `-mode/-coarsek/
+-rerank`. Run on real bge-small, topK=5; gold-ref recall@topK and currency are code-measured.
+
+| corpus / config | gold-ref recall@topK | currency |
+|---|---|---|
+| flat / vector | 0.85 | 1/1 |
+| **flat / vector + rerank** | **0.93** | 1/1 |
+| tree / hierarchical | 0.74 | 1/1 |
+| tree / hierarchical + rerank | 0.74 | 1/1 |
+| tree / hierarchical, coarseK=10 | 0.78 | 1/1 |
+
+Blind-judged (one packet per judge; isolated for the recall-miss and the absent probe) +
+graded vs gold in the best config (**flat + rerank**): **answer-grounded sufficiency 27/27**.
+
+**Reading it honestly:**
+- **The wall holds at 180.** Flat vector recall fell only 0.93→0.85 going 28→180 — the
+  distinctive real reasoning artifacts resist the scale crater (unlike the near-duplicate
+  generic scale corpus where flat vector collapses to ~0.33). **Rerank recovers 0.85→0.93**:
+  the cross-encoder promotes a gold the embedding ranked 6–20 back into the top-5. Every
+  retrieved gold summary was answerable by the blind judge; distractors that leaked into the
+  lower slots (PostgreSQL, JWT, Redis…) did **not** mislead it.
+- **Hierarchical HURTS this corpus (0.74), and rerank can't save it.** This refines the
+  CLAUDE.md claim "hierarchical is best at scale": that holds only for **dense near-duplicate
+  clusters**, where flat vector cannot separate hits. For **distinctive** reasoning artifacts
+  scattered among topical distractors, the coarse stage routes the query to the wrong session
+  and **drops the gold artifact's scope entirely** — so rerank never sees it (still 0.74), and a
+  wider coarseK only nudges it to 0.78. Lesson: pick the retrieval mode by corpus density, not
+  by scale alone; flat + rerank is the right default for a distinctive reasoning corpus.
+- **Currency holds at scale (1/1 in every config).** The superseded v0.1 artifact is excluded
+  from candidates regardless of corpus size or retrieval mode — #61's mechanism is robust at 180.
+- **No false confidence under distractor pressure.** The absent probe ("which database does IOC
+  use to BILL customers?") now retrieves only distractors about a PostgreSQL *storage* decision;
+  the blind judge still correctly answered **INSUFFICIENT**, distinguishing "storage engine" from
+  "billing." This is the strongest honesty signal of the run.
+- **Honest caveat on the 27/27.** `q-scale-cosine` still does not retrieve its own gold artifact
+  (R1) — at 180 it passed only because a *sibling* note ("…0.94 recall at 180 vs 0.33 for vector
+  alone") happened to land in its top-5 and grounded the size, while the judge explicitly flagged
+  that the mechanism was not in its notes. So the wall's one weak spot is unchanged; it was merely
+  answerable from a neighbour this time. Also: synthetic distractors are less adversarial than a
+  real foreign corpus — see the document-ingest 0/4 result, which this experiment does not refute.
+
 ## Verdict
 
-The reasoning wall **holds at small scale on the real embedder** (0.96 answer-grounded,
-no false confidence), with the single miss attributable to recall, not to the overview
-being too thin.
+The reasoning wall **holds on the real embedder at both 28 and ~180 artifacts** — 0.96 and
+27/27 answer-grounded, no false confidence even under distractor pressure — with the single
+weak spot (`q-scale-cosine`) attributable to recall, not to the overview being too thin. The
+decisive scale lesson is that **retrieval mode must match corpus density**: flat + rerank is the
+right default for distinctive reasoning memory; hierarchical helps only dense near-duplicate
+corpora and otherwise drops the target by misrouting.
 
 **Currency — moved (#61).** The baseline showed, on the real embedder, that a superseded
 artifact outranked the current one and was only saved at the answer level by self-marking

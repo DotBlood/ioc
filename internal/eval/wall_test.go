@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DotBlood/ioc/internal/core"
 	"github.com/DotBlood/ioc/internal/embed"
 	"github.com/DotBlood/ioc/internal/engine"
 )
@@ -60,7 +61,7 @@ func TestWallRun(t *testing.T) {
 	}
 
 	var packets, gold bytes.Buffer
-	rep, err := WallRun(ctx, e, spec, &packets, &gold)
+	rep, err := WallRun(ctx, e, spec, &packets, &gold, core.ModeVector, false, 0, false)
 	if err != nil {
 		t.Fatalf("WallRun: %v", err)
 	}
@@ -123,7 +124,52 @@ func TestWallRun_RejectsQueryInBuild(t *testing.T) {
 		Build: []Turn{{Op: "query", Scope: "root", Text: "x"}},
 	}
 	var p, g bytes.Buffer
-	if _, err := WallRun(ctx, e, spec, &p, &g); err == nil {
+	if _, err := WallRun(ctx, e, spec, &p, &g, core.ModeVector, false, 0, false); err == nil {
 		t.Fatal("expected an error for a query op in the build")
+	}
+}
+
+// WallRun must honor hierarchical retrieval: with rollups on sub-scopes and the
+// query viewpoint at the parent, a gold artifact living in a descendant session
+// (invisible to a flat bottom-up query) is found via coarse→fine routing.
+func TestWallRun_Hierarchical(t *testing.T) {
+	ctx := context.Background()
+	e, err := engine.Open(ctx, t.TempDir(), embed.NewMockEmbedder(64))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer e.Close()
+
+	spec := &WallSpec{
+		Name: "wall-hier-test",
+		TopK: 5,
+		Build: []Turn{
+			{Op: "create_scope", ID: "wt", Parent: "root", Role: "worktree", Title: "ioc"},
+			{Op: "create_scope", ID: "ws", Parent: "wt", Role: "workspace", Title: "decisions"},
+			{Op: "create_scope", ID: "s0", Parent: "ws", Role: "session", Title: "storage"},
+			{Op: "push", Scope: "s0", As: "durable", Kind: "reasoning",
+				Summary: "embeddings are durable via an append-only file with an fsync on flush"},
+			{Op: "rollup", Scope: "s0", Summary: "storage and durability of embeddings and content"},
+			{Op: "create_scope", ID: "s1", Parent: "ws", Role: "session", Title: "runtime"},
+			{Op: "push", Scope: "s1", As: "daemon", Kind: "reasoning",
+				Summary: "a single daemon owns the store and serves clients over a loopback protocol"},
+			{Op: "rollup", Scope: "s1", Summary: "runtime daemon and client protocol"},
+		},
+		Questions: []WallQuestion{
+			{ID: "q-durable", Scope: "ws", GoldRefs: []string{"durable"},
+				Question: "how are embeddings made durable", Gold: "append-only file, fsync on flush"},
+		},
+	}
+	var packets, gold bytes.Buffer
+	rep, err := WallRun(ctx, e, spec, &packets, &gold, core.ModeHybrid, true, 0, false)
+	if err != nil {
+		t.Fatalf("WallRun hierarchical: %v", err)
+	}
+	golds := decodeJSONL[WallGold](t, gold.Bytes())
+	if len(golds) != 1 || !golds[0].GoldFound {
+		t.Fatalf("hierarchical retrieval should find the gold artifact in a descendant session: %+v", golds)
+	}
+	if rep.GoldRecall != 1.0 {
+		t.Fatalf("expected gold recall 1.0, got %v", rep.GoldRecall)
 	}
 }

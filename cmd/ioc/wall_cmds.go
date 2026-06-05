@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/DotBlood/ioc/internal/eval"
+	"github.com/DotBlood/ioc/internal/iocfmt"
 )
 
 // runWall builds a reasoning-wall corpus in a throwaway store and emits the
@@ -19,6 +20,9 @@ func runWall(args []string) int {
 	dir := fs.String("dir", filepath.Join(os.TempDir(), "ioc-wall"), "run data directory (reset each run)")
 	em := fs.String("embed", "", "embedder endpoint (empty=mock)")
 	out := fs.String("out", "", "output directory for packets.jsonl/gold.jsonl (default: <dir>)")
+	mode := fs.String("mode", "vector", "retrieval mode: vector|hybrid|hierarchical")
+	coarseK := fs.Int("coarsek", 0, "hierarchical coarse stage: # scopes to keep (0=engine default)")
+	rerank := fs.Bool("rerank", false, "cross-encoder rerank the top candidates (needs a real -embed)")
 	specPath, rest := splitPositional(args)
 	_ = fs.Parse(rest)
 	if specPath == "" {
@@ -34,8 +38,7 @@ func runWall(args []string) int {
 		fmt.Fprintln(os.Stderr, "error: reset dir:", err)
 		return 1
 	}
-	// The wall corpus is reasoning-only; rerank needs no endpoint here.
-	e, err := openEngineEmbedded(*dir, *em, false)
+	e, err := openEngineEmbedded(*dir, *em, *rerank)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: open engine:", err)
 		return 1
@@ -65,11 +68,13 @@ func runWall(args []string) int {
 	}
 	defer gf.Close()
 
-	rep, err := eval.WallRun(context.Background(), e, spec, pf, gf)
+	qm, hier := iocfmt.ParseModeSpec(*mode)
+	rep, err := eval.WallRun(context.Background(), e, spec, pf, gf, qm, hier, *coarseK, *rerank)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: wall run:", err)
 		return 1
 	}
+	fmt.Printf("config: mode=%s coarsek=%d rerank=%v\n", *mode, *coarseK, *rerank)
 	fmt.Print(rep.String())
 	fmt.Printf("blind judge packets: %s\n", packetsPath)
 	fmt.Printf("gold + retrieval facts: %s\n", goldPath)

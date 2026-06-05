@@ -47,8 +47,11 @@ Retrieval modes (`-mode` / `Query.Mode`+`Hierarchical`+`CoarseK`):
 - `vector` (default) — cosine; best at small scale.
 - `hybrid` — vector+BM25 via RRF; helps at scale, can hurt at small N.
 - `hierarchical` — coarse-rank scope rollups → **hybrid** fine within top `CoarseK` (~6) scopes;
-  needs `RollupScope` on sub-scopes. **Best at scale:** recall@topK ~0.94 at 180 artifacts vs 0.33
-  vector-only / 0.67 flat-hybrid (real bge-small). Pure-vector hierarchy does NOT help.
+  needs `RollupScope` on sub-scopes. **Best for DENSE near-duplicate corpora at scale:** recall@topK
+  ~0.94 at 180 artifacts vs 0.33 vector-only / 0.67 flat-hybrid (real bge-small). Pure-vector hierarchy
+  does NOT help. **Caveat (measured, `docs/WALL_EXPERIMENT.md` scale run):** for a corpus of *distinctive*
+  artifacts among topical distractors, hierarchical HURTS (0.74) — coarse routing drops the target's
+  scope — and **flat vector + rerank wins (0.93)**. Pick the mode by corpus density, not scale alone.
 
 `query` returns `query_id`, `weak_match`, `top_score`, `margin`, and `ranked_by` — these read the
 signal that actually ordered the hits: cosine (per-embedder `core.ConfidenceFloor`, ~0.68 bge-small)

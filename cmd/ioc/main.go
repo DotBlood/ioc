@@ -30,6 +30,8 @@ func main() {
 		err = embedPing(args)
 	case "gen-scenario":
 		err = genScenario(args)
+	case "gen-wall":
+		err = genWall(args)
 	case "ingest":
 		err = ingestCmd(args)
 	case "serve":
@@ -81,7 +83,8 @@ func usage() {
 
 commands:
   run-scenario <file.json> [-dir d] [-embed e] [-mode m]  run a scripted eval scenario
-  wall <spec.json> [-dir d] [-embed e] [-out D]  reasoning-wall: build corpus, emit blind judge packets + gold
+  wall <spec.json> [-dir d] [-embed e] [-out D] [-mode m] [-coarsek N] [-rerank]  reasoning-wall: build corpus, emit blind judge packets + gold
+  gen-wall -out F [-shape flat|tree] [-n N] [-distractor-clusters C]  generate a ~N-artifact wall spec (real seed + distractors)
   gen-scenario -out F [-n N] [-clusters C] [-shape flat|tree]  generate a scale scenario
   embed-ping [-embed e]                          check the embedding service
   create-scope [-parent ID] -role R -title T     create a scope
