@@ -22,7 +22,13 @@ import numpy as np
 import uvicorn
 from fastapi import FastAPI, Response
 from pydantic import BaseModel
-from sentence_transformers import CrossEncoder, SentenceTransformer
+
+# sentence-transformers (and torch) are heavy. Import lazily so the module can be
+# imported for tests without them installed — tests monkeypatch get_model/get_reranker.
+try:
+    from sentence_transformers import CrossEncoder, SentenceTransformer
+except ImportError:  # pragma: no cover - exercised only when the dep is absent
+    SentenceTransformer = CrossEncoder = None
 
 logger = logging.getLogger("ioc-embedder")
 
@@ -33,9 +39,25 @@ SOCKET_PATH = os.environ.get(
     os.environ.get("XDG_RUNTIME_DIR", "/tmp") + "/ioc/embedder.sock",
 )
 
-logger.info("loading model: %s", MODEL_NAME)
-model = SentenceTransformer(MODEL_NAME)
-logger.info("model loaded: %s, dimension=%d", MODEL_NAME, model.get_sentence_embedding_dimension())
+# The embedding model loads lazily on first use (like the reranker) so importing
+# this module is cheap (no ~400MB download at import time).
+_model = None
+
+
+def get_model():
+    global _model
+    if _model is None:
+        if SentenceTransformer is None:
+            raise RuntimeError("sentence-transformers is not installed")
+        logger.info("loading model: %s", MODEL_NAME)
+        _model = SentenceTransformer(MODEL_NAME)
+        logger.info(
+            "model loaded: %s, dimension=%d",
+            MODEL_NAME,
+            _model.get_sentence_embedding_dimension(),
+        )
+    return _model
+
 
 app = FastAPI(title="IOC Embedder", version="0.1.0")
 
@@ -89,7 +111,7 @@ async def health():
     return {
         "status": "ok",
         "model": MODEL_NAME,
-        "dimension": model.get_sentence_embedding_dimension(),
+        "dimension": get_model().get_sentence_embedding_dimension(),
     }
 
 
@@ -102,7 +124,7 @@ async def embed(req: EmbedRequest):
             media_type="application/json",
         )
 
-    embeddings = model.encode(req.texts, normalize_embeddings=True)
+    embeddings = get_model().encode(req.texts, normalize_embeddings=True)
     dimension = embeddings.shape[1]
 
     vectors = embeddings.astype(np.float32).tolist()
@@ -121,6 +143,8 @@ _reranker = None
 def get_reranker():
     global _reranker
     if _reranker is None:
+        if CrossEncoder is None:
+            raise RuntimeError("sentence-transformers is not installed")
         logger.info("loading reranker: %s", RERANK_MODEL)
         _reranker = CrossEncoder(RERANK_MODEL)
     return _reranker
