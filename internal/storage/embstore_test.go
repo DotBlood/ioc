@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"testing"
@@ -117,6 +118,52 @@ func TestEmbStoreTornTailIgnored(t *testing.T) {
 	}
 	if s2.Len() != n+1 {
 		t.Fatalf("len after recovery put = %d, want %d", s2.Len(), n+1)
+	}
+}
+
+// M1: a header count larger than the records physically present (crash /
+// corruption) must be clamped on reopen — Get must not panic.
+func TestEmbStoreOverstatedCountClamped(t *testing.T) {
+	const dims, n = 4, 5
+	p := filepath.Join(t.TempDir(), "emb.dat")
+
+	s, err := OpenEmbeddingStore(p, dims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < n; i++ {
+		if _, err := s.Put(mkVec(dims, i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.Close()
+
+	// Corrupt the header to claim n+3 records (no extra record bytes present).
+	f, err := os.OpenFile(p, os.O_RDWR, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hdr [4]byte
+	binary.LittleEndian.PutUint32(hdr[:], uint32(n+3))
+	if _, err := f.WriteAt(hdr[:], 0); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	s2, err := OpenEmbeddingStore(p, dims)
+	if err != nil {
+		t.Fatalf("reopen with overstated count: %v", err)
+	}
+	defer s2.Close()
+	if s2.Len() != n {
+		t.Fatalf("count not clamped: Len=%d, want %d", s2.Len(), n)
+	}
+	// Get of the last real record must work; beyond must error (not panic).
+	if _, err := s2.Get(core.EmbeddingRef(n)); err != nil {
+		t.Fatalf("get last real record: %v", err)
+	}
+	if _, err := s2.Get(core.EmbeddingRef(n + 1)); err == nil {
+		t.Fatal("expected out-of-range error for a clamped-away ref")
 	}
 }
 

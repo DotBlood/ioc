@@ -78,6 +78,14 @@ func OpenEmbeddingStore(path string, dims int) (*EmbeddingStore, error) {
 			return nil, fmt.Errorf("embedding store: dims mismatch: file=%d requested=%d", fileDims, dims)
 		}
 		count = int(binary.LittleEndian.Uint32(header[0:8]))
+		// Clamp the header count to the records physically present. A crash
+		// between writing a record and committing the header, or any external
+		// truncation/corruption, can leave count > the actual records; without
+		// this clamp Get would slice past the buffer and PANIC. Clamping is
+		// idempotent (recomputed each Open) and drops a torn tail safely.
+		if max := (fileSize - embHeaderSize) / recSize; count > max {
+			count = max
+		}
 	}
 
 	buf := make([]byte, fileSize)
