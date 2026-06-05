@@ -58,6 +58,22 @@ func TestCAS_AtomicStoreNoTempLeftover(t *testing.T) {
 	}))
 }
 
+// V5: Load must refuse to decompress past the configured cap (bomb defense)
+// instead of allocating unbounded memory.
+func TestCAS_DecompressionBombCapped(t *testing.T) {
+	ctx := context.Background()
+	old := maxCASDecodedBytes
+	maxCASDecodedBytes = 1 << 20 // 1 MiB cap for this test
+	defer func() { maxCASDecodedBytes = old }()
+
+	c := NewCAS(t.TempDir())
+	big := make([]byte, 8<<20) // 8 MiB of zeros — compresses tiny, expands past the cap
+	h, err := c.StoreBytes(ctx, big)
+	require.NoError(t, err)
+	_, err = c.Load(ctx, h)
+	require.Error(t, err, "decompressing past the cap must error, not OOM")
+}
+
 func TestEmbeddingStore_PutGetPersist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "emb.dat")
 

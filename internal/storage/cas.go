@@ -26,6 +26,12 @@ type CAS struct {
 	root string
 }
 
+// maxCASDecodedBytes bounds zstd decompression on Load to defend against a
+// decompression bomb (a tiny stored object that expands to gigabytes → OOM).
+// Legitimate blobs (chunks ≤512 KiB, distilled summaries/answers) are far below
+// this. Package var so tests can lower it.
+var maxCASDecodedBytes uint64 = 128 << 20 // 128 MiB
+
 // NewCAS creates a content-addressable store rooted at the given directory.
 func NewCAS(root string) *CAS { return &CAS{root: root} }
 
@@ -91,7 +97,7 @@ func (c *CAS) Load(_ context.Context, hash core.ContentHash) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("cas load: read: %w", err)
 	}
-	dec, err := zstd.NewReader(nil)
+	dec, err := zstd.NewReader(nil, zstd.WithDecoderMaxMemory(maxCASDecodedBytes))
 	if err != nil {
 		return nil, fmt.Errorf("cas load: zstd reader: %w", err)
 	}
