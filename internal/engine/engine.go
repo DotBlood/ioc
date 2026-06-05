@@ -244,6 +244,28 @@ func (e *Engine) Push(ctx context.Context, r core.PushRequest) (core.Artifact, e
 		kind = core.KindInsight
 	}
 
+	// Provenance is engine-asserted, not caller-asserted (V17): strip any
+	// Meta["trust"] a caller tried to set, then write it ONLY from the dedicated
+	// PushRequest.Trust field — so an external ioc_push cannot forge "ingested"
+	// (or launder ingested content as authored). Only allocate when trust is
+	// involved, and never mutate the caller's map.
+	meta := r.Meta
+	if _, forged := meta["trust"]; forged || r.Trust != "" {
+		m := make(map[string]string, len(r.Meta)+1)
+		for k, v := range r.Meta {
+			if k != "trust" {
+				m[k] = v
+			}
+		}
+		if r.Trust != "" {
+			m["trust"] = r.Trust
+		}
+		meta = m
+		if len(meta) == 0 {
+			meta = nil
+		}
+	}
+
 	var content core.ContentHash
 	if r.Content != nil {
 		h, err := e.cas.StoreBytes(ctx, r.Content)
@@ -283,7 +305,7 @@ func (e *Engine) Push(ctx context.Context, r core.PushRequest) (core.Artifact, e
 		Content:     content,
 		DerivedFrom: unionIDs(r.DerivedFrom, r.Supersedes), // lineage records what it replaced
 		Published:   r.Publish,
-		Meta:        r.Meta,
+		Meta:        meta,
 		CreatedAt:   time.Now(),
 	}
 	if err := e.meta.PutArtifact(a); err != nil {

@@ -66,10 +66,20 @@ func newRoot(t *testing.T, e *engine.Engine) core.ID {
 	return s.ID
 }
 
+// ingestRootDir returns a fresh temp dir AND declares it the ingest sandbox root
+// (IOC_INGEST_ROOT) — required since V1 confines ingest to that root, and a test
+// tree lives under the OS temp dir, outside the process CWD default.
+func ingestRootDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv(IngestRootEnv, dir)
+	return dir
+}
+
 func TestIngestIdempotent(t *testing.T) {
 	ctx := context.Background()
 	e := openTestEngine(t)
-	dir := t.TempDir()
+	dir := ingestRootDir(t)
 	write(t, filepath.Join(dir, "a.txt"), "alpha file\nsecond line\n")
 	write(t, filepath.Join(dir, "sub", "b.txt"), "bravo content here\n")
 	root := newRoot(t, e)
@@ -109,7 +119,7 @@ func TestIngestIdempotent(t *testing.T) {
 func TestIngestUpdateAddRemove(t *testing.T) {
 	ctx := context.Background()
 	e := openTestEngine(t)
-	dir := t.TempDir()
+	dir := ingestRootDir(t)
 	write(t, filepath.Join(dir, "a.txt"), "alpha\n")
 	write(t, filepath.Join(dir, "keep", "k.txt"), "keep me\n")
 	write(t, filepath.Join(dir, "gone", "g.txt"), "delete me\n")

@@ -154,7 +154,17 @@ type PushRequest struct {
 	// the change). Push marks each as SupersededBy this new artifact and records the
 	// lineage in DerivedFrom. See docs/SUPERSESSION.md.
 	Supersedes []ID
+	// Trust is engine-asserted provenance written into Meta["trust"] (e.g.
+	// TrustIngested for untrusted file content). It is a dedicated field, NOT a Meta
+	// key, so an external caller cannot forge it via Meta — Push strips any
+	// caller-supplied Meta["trust"] and sets it only from here. Empty = authored
+	// (trusted), the default. See V17 in docs/SECURITY_AND_VULNERABILITIES.md.
+	Trust string
 }
+
+// TrustIngested marks an artifact whose content came from ingested files — it is
+// UNTRUSTED data (potential indirect prompt injection), not authored reasoning.
+const TrustIngested = "ingested"
 
 // QueryMode selects the retrieval strategy.
 type QueryMode uint8

@@ -30,7 +30,7 @@ func (f *failingStore) Push(ctx context.Context, r core.PushRequest) (core.Artif
 func TestIngestPartialWriteHeals(t *testing.T) {
 	ctx := context.Background()
 	e := openTestEngine(t)
-	dir := t.TempDir()
+	dir := ingestRootDir(t)
 	// 3 short paragraphs → 3 chunks at maxChars=20 (Generic, .txt).
 	write(t, filepath.Join(dir, "f.txt"), "alpha one line\n\nbravo two line\n\ncharlie three x\n")
 	root := newRoot(t, e)

@@ -44,6 +44,13 @@ type Stats struct {
 // each text file carries a content+params signature (Meta["sig"]) and directory
 // scopes are reused by (parent, title) rather than recreated.
 func Ingest(ctx context.Context, e Store, root string, rootScope core.ID, opt Options) (Stats, error) {
+	// Containment (V1): refuse to ingest outside the configured sandbox root, so a
+	// model-chosen path cannot pull arbitrary local files (secrets) into memory.
+	contained, err := Contain(IngestRoot(), root)
+	if err != nil {
+		return Stats{}, err
+	}
+	root = contained
 	if opt.MaxChars <= 0 {
 		opt.MaxChars = DefaultMaxChars
 	}

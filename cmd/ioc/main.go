@@ -91,7 +91,7 @@ commands:
   push -scope ID -summary S [-kind K] [-content X|-content-file F] [-publish] [-supersedes id1,id2]
   supersede -old ID -by ID                       mark an artifact superseded by another (currency)
   history -artifact ID                           show an artifact's supersession chain
-  ingest <path> [-scope ID] [-title T] [-maxchars N] [-overlap N]  mirror a dir tree into scopes; chunk files as documents
+  ingest <path> [-scope ID] [-title T] [-maxchars N] [-overlap N]  mirror a dir tree into scopes; chunk files as documents (path must be inside IOC_INGEST_ROOT or cwd)
   serve [-dir d] [-embed e]                      run the runtime daemon (single owner of -dir; clients connect via runtime.json)
   runtime status|stop [-dir d]                   inspect or stop the runtime daemon owning -dir
   query -scope ID -text T [-detail overview|entry|raw] [-topk N] [-tier t] [-kind k] [-mode m] [-include-superseded]

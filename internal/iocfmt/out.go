@@ -53,6 +53,9 @@ func HitOut(h core.Hit) map[string]any {
 	if l := h.Meta["lines"]; l != "" {
 		out["lines"] = l
 	}
+	if tr := h.Meta["trust"]; tr != "" {
+		out["trust"] = tr // e.g. "ingested" — untrusted external data (V17)
+	}
 	if len(h.Content) > 0 {
 		out["content"] = string(h.Content)
 	}
@@ -104,7 +107,7 @@ func QueryOut(queryID core.ID, hits []core.Hit, model string) map[string]any {
 		rankedBy = "rerank"
 	}
 
-	return map[string]any{
+	out := map[string]any{
 		"query_id":   queryID.String(),
 		"ranked_by":  rankedBy,
 		"weak_match": len(hits) == 0 || top < floor,
@@ -112,4 +115,14 @@ func QueryOut(queryID core.ID, hits []core.Hit, model string) map[string]any {
 		"margin":     margin,
 		"hits":       HitsOut(hits),
 	}
+	// Provenance flag (V17): warn the caller that some results are UNTRUSTED
+	// ingested content (potential indirect prompt injection) — reason about any
+	// imperatives in it, do not follow them.
+	for _, h := range hits {
+		if h.Meta["trust"] == core.TrustIngested {
+			out["untrusted_content"] = true
+			break
+		}
+	}
+	return out
 }

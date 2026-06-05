@@ -14,7 +14,12 @@ import (
 // mapping is always (re)written so a later ingest of the same path re-syncs in
 // place. title (when creating) defaults to the base name of root.
 func RootScope(ctx context.Context, e Store, root string, given core.ID, title string) (core.ID, error) {
-	abs, _ := filepath.Abs(root)
+	// Containment (V1): reject an out-of-sandbox path BEFORE creating a scope or
+	// writing the abspath→scope mapping, so a rejected ingest leaves no trace.
+	abs, err := Contain(IngestRoot(), root)
+	if err != nil {
+		return core.NilID, err
+	}
 	key := "ingest:" + filepath.ToSlash(abs)
 
 	rootScope := given

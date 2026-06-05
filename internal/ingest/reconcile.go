@@ -180,6 +180,11 @@ func (r *reconciler) pushChunk(scope core.ID, relSlash string, c Chunk, idx int,
 		Summary:   summary,
 		EmbedText: c.Text,
 		Content:   []byte(c.Text),
+		// Provenance (V17): ingested file content is UNTRUSTED — it returns to the
+		// model via query/drill and may carry injected instructions. Trust is an
+		// engine-asserted field (callers can't forge it via Meta); Push writes it to
+		// Meta["trust"], surfaced as trust/untrusted_content so callers treat it as data.
+		Trust: core.TrustIngested,
 		Meta: map[string]string{
 			"path":  relSlash,
 			"lines": lines,
