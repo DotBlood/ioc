@@ -18,6 +18,15 @@ import (
 // compile-time check: the embedded engine satisfies Service.
 var _ Service = (*engine.Engine)(nil)
 
+// Connection-DoS bounds (V6). Package vars so tests can lower them.
+var (
+	// maxConns caps concurrent client connections — half-open/idle sockets can't
+	// pin unbounded goroutines+memory.
+	maxConns = 128
+	// connIdleTimeout bounds inter-frame inactivity; a stalled connection is dropped.
+	connIdleTimeout = 60 * time.Second
+)
+
 // Server is the runtime daemon: it owns one *engine.Engine and serves the
 // framed-JSON protocol to many client connections. All engine calls are
 // serialized by a single mutex (S1; upgraded to RWMutex in S3).
@@ -118,6 +127,14 @@ func (s *Server) Serve() error {
 			conn.Close()
 			continue
 		}
+		// Max-conns (V6): bound concurrent connections so half-open/idle sockets
+		// can't pin unbounded goroutines+memory. Checked under the same lock that
+		// gates closing, so it composes with the shutdown race fix.
+		if len(s.conns) >= maxConns {
+			s.connsMu.Unlock()
+			conn.Close()
+			continue
+		}
 		s.conns[conn] = struct{}{}
 		s.wg.Add(1) // under connsMu, gated by !closing → ordered before Stop's wg.Wait
 		s.connsMu.Unlock()
@@ -133,16 +150,31 @@ func (s *Server) serveConn(conn net.Conn) {
 		s.connsMu.Unlock()
 		conn.Close()
 	}()
+	// An unauthenticated connection may send only a control-size frame; once a
+	// request authenticates (any non-codeAuth response → the token matched), it may
+	// send data-size frames (large Push). This closes the pre-auth large allocation.
+	authed := false
 	for {
-		raw, err := readFrame(conn)
+		// Idle read deadline (V6): a half-open / slow-loris connection that stops
+		// sending is dropped instead of pinning a goroutine forever. Refreshed each
+		// frame, so it bounds inter-frame inactivity, not total session length.
+		_ = conn.SetReadDeadline(time.Now().Add(connIdleTimeout))
+		max := uint32(maxControlFrame)
+		if authed {
+			max = maxDataFrame
+		}
+		raw, err := readFrame(conn, max)
 		if err != nil {
-			return // EOF or connection closed
+			return // EOF, deadline, oversize frame, or connection closed
 		}
 		var req request
 		if err := json.Unmarshal(raw, &req); err != nil {
 			return
 		}
 		resp := s.handle(context.Background(), req)
+		if !authed && (resp.Error == nil || resp.Error.Code != codeAuth) {
+			authed = true // token matched → allow larger frames henceforth
+		}
 		out, err := json.Marshal(resp)
 		if err != nil {
 			return

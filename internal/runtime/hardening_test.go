@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DotBlood/ioc/internal/core"
 )
@@ -32,7 +34,7 @@ func TestProtoVersionMismatch(t *testing.T) {
 	if err := writeFrame(conn, reqBytes); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	raw, err := readFrame(conn)
+	raw, err := readFrame(conn, maxDataFrame)
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -61,7 +63,7 @@ func rawRequest(t *testing.T, dir string, req request) response {
 	if err := writeFrame(conn, b); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	raw, err := readFrame(conn)
+	raw, err := readFrame(conn, maxDataFrame)
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -116,6 +118,115 @@ func TestRuntimeInfoMode0600(t *testing.T) {
 	}
 	if fi.Mode().Perm() != 0o600 {
 		t.Fatalf("runtime.json mode = %o, want 0600", fi.Mode().Perm())
+	}
+}
+
+// V6: an UNAUTHENTICATED connection announcing an oversize frame is dropped before
+// the body is allocated (the header alone exceeds maxControlFrame).
+func TestPreAuthFrameCapped(t *testing.T) {
+	dir := t.TempDir()
+	defer startDaemon(t, dir).Stop()
+	info, err := Info(dir)
+	if err != nil {
+		t.Fatalf("info: %v", err)
+	}
+	conn, err := net.Dial(info.Net, info.Addr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+
+	var hdr [4]byte
+	binary.BigEndian.PutUint32(hdr[:], maxControlFrame+1) // claim > pre-auth cap
+	if _, err := conn.Write(hdr[:]); err != nil {
+		t.Fatalf("write header: %v", err)
+	}
+	// Server rejects the oversize frame and closes the conn → our read sees EOF.
+	if _, err := readFrame(conn, maxDataFrame); err == nil {
+		t.Fatal("expected the connection to be closed for an oversize pre-auth frame")
+	}
+}
+
+// V6: after a small request authenticates the connection, a frame larger than the
+// pre-auth cap (a big Push) is accepted.
+func TestPostAuthLargeFrame(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	defer startDaemon(t, dir).Stop()
+	c, err := Dial(dir)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.Close()
+
+	root, err := c.CreateScope(ctx, core.NilID, core.RoleWorktree, "root") // authenticates
+	if err != nil {
+		t.Fatalf("create scope: %v", err)
+	}
+	big := make([]byte, 2<<20) // 2 MiB > maxControlFrame(1 MiB)
+	for i := range big {
+		big[i] = 'x'
+	}
+	if _, err := c.Push(ctx, core.PushRequest{Scope: root.ID, Summary: "big doc", Content: big}); err != nil {
+		t.Fatalf("post-auth large push failed: %v", err)
+	}
+}
+
+// V6: concurrent connections are bounded — with the cap at 1, a second connection
+// (opened while the first is held) is refused.
+func TestMaxConns(t *testing.T) {
+	old := maxConns
+	maxConns = 1
+	defer func() { maxConns = old }()
+
+	ctx := context.Background()
+	dir := t.TempDir()
+	defer startDaemon(t, dir).Stop()
+
+	c1, err := Dial(dir)
+	if err != nil {
+		t.Fatalf("dial c1: %v", err)
+	}
+	defer c1.Close()
+	// A completed round-trip guarantees c1 is registered in s.conns before c2 dials.
+	if _, err := c1.CreateScope(ctx, core.NilID, core.RoleWorktree, "root"); err != nil {
+		t.Fatalf("c1 create: %v", err)
+	}
+
+	c2, err := Dial(dir)
+	if err != nil {
+		t.Fatalf("dial c2: %v", err)
+	}
+	defer c2.Close()
+	if _, err := c2.CreateScope(ctx, core.NilID, core.RoleWorktree, "x"); err == nil {
+		t.Fatal("expected the second connection to be refused at the conn cap")
+	}
+}
+
+// V6: a connection that goes idle past the deadline is dropped.
+func TestIdleTimeout(t *testing.T) {
+	old := connIdleTimeout
+	connIdleTimeout = 150 * time.Millisecond
+	defer func() { connIdleTimeout = old }()
+
+	dir := t.TempDir()
+	defer startDaemon(t, dir).Stop()
+	info, err := Info(dir)
+	if err != nil {
+		t.Fatalf("info: %v", err)
+	}
+	conn, err := net.Dial(info.Net, info.Addr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+
+	time.Sleep(400 * time.Millisecond) // exceed the idle deadline without sending
+	// The server has closed the idle conn; a request now fails to get a response.
+	b, _ := json.Marshal(request{ID: 1, V: ProtoVersion, Method: mEmbModel, Token: info.Token})
+	_ = writeFrame(conn, b)
+	if _, err := readFrame(conn, maxDataFrame); err == nil {
+		t.Fatal("expected the idle connection to have been closed")
 	}
 }
 

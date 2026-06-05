@@ -58,7 +58,7 @@ func (c *Client) call(method string, params, out any) error {
 	if err := writeFrame(c.conn, reqBytes); err != nil {
 		return err
 	}
-	respBytes, err := readFrame(c.conn)
+	respBytes, err := readFrame(c.conn, maxDataFrame) // responses come from the trusted daemon
 	if err != nil {
 		return err
 	}

@@ -13,8 +13,17 @@ import (
 // ProtoVersion is the wire-protocol version (handshake/compat is hardened in S3).
 const ProtoVersion = 1
 
-// maxFrame caps a single message; content blobs ride inside, so allow large.
-const maxFrame = 64 << 20 // 64 MiB
+// Frame size caps (V6). An UNAUTHENTICATED connection (before it presents a valid
+// token) may send at most maxControlFrame — enough for the request envelope + token
+// + a normal request, but far too small for amplification. After the first frame
+// authenticates, the connection may send maxDataFrame (a large Push rides inside).
+// This closes the previous 64 MiB pre-auth allocation. NOTE: a connection's FIRST
+// request is therefore capped at maxControlFrame — authenticate with a small op
+// before pushing >1 MiB content (the client makes small calls first in practice).
+const (
+	maxControlFrame = 1 << 20  // 1 MiB — pre-auth / first frame
+	maxDataFrame    = 64 << 20 // 64 MiB — post-auth
+)
 
 // Method names (string-keyed dispatch).
 const (
@@ -136,14 +145,14 @@ func writeFrame(w io.Writer, b []byte) error {
 	return err
 }
 
-func readFrame(r io.Reader) ([]byte, error) {
+func readFrame(r io.Reader, max uint32) ([]byte, error) {
 	var hdr [4]byte
 	if _, err := io.ReadFull(r, hdr[:]); err != nil {
 		return nil, err
 	}
 	n := binary.BigEndian.Uint32(hdr[:])
-	if n > maxFrame {
-		return nil, fmt.Errorf("runtime: frame too large (%d > %d)", n, maxFrame)
+	if n > max {
+		return nil, fmt.Errorf("runtime: frame too large (%d > %d)", n, max)
 	}
 	buf := make([]byte, n)
 	if _, err := io.ReadFull(r, buf); err != nil {
