@@ -1,5 +1,9 @@
 # Code & theory review — findings (2026-06-05)
 
+> A dedicated security/robustness deep-dive (threat models, decompression bombs, DoS/parse limits,
+> embedder trust boundary, secrets, path containment, prompt injection) lives in
+> [`SECURITY_AND_VULNERABILITIES.md`](SECURITY_AND_VULNERABILITIES.md).
+
 Adversarial review of the whole repo via 7 parallel domain reviewers (storage, runtime, engine,
 ingest, cmd/MCP, cross-cutting, theory). Each finding was pushed to be **disproved** before listing;
 the highest-impact ones were re-verified directly (reproduced or read at file:line). Status legend:
