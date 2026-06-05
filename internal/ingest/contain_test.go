@@ -87,6 +87,59 @@ func TestIngestRoot_EnvAndDefault(t *testing.T) {
 	require.Equal(t, cwd, IngestRoot())
 }
 
+// fakeConfig is a minimal configReader for ResolveIngestRoot.
+type fakeConfig map[string]string
+
+func (f fakeConfig) Config(k string) (string, bool) { v, ok := f[k]; return v, ok }
+
+// ResolveIngestRoot precedence: env > config "ingest_root" > CWD.
+func TestResolveIngestRoot(t *testing.T) {
+	envDir := t.TempDir()
+	cfgDir := t.TempDir()
+	cwd, _ := os.Getwd()
+
+	t.Run("env-beats-config", func(t *testing.T) {
+		t.Setenv(IngestRootEnv, envDir)
+		require.Equal(t, absRoot(envDir), ResolveIngestRoot(fakeConfig{"ingest_root": cfgDir}))
+	})
+	t.Run("config-when-no-env", func(t *testing.T) {
+		t.Setenv(IngestRootEnv, "")
+		require.Equal(t, absRoot(cfgDir), ResolveIngestRoot(fakeConfig{"ingest_root": cfgDir}))
+	})
+	t.Run("cwd-when-neither", func(t *testing.T) {
+		t.Setenv(IngestRootEnv, "")
+		require.Equal(t, cwd, ResolveIngestRoot(fakeConfig{}))
+	})
+	t.Run("empty-config-falls-through", func(t *testing.T) {
+		t.Setenv(IngestRootEnv, "")
+		require.Equal(t, cwd, ResolveIngestRoot(fakeConfig{"ingest_root": "  "}))
+	})
+	t.Run("nil-store", func(t *testing.T) {
+		t.Setenv(IngestRootEnv, "")
+		require.Equal(t, cwd, ResolveIngestRoot(nil))
+	})
+}
+
+// Ingest honors a persisted config root (no env): a file inside it ingests, a
+// sibling outside it is rejected.
+func TestIngest_RespectsConfigRoot(t *testing.T) {
+	t.Setenv(IngestRootEnv, "") // config path, not env
+	e := openTestEngine(t)
+	rootDir := t.TempDir()
+	require.NoError(t, e.SetConfig(ingestRootConfigKey, rootDir))
+	write(t, filepath.Join(rootDir, "a.txt"), "alpha\n")
+
+	scope := newRoot(t, e)
+	_, err := Ingest(context.Background(), e, rootDir, scope, Options{})
+	require.NoError(t, err, "ingest inside the config root should succeed")
+
+	outside := t.TempDir()
+	write(t, filepath.Join(outside, "secret.txt"), "x\n")
+	_, err = Ingest(context.Background(), e, outside, scope, Options{})
+	require.Error(t, err, "ingest outside the config root should be rejected")
+	require.ErrorIs(t, err, core.ErrInvalidInput)
+}
+
 // End-to-end: Ingest of an out-of-root tree errors and writes nothing.
 func TestIngest_RejectsOutOfRoot(t *testing.T) {
 	e := openTestEngine(t)

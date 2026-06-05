@@ -71,7 +71,8 @@ type Stats struct {
 func Ingest(ctx context.Context, e Store, root string, rootScope core.ID, opt Options) (Stats, error) {
 	// Containment (V1): refuse to ingest outside the configured sandbox root, so a
 	// model-chosen path cannot pull arbitrary local files (secrets) into memory.
-	contained, err := Contain(IngestRoot(), root)
+	// Root precedence: env > persisted store config > CWD (ResolveIngestRoot).
+	contained, err := Contain(ResolveIngestRoot(e), root)
 	if err != nil {
 		return Stats{}, err
 	}

@@ -13,16 +13,50 @@ import (
 // IngestRootEnv names the environment variable that pins the ingest sandbox root.
 const IngestRootEnv = "IOC_INGEST_ROOT"
 
-// IngestRoot returns the directory ingest is confined to: IOC_INGEST_ROOT if set,
-// else the process working directory. Resolved once per process by the owner that
-// launched it (the daemon/MCP operator sets policy) — NOT chosen per request, so a
-// model cannot widen its own sandbox. The returned path is absolute (best-effort).
+// ingestRootConfigKey is the meta-config key holding a persisted sandbox root
+// (set via `ioc config set-ingest-root`). The env var overrides it.
+const ingestRootConfigKey = "ingest_root"
+
+// absRoot makes a root path absolute (best-effort), falling back to Clean.
+func absRoot(v string) string {
+	if abs, err := filepath.Abs(v); err == nil {
+		return abs
+	}
+	return filepath.Clean(v)
+}
+
+// IngestRoot returns the directory ingest is confined to from env (IOC_INGEST_ROOT)
+// or the process working directory — for callers without a store. Prefer
+// ResolveIngestRoot when a store is available (it also honors the persisted config).
 func IngestRoot() string {
 	if v := strings.TrimSpace(os.Getenv(IngestRootEnv)); v != "" {
-		if abs, err := filepath.Abs(v); err == nil {
-			return abs
+		return absRoot(v)
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		return cwd
+	}
+	return "."
+}
+
+// configReader is the slice of the store ResolveIngestRoot needs.
+type configReader interface {
+	Config(key string) (string, bool)
+}
+
+// ResolveIngestRoot returns the ingest sandbox root with precedence:
+// env IOC_INGEST_ROOT > store config "ingest_root" > process CWD. Resolved by the
+// owner that launched the process (operator sets policy), NOT chosen per request,
+// so a model cannot widen its own sandbox. The result is absolute (best-effort).
+func ResolveIngestRoot(e configReader) string {
+	if v := strings.TrimSpace(os.Getenv(IngestRootEnv)); v != "" {
+		return absRoot(v)
+	}
+	if e != nil {
+		if v, ok := e.Config(ingestRootConfigKey); ok {
+			if v = strings.TrimSpace(v); v != "" {
+				return absRoot(v)
+			}
 		}
-		return filepath.Clean(v)
 	}
 	if cwd, err := os.Getwd(); err == nil {
 		return cwd
@@ -67,7 +101,7 @@ func Contain(root, target string) (string, error) {
 		return "", fmt.Errorf("ingest: %w: %q is outside the ingest root %q", core.ErrInvalidInput, target, root)
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return "", fmt.Errorf("ingest: %w: %q escapes the ingest root %q (set %s to widen)", core.ErrInvalidInput, target, root, IngestRootEnv)
+		return "", fmt.Errorf("ingest: %w: %q escapes the ingest root %q (set %s or run `ioc config set-ingest-root` to widen)", core.ErrInvalidInput, target, root, IngestRootEnv)
 	}
 	return rt, nil
 }

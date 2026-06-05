@@ -16,7 +16,7 @@ import (
 func RootScope(ctx context.Context, e Store, root string, given core.ID, title string) (core.ID, error) {
 	// Containment (V1): reject an out-of-sandbox path BEFORE creating a scope or
 	// writing the abspath→scope mapping, so a rejected ingest leaves no trace.
-	abs, err := Contain(IngestRoot(), root)
+	abs, err := Contain(ResolveIngestRoot(e), root)
 	if err != nil {
 		return core.NilID, err
 	}
