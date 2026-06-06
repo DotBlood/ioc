@@ -266,6 +266,17 @@ type Query struct {
 	// ignored when reranking. Opt-in so the proven pure-semantic default is untouched.
 	// See docs/FSD.md §5.
 	GraphBoost float64
+
+	// ImportanceWeight, when > 0 (0 = OFF, default), blends an AUTHOR-DECLARED importance
+	// term into the cosine ranking as a TIE-BREAKER: score = (1−w)·cosine + w·importance,
+	// where importance is derived from Tier (TierWorktree = canonical truth = 1.0,
+	// TierWorkspace = mutable = 0.0) — so a canonical artifact outranks a workspace
+	// near-duplicate of similar cosine. Importance is declared by the authoring agent
+	// (the Tier it pushed at), never LLM-scored — the Generative Agents
+	// relevance+recency+importance signal, kept no-LLM. It only REORDERS (Hit.Score stays
+	// cosine); a no-op when all candidates share one Tier; vector mode, ignored when
+	// reranking. Opt-in so the proven default ranking is untouched.
+	ImportanceWeight float64
 }
 
 // matchesKind reports whether k is in the (possibly empty=all) filter set.

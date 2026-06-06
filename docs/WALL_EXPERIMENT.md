@@ -394,3 +394,23 @@ hold at real scale. **PPR failed its gate** (regressed 1-hop, no multi-hop gain)
 **Decision:** reverted to the v2 1-hop seed-anchored boost (it honestly surfaces direct dependents). This
 reconfirms the earlier finding: the structural axis is reliably served by the **explicit `Related`
 edge-walk**, not by an implicit cosine-blended boost. Net for graph-boost: v2 stays, opt-in/off by default.
+
+---
+
+## 2026-06-06 — R3: author-declared importance ranking (multi-signal) — SHIPPED (opt-in)
+
+RESEARCH_ROADMAP R3 / DREAM §3 (Generative Agents' relevance+recency+importance). Added `blendImportance`
+(opt-in `Query.ImportanceWeight`): blend `(1−w)·cosine + w·importance`, importance Tier-derived
+(TierWorktree=canonical=1.0, else 0.0) — author-declared (the Tier the agent pushed at), never LLM-scored.
+Reorder-only, Hit.Score stays cosine, vector-mode, skipped under rerank.
+
+- **Mechanic validated (deterministic unit test):** a worktree-tier (canonical) artifact outranks a
+  workspace-tier artifact of EQUAL cosine when ImportanceWeight>0; pure no-op when off; no-op when all
+  candidates share one Tier.
+- **No regression (real bge-small):** `ioc wall -importance-weight 0` vs `0.3` produce IDENTICAL gold
+  (recall 0.93) — the wall corpus is single-tier, so importance is a clean no-op there.
+- **Honest caveat:** usefulness depends on agents actually using mixed tiers and querying where a canonical
+  truth should win a near-tie. Canonical (worktree) tier today comes from `Consolidate` (promotion); there
+  is no `-tier` flag on `ioc push` yet — so the signal pays off mainly after consolidation. v1 applies
+  importance as an independent tie-breaker (after recency); true joint `(1−wr−wi)·cos+wr·rec+wi·imp`
+  weighting is a refinement. Default ranking untouched (opt-in/off).

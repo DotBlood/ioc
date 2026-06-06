@@ -24,6 +24,7 @@ func query(args []string) error {
 	includeSuperseded := fs.Bool("include-superseded", false, "include superseded/archived (history) — default current view only")
 	recencyHalfLife := fs.Float64("recency-halflife-days", 0, "opt-in recency tie-breaker half-life in days (0=off; vector mode only)")
 	graphBoost := fs.Float64("graph-boost", 0, "opt-in graph-aware boost weight 0..1 (0=off): lift candidates edge-connected to strong hits")
+	importanceWeight := fs.Float64("importance-weight", 0, "opt-in author-declared importance weight 0..1 (0=off): lift canonical (worktree-tier) artifacts over workspace near-duplicates")
 	_ = fs.Parse(args)
 
 	scopeID, err := iocfmt.ParseScopeID(*scope)
@@ -53,6 +54,7 @@ func query(args []string) error {
 		IncludeSuperseded:   *includeSuperseded,
 		RecencyHalfLifeDays: *recencyHalfLife,
 		GraphBoost:          *graphBoost,
+		ImportanceWeight:    *importanceWeight,
 	})
 	if err != nil {
 		return err

@@ -204,6 +204,7 @@ func (a *ioc) register(s *server.MCPServer) {
 		mcp.WithBoolean("include_superseded", mcp.Description("include superseded/archived (history); default false = current view only")),
 		mcp.WithNumber("recency_halflife_days", mcp.Description("opt-in recency tie-breaker half-life in days (0=off; demotes stable old truths, use sparingly)")),
 		mcp.WithNumber("graph_boost", mcp.Description("opt-in graph-aware boost weight 0..1 (0=off): lift candidates edge-connected to strong hits (the structural axis blended into the semantic order)")),
+		mcp.WithNumber("importance_weight", mcp.Description("opt-in author-declared importance weight 0..1 (0=off): lift canonical worktree-tier artifacts over workspace near-duplicates of similar cosine")),
 	), a.query)
 
 	s.AddTool(mcp.NewTool("ioc_neighbors",

@@ -24,6 +24,7 @@ func runWall(args []string) int {
 	coarseK := fs.Int("coarsek", 0, "hierarchical coarse stage: # scopes to keep (0=engine default)")
 	rerank := fs.Bool("rerank", false, "cross-encoder rerank the top candidates (needs a real -embed)")
 	graphBoost := fs.Float64("graph-boost", 0, "opt-in graph-aware boost weight 0..1 (0=off)")
+	importanceWeight := fs.Float64("importance-weight", 0, "opt-in author-declared importance weight 0..1 (0=off)")
 	specPath, rest := splitPositional(args)
 	_ = fs.Parse(rest)
 	if specPath == "" {
@@ -70,12 +71,12 @@ func runWall(args []string) int {
 	defer gf.Close()
 
 	qm, hier, coll := iocfmt.ParseModeSpec(*mode)
-	rep, err := eval.WallRun(context.Background(), e, spec, pf, gf, qm, hier, coll, *coarseK, *rerank, *graphBoost)
+	rep, err := eval.WallRun(context.Background(), e, spec, pf, gf, qm, hier, coll, *coarseK, *rerank, *graphBoost, *importanceWeight)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: wall run:", err)
 		return 1
 	}
-	fmt.Printf("config: mode=%s coarsek=%d rerank=%v graph-boost=%g\n", *mode, *coarseK, *rerank, *graphBoost)
+	fmt.Printf("config: mode=%s coarsek=%d rerank=%v graph-boost=%g importance-weight=%g\n", *mode, *coarseK, *rerank, *graphBoost, *importanceWeight)
 	fmt.Print(rep.String())
 	fmt.Printf("blind judge packets: %s\n", packetsPath)
 	fmt.Printf("gold + retrieval facts: %s\n", goldPath)

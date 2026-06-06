@@ -51,6 +51,32 @@ func blendRecency(ordered []search.Result, cosineByID map[string]float64, byID m
 	return out
 }
 
+// blendImportance re-sorts candidates by (1−w)·cosine + w·importance, where importance
+// is Tier-derived (TierWorktree = 1.0 canonical, else 0.0) — an AUTHOR-DECLARED signal
+// (the Tier the agent pushed at), never LLM-scored. It only reorders; the displayed
+// Hit.Score stays cosine. A no-op when all candidates share one Tier (importance is
+// constant → a uniform shift/scale that preserves the order).
+func blendImportance(ordered []search.Result, cosineByID map[string]float64, byID map[string]core.Artifact, w float64) []search.Result {
+	if w > 1 {
+		w = 1
+	}
+	out := make([]search.Result, len(ordered))
+	for i, r := range ordered {
+		var imp float64
+		if byID[r.ID].Tier == core.TierWorktree {
+			imp = 1
+		}
+		out[i] = search.Result{ID: r.ID, Score: (1-w)*cosineByID[r.ID] + w*imp}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Score != out[j].Score {
+			return out[i].Score > out[j].Score
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
 // blendGraph re-sorts candidates by α·cosine + (1−α)·g, where g is a candidate's
 // normalized connectivity to the query's STRONG HITS — the top-graphSeedK candidates
 // by cosine (the "seed" set) — via author-declared edges (1-hop, undirected, all
@@ -254,6 +280,14 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 	willRerank := q.Rerank && e.reranker != nil
 	if q.RecencyHalfLifeDays > 0 && q.Mode == core.ModeVector && !willRerank {
 		ordered = blendRecency(ordered, cosineByID, byID, q.RecencyHalfLifeDays)
+	}
+
+	// Optional author-declared importance tie-breaker (opt-in, OFF by default): blend a
+	// Tier-derived importance term (worktree=canonical=1, workspace=0) so a canonical
+	// artifact outranks a workspace near-duplicate of similar cosine. Reorder-only —
+	// Hit.Score stays cosine; vector mode, skipped while reranking. See ImportanceWeight.
+	if q.ImportanceWeight > 0 && q.Mode == core.ModeVector && !willRerank {
+		ordered = blendImportance(ordered, cosineByID, byID, q.ImportanceWeight)
 	}
 
 	// Optional graph-aware boost (opt-in, OFF by default): lift candidates edge-linked

@@ -67,7 +67,15 @@ axis is reliably served by the explicit `Related` walk, not an implicit boost. S
 - **Ship.** Replace `blendGraph` internals (still opt-in `GraphBoost`); keep degree-normalize / kind
   filter as sub-experiments.
 
-## R3 — Multi-signal ranking with author-declared importance
+## R3 — Multi-signal ranking with author-declared importance *(SHIPPED opt-in 2026-06-06)*
+
+**Result:** `Query.ImportanceWeight` (opt-in) blends a Tier-derived importance term (worktree=canonical=1,
+workspace=0) — author-declared, no LLM. Unit-tested: lifts a canonical artifact over a workspace
+near-duplicate of equal cosine; no-op when off or single-tier. No regression on the wall (recall 0.93
+identical, single-tier → no-op). Default untouched. Caveat: pays off only with mixed tiers (canonical
+comes from `Consolidate`; no `-tier` on push yet); joint recency+importance weighting is a refinement.
+See `WALL_EXPERIMENT.md` R3.
+
 
 - **Question.** Does adding an **author-declared importance** signal (beside relevance + recency)
   improve ranking, staying true to no-LLM-in-core?
