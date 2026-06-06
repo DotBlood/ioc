@@ -91,7 +91,16 @@ See `WALL_EXPERIMENT.md` R3.
   hurting the proven wall.
 - **Ship.** Opt-in ranking weights; default only if the gate passes.
 
-## R4 — Confidence / abstention / calibration *(OPEN — research before code)*
+## R4 — Confidence / abstention / calibration *(RESEARCH DONE 2026-06-06; code next)*
+
+**Result (53-agent bounded fan-out, 7/16 claims confirmed; see `DREAM.md` §4):** the gap is CLOSED and
+IOC's margin instinct is validated. **Margin > absolute floor** (TARG arXiv:2511.09803); **absolute
+floors are not portable** across embedders (arXiv:2403.05440); **conformal calibration** gives a
+principled floor from a small labeled probe set (arXiv:2511.17908); **floor and margin are distinct
+signals** (don't-answer vs answer-with-uncertainty); QPP/Cosine-Adapter are supplementary only. **Code:**
+`weak_match = len==0 OR score<floor OR margin<marginFloor` (per-embedder marginFloor calibrated on the
+wall) + distinct confidence codes (ok/floor_miss/margin_ambiguous). Per-embedder floor calibration infra
+= R4b (deferred).
 
 - **Question.** What is the actual SOTA for retrieval confidence / selective prediction / abstention,
   and does it confirm IOC's empirical move from an absolute cosine floor to a top-1-vs-runner-up margin?

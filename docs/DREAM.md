@@ -143,25 +143,45 @@ agent, not the store.
 
 ---
 
-## 4. Confidence / abstention / calibration — the open gap
+## 4. Confidence / abstention / calibration — RESOLVED (R4 follow-up, 2026-06-06)
 
-**SOTA.** *Unresolved by this pass.* Of 20 confirmed claims, **none** addressed selective prediction,
-calibration, or RAG abstention directly — this was the weakest-covered angle (the fan-out surfaced
-sources — Google's "sufficient context" work, a conformal-prediction-for-NLP TACL paper, several
-RAG-abstention preprints — but their specific claims did not survive verification). So this report
-**cannot** make evidence-backed recommendations here yet.
+The original pass left this an open gap; a dedicated bounded follow-up (RESEARCH_ROADMAP R4, 53-agent
+fan-out, 7/16 claims confirmed) **closed it** and **validates IOC's margin instinct on two independent
+grounds.**
 
-**Where IOC stands.** IOC's known problem (`ioc-weakmatch-threshold-too-low`, `WALL_EXPERIMENT.md`): the
-absolute cosine `weak_match` floor is **gameable by vocabulary** at small scale; IOC's empirical move —
-prefer the **top-1-vs-runner-up margin** over an absolute floor — is *consistent with* selective-
-prediction intuition but currently **unsupported by external citation**.
+**SOTA (confirmed).**
+- **Margin > absolute floor.** TARG (arXiv:2511.09803) shows a **top1-vs-top2 margin is a more robust
+  abstention gate than entropy or an absolute threshold** (TriviaQA/Llama-3.1-8B: 83.8% EM at 0.1%
+  trigger vs entropy 74.4% EM at 52.4% trigger). The structural argument — a large gap ⇒ one hit clearly
+  dominates (present & specific); a small gap ⇒ tied (ambiguous/absent) — transfers to retrieval cosine;
+  the *number* does not (recalibrate on IOC's distribution).
+- **Absolute floors are not portable.** "Is Cosine-Similarity Really About Similarity?" (arXiv:2403.05440)
+  shows cosine thresholds depend on per-model regularization and **cannot be transferred** to another
+  embedder or a fine-tuned variant — IOC's hardcoded 0.68 silently breaks on a model change. Margin (a
+  *relative* signal) is the more stable of the two.
+- **Calibration path.** Split conformal prediction (arXiv:2511.17908) makes the floor principled: at
+  setup, on a small labeled probe set (20–50 relevant/absent pairs), take the quantile retaining the
+  target fraction of relevant pairs — finite-sample coverage, **no LLM at query time**. Caveat: coverage
+  controls *recall*, not precision (won't stop above-floor false positives).
+- **Floor and margin are DISTINCT signals.** `top < floor` = "no confident match at all" (→ don't
+  answer); small margin = "a match exists but is not decisive" (→ answer with stated uncertainty / retrieve
+  one more turn). Collapsing both into one boolean loses that affordance.
+- **QPP score-variance (NQC/WIG) and Cosine-Adapter** (arXiv:2504.01101, 2408.04887) are weakly
+  predictive / corpus-dependent (best explains <17% variance) — supplementary sanity checks, **not** a
+  primary gate.
 
-**Recommendation.**
-- Treat area 4 as an **explicit open research gap**: run a *dedicated* follow-up search on conformal
-  prediction for retrieval, selective prediction / margin calibration, and RAG abstention **before**
-  building the margin-aware weak_match (ROADMAP "Margin-aware weak_match" — keep it experiment-first).
-- Until then, the only validated adjacent signal is the multi-signal score (§3) — a confident answer is
-  one with high relevance *and* a clear margin over the runner-up.
+**Where IOC stands.** IOC's own finding (margin separates present/absent better than the floor; the
+absent probe abstained under 180-distractor pressure) is now **externally corroborated**.
+
+**Recommendation (no-LLM, score-only) — R4 implementation:**
+- `weak_match = (len==0) OR (score < floor) OR (margin < marginFloor)` — add the **margin gate** as a
+  second, independent condition (per-embedder `marginFloor`, **calibrated on the wall**, ~0.05 cosine /
+  ~0.02 rerank as a starting point — do not borrow TARG's logit number).
+- **Report the two signals distinctly** (e.g. a `confidence` code: `ok` / `floor_miss` /
+  `margin_ambiguous`) so callers get the right affordance.
+- **Make the floor calibratable per embedder** (offline quantile script → per-embedder config); refuse a
+  *transferred* constant for an unknown model. *(This calibration-infra step is deferred to R4b; the
+  margin gate + distinct codes are the immediate win, experiment-grounded on the wall.)*
 
 ---
 
@@ -227,3 +247,7 @@ recommended — their absence is intentional:
 *Method: deep-research fan-out — 5 angles, 25 sources fetched, 122 claims extracted, 25 verified at
 2-of-3 adversarial votes (20 confirmed / 5 refuted), synthesized to 8 findings. Verification covers
 recall, not exhaustiveness; area 4 is under-covered.*
+
+
+Привет, я начал делать проект, что то на подобие rag + memmory + knowgraf - для ии агентов, цель сделать так что бы ии сохранял память через сессии, но не нагружал контекст + ну и куча фишок сверху. И в целом, сейчас проект показывает хорошие результаты, из 27 вопросв на голоый контекст агент понимает что происходит не нагружая все в контекстное окно через стены (The Reasoning-Wall Experiment). если интересно могу скинуть notebooklm с совсей документацией. 
+Зачем я тебе пишу, мне бы хотелось узнать, нет ли у тебя друзей/знакомых/или может ты сам, которые могут помочь с этим проектом, Лицензия у проекта AGPL v3
