@@ -249,6 +249,16 @@ type Query struct {
 	// opt-in — supersession (not age) is the real currency signal. Ignored when
 	// reranking (the cross-encoder already orders). See docs/SUPERSESSION.md §8.
 	RecencyHalfLifeDays float64
+
+	// GraphBoost, when > 0 (0 = OFF, default), blends the STRUCTURAL axis into the
+	// semantic ranking: a candidate that is edge-connected (author-declared edges) to
+	// high-cosine candidates is lifted — score = (1−w)·cosine + w·g, where g is the
+	// candidate's normalized connectivity to strong neighbours within the candidate
+	// set (1-hop, undirected, all kinds). It only REORDERS the visible candidate set
+	// (no recall change); Hit.Score stays cosine. A no-op when there are no edges, and
+	// ignored when reranking. Opt-in so the proven pure-semantic default is untouched.
+	// See docs/FSD.md §5.
+	GraphBoost float64
 }
 
 // matchesKind reports whether k is in the (possibly empty=all) filter set.

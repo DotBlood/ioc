@@ -187,8 +187,11 @@ Dependency direction (no cycles): `core` is a leaf; `embed`/`search` are leaves;
   depth)` (CLI `ioc related`, MCP `ioc_related`) walks the graph — `dir=in` answers "what depends on X",
   `dir=out` "what does X depend on", with kind filter + depth; superseded artifacts are excluded.
   Stored in a Meta `edges` bucket keyed `from|to|kind` (idempotent); `DeleteArtifact` clears its edges.
-  Distinct from the `DerivedFrom`/`SupersededBy` provenance edges. Graph-aware *ranking* of `Query`
-  (edge-boosted retrieval) is a deferred follow-up — edges are currently a separate retrieval axis.
+  Distinct from the `DerivedFrom`/`SupersededBy` provenance edges. **Graph-aware retrieval (v1):**
+  `Query.GraphBoost` (CLI `query -graph-boost`/`wall -graph-boost`, MCP `graph_boost`; opt-in, OFF by
+  default) blends the structural axis into the semantic order — it lifts candidates edge-connected to
+  high-cosine hits (1-hop, undirected, reorder-only; `Hit.Score` stays cosine; a no-op with no edges, so
+  the proven default path is untouched). Deferred v2: recall expansion + kind/direction-filtered boost.
 
 ## Conventions
 

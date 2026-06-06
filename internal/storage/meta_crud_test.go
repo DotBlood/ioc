@@ -143,6 +143,10 @@ func TestMetaEdges(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, fromB, 2, "b → a (depends_on) and b → c (relates_to); dedup on re-put")
 
+			all, err := m.AllEdges()
+			require.NoError(t, err)
+			require.Len(t, all, 3, "AllEdges returns every edge once (dedup on re-put)")
+
 			toA, err := m.EdgesTo(a)
 			require.NoError(t, err)
 			require.Len(t, toA, 2, "both b and c point at a")

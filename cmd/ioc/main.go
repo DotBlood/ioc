@@ -105,7 +105,7 @@ commands:
   config set-ingest-root <path> | get-ingest-root   pin/show the persisted ingest sandbox root
   serve [-dir d] [-embed e]                      run the runtime daemon (single owner of -dir; clients connect via runtime.json)
   runtime status|stop|rotate|mint-read-token [-dir d]   inspect/stop daemon; rotate token(s); mint a read-only token
-  query -scope ID -text T [-detail overview|entry|raw] [-topk N] [-tier t] [-kind k] [-mode m] [-include-superseded]
+  query -scope ID -text T [-detail overview|entry|raw] [-topk N] [-tier t] [-kind k] [-mode m] [-rerank] [-graph-boost W] [-include-superseded]
   neighbors -scope ID -text T [-topk N]          similar CURRENT memory (run before push to find supersede candidates)
   drill -artifact ID [-detail raw]
   publish -artifact ID

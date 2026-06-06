@@ -44,6 +44,68 @@ func blendRecency(ordered []search.Result, cosineByID map[string]float64, byID m
 	return out
 }
 
+// blendGraph re-sorts candidates by α·cosine + (1−α)·g, where g is a candidate's
+// normalized connectivity (sum of neighbours' cosine) to OTHER candidates via
+// author-declared edges (1-hop, undirected, all kinds) — so a candidate edge-linked
+// to strong hits is lifted. It only REORDERS the visible candidate set (no recall
+// change); the displayed Hit.Score stays cosine (callers read cosineByID, not these
+// scores). A no-op when w<=0, fewer than 2 candidates, or no edges connect the set.
+func (e *Engine) blendGraph(ordered []search.Result, cosineByID map[string]float64, w float64) ([]search.Result, error) {
+	if w <= 0 || len(ordered) < 2 {
+		return ordered, nil
+	}
+	if w > 1 {
+		w = 1
+	}
+	edges, err := e.meta.AllEdges()
+	if err != nil {
+		return nil, err
+	}
+	// Undirected adjacency, restricted to edges whose BOTH endpoints are candidates.
+	adj := make(map[string][]string, len(ordered))
+	for _, ed := range edges {
+		from, to := ed.From.String(), ed.To.String()
+		if _, ok := cosineByID[from]; !ok {
+			continue
+		}
+		if _, ok := cosineByID[to]; !ok {
+			continue
+		}
+		adj[from] = append(adj[from], to)
+		adj[to] = append(adj[to], from)
+	}
+	if len(adj) == 0 {
+		return ordered, nil // no edges within the candidate set → unchanged order
+	}
+	raw := make(map[string]float64, len(ordered))
+	var gmax float64
+	for _, r := range ordered {
+		var s float64
+		for _, nb := range adj[r.ID] {
+			s += cosineByID[nb]
+		}
+		raw[r.ID] = s
+		if s > gmax {
+			gmax = s
+		}
+	}
+	if gmax <= 0 {
+		return ordered, nil
+	}
+	blended := make([]search.Result, len(ordered))
+	for i, r := range ordered {
+		g := raw[r.ID] / gmax
+		blended[i] = search.Result{ID: r.ID, Score: (1-w)*cosineByID[r.ID] + w*g}
+	}
+	sort.SliceStable(blended, func(i, j int) bool {
+		if blended[i].Score != blended[j].Score {
+			return blended[i].Score > blended[j].Score
+		}
+		return blended[i].ID < blended[j].ID
+	})
+	return blended, nil
+}
+
 // Query runs progressive-disclosure retrieval from a viewpoint scope and returns
 // the trace's query ID alongside the hits (use it with Trace). Mode selects
 // hybrid (vector+BM25 via RRF, default) or vector-only. Hit.Score is always the
@@ -156,6 +218,17 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 	willRerank := q.Rerank && e.reranker != nil
 	if q.RecencyHalfLifeDays > 0 && q.Mode == core.ModeVector && !willRerank {
 		ordered = blendRecency(ordered, cosineByID, byID, q.RecencyHalfLifeDays)
+	}
+
+	// Optional graph-aware boost (opt-in, OFF by default): lift candidates edge-linked
+	// to high-cosine candidates (the structural axis blended into the semantic order).
+	// Reorder-only — Hit.Score stays cosine; a no-op when no edges connect the set;
+	// skipped while reranking (the cross-encoder already orders). See Query.GraphBoost.
+	if q.GraphBoost > 0 && !willRerank {
+		ordered, err = e.blendGraph(ordered, cosineByID, q.GraphBoost)
+		if err != nil {
+			return core.NilID, nil, err
+		}
 	}
 
 	// MinScore is a COSINE gate, applied here on the candidate set — before rerank,

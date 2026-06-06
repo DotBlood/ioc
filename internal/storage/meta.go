@@ -341,6 +341,12 @@ func (m *Meta) EdgesTo(id core.ID) ([]core.Edge, error) {
 	return m.edgesWhere(func(e core.Edge) bool { return e.To == id })
 }
 
+// AllEdges returns every edge in one scan (used by graph-aware retrieval to build
+// adjacency over a candidate set without a per-candidate scan).
+func (m *Meta) AllEdges() ([]core.Edge, error) {
+	return m.edgesWhere(func(core.Edge) bool { return true })
+}
+
 // DeleteEdgesFor removes every edge touching id (as From or To) — called when an
 // artifact is deleted so no dangling edges remain. Keys are collected first, then
 // deleted (mutating a bucket mid-ForEach is unsafe).

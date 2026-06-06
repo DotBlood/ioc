@@ -184,6 +184,14 @@ For a `Query` from viewpoint `q.Scope` (pipeline as implemented in `internal/eng
 5. **Rank.** Build a cosine set (and, in `ModeHybrid`, a BM25 index over each artifact's rank-text).
    `ordered` = cosine by default, or `RRF(60, cosine, bm25)` in hybrid. Optional recency blend
    (vector-mode, non-rerank only).
+5b. **Graph-aware boost (opt-in, OFF by default).** When `Query.GraphBoost > 0` (and not reranking),
+   re-sort `ordered` by `(1−w)·cosine + w·g`, where `g` is a candidate's normalized 1-hop, undirected
+   connectivity (via author-declared edges) to OTHER candidates, weighted by their cosine — so a
+   candidate edge-linked to strong hits is lifted. This blends the **structural axis** into the
+   semantic order. It only REORDERS the visible candidate set (no recall change); `Hit.Score` stays
+   cosine; it is a no-op when no edges connect the set, so `GraphBoost=0` (the default) is the proven
+   pure-semantic path byte-for-byte. (v1 is reorder-only; recall expansion and kind/direction-filtered
+   boost are deferred — see ROADMAP.)
 6. **MinScore** is a **cosine pre-gate** on candidates (before rerank, never a post-rerank drop).
 7. **Rerank** (optional): a cross-encoder re-orders the top `RerankN` candidates over their content;
    `Hit.RerankScore` = sigmoid(logit). On rerank error, keep the existing order.
