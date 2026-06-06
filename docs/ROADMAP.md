@@ -37,11 +37,16 @@ reconciling the 11 v0.1→v0.2 model deltas. The v0.1 specs are archived. One do
 
 ## NEXT (open, on-thesis; pick by need, not all required)
 
+The 2026-06-06 deep-research dream ([`DREAM.md`](DREAM.md)) re-prioritized this list against the field;
+the top three below are its highest-confidence, externally-corroborated wins.
+
 | Item | What | Source |
 |------|------|--------|
-| **Margin-aware weak_match** | The cosine floor is gameable by vocabulary at small N; margin separates present/absent more honestly. Calibrate a per-embedder margin threshold on wall data, then `weak_match = top<floor OR (margin>0 && margin<m)`. **Experiment first, code after.** | [`WALL_EXPERIMENT.md`](WALL_EXPERIMENT.md) |
-| **Shape-aware retrieval** | Flat retrieval is structurally blind to descendant-scope artifacts (recall 0.00 when querying from a parent). Either auto-route to hierarchical when the viewpoint has rolled-up descendants, or loudly warn. | [`WALL_EXPERIMENT.md`](WALL_EXPERIMENT.md) (2026-06-06) |
-| **Graph-aware retrieval v3 refinements** | v2 (seed-anchored) shipped and works (see DONE). Remaining polish: degree-normalize `g` (some 1-hop-from-a-different-seed noise remains), kind/direction-filtered boost, recall expansion (pull non-visible edge-neighbours), rerank composition, and tuning the blend weight / seed count. | code (`internal/engine`) + eval |
+| **Shape-aware default = flat/collapsed retrieval** | Make flat-vector(+rerank) the DEFAULT and add a collapsed-tree mode (score rollups + leaves in ONE pass); reserve strict coarse→fine for dense near-duplicate corpora. RAPTOR + ReTreever externally confirm IOC's own finding that coarse→fine routing drops the correct scope (flat+rerank 0.93 vs hierarchical 0.74 on distinctive corpora). | [`DREAM.md`](DREAM.md) §2, [`WALL_EXPERIMENT.md`](WALL_EXPERIMENT.md) |
+| **Graph-boost v3 = query-seeded PPR** | Formalize v2's seed-anchored reorder as a 1–2 step Personalized PageRank over author-declared edges (seed = top-cosine hits, equal restart mass; re-rank over the vector candidate set, never the primary index) — HippoRAG's precedent at IOC's no-LLM cost. Add cheap no-LLM **synonym edges** (encoder-cosine) to densify so PPR can find paths. Then degree-normalize / kind-filter / weight-tune. | [`DREAM.md`](DREAM.md) §1, code (`internal/engine`) |
+| **Multi-signal ranking (author-declared importance)** | Add an **author-declared importance** term (reuse `Tier`: worktree=canonical vs workspace=mutable) as a third ranking signal beside relevance(cosine) + recency(have) — Generative Agents' `recency+importance+relevance` baseline, kept no-LLM (importance declared by the agent, not LLM-scored). Tune weights on IOC's eval (don't copy their all-weights=1). | [`DREAM.md`](DREAM.md) §3 |
+| **Memory-evolution superseding summaries** | Let the authoring agent optionally author a merged/rewritten **superseding** summary (still its words, still append-only) — closes the gap with A-MEM's revise-in-place without an LLM in core. | [`DREAM.md`](DREAM.md) §3 |
+| **Confidence/abstention research → margin-aware weak_match** | The cosine floor is gameable by vocabulary; margin separates better. **Area 4 is an open research gap** (the dream's verification surfaced no confirmed evidence) — run a dedicated search on conformal/selective-prediction/RAG-abstention FIRST, then calibrate `weak_match = top<floor OR (margin>0 && margin<m)`. **Experiment first, code after.** | [`DREAM.md`](DREAM.md) §4, [`WALL_EXPERIMENT.md`](WALL_EXPERIMENT.md) |
 | **Robustness cleanup** | RPC ctx/deadlines, chunk boundaries inside strings/fenced code, CRLF→\n normalization on Windows, `rerankTop` tail + score-count validation | code (`internal/{runtime,ingest,engine}`) |
 
 ## DEFERRED

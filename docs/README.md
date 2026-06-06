@@ -28,6 +28,7 @@ spec and the code disagree, the code wins**. These replaced the v0.1 formal spec
 - [`MCP_GUIDE.md`](MCP_GUIDE.md) — using IOC over MCP (the `ioc_*` tools).
 - [`SUPERSESSION.md`](SUPERSESSION.md) — the supersession / current-truth (currency) mechanism.
 - [`WALL_EXPERIMENT.md`](WALL_EXPERIMENT.md) — the reasoning-wall experiment: the empirical proof of the core thesis.
+- [`DREAM.md`](DREAM.md) — a deep-research-grounded rethink of IOC's theory vs the field (adopt/adapt/reject; direction, not spec).
 - [`SECURITY_AND_VULNERABILITIES.md`](SECURITY_AND_VULNERABILITIES.md) — threat models, the vulnerability register, the SaaS security gate.
 - [`encryption.md`](encryption.md) — opt-in at-rest AES-256-GCM (key handling, caveats).
 
