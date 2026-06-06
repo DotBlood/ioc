@@ -24,7 +24,6 @@ func query(args []string) error {
 	includeSuperseded := fs.Bool("include-superseded", false, "include superseded/archived (history) — default current view only")
 	recencyHalfLife := fs.Float64("recency-halflife-days", 0, "opt-in recency tie-breaker half-life in days (0=off; vector mode only)")
 	graphBoost := fs.Float64("graph-boost", 0, "opt-in graph-aware boost weight 0..1 (0=off): lift candidates edge-connected to strong hits")
-	graphSynonym := fs.Float64("graph-synonym", 0, "opt-in synonym-edge cosine threshold for graph-boost PPR (0=off; e.g. 0.85)")
 	_ = fs.Parse(args)
 
 	scopeID, err := iocfmt.ParseScopeID(*scope)
@@ -54,7 +53,6 @@ func query(args []string) error {
 		IncludeSuperseded:   *includeSuperseded,
 		RecencyHalfLifeDays: *recencyHalfLife,
 		GraphBoost:          *graphBoost,
-		GraphSynonym:        *graphSynonym,
 	})
 	if err != nil {
 		return err

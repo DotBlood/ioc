@@ -22,19 +22,12 @@ const recencyWeight = 0.15
 // clockNow is the time source for the recency tie-breaker; a var so tests can pin it.
 var clockNow = time.Now
 
-// graphSeedK is how many top-cosine candidates seed the graph-aware boost — the query's
-// "strong hits". The PPR restart distribution puts all its mass on these (∝ their cosine)
-// and zero elsewhere, so candidates are lifted for lying on a path FROM what the query
-// matched, not for global degree. Package var so a test can lower it.
+// graphSeedK is how many top-cosine candidates count as the query's "strong hits"
+// (the seed set) for graph-aware boost: a candidate is lifted only for its edges to
+// these seeds, NOT for its global degree — which is what fixes v1's centrality bias
+// (the 2026-06-06 experiment showed v1 lifted global hubs regardless of the query).
+// Package var so a test can lower it.
 var graphSeedK = 5
-
-// graphPPRSteps / graphPPRDamping tune the query-seeded Personalized PageRank: a few
-// degree-normalized walk steps with teleport probability (1−damping) back to the seeds.
-// Few steps keep the walk local (multi-hop, not global). Package vars so tests can pin them.
-var (
-	graphPPRSteps   = 2
-	graphPPRDamping = 0.5
-)
 
 // blendRecency re-sorts candidates by α·cosine + (1−α)·0.5^(ageDays/halfLife). It
 // only reorders — the displayed Hit.Score stays cosine (like the rerank path).
@@ -58,37 +51,28 @@ func blendRecency(ordered []search.Result, cosineByID map[string]float64, byID m
 	return out
 }
 
-// blendGraphPPR re-sorts candidates by (1−w)·cosine + w·g, where g is a candidate's
-// normalized mass from a query-seeded Personalized PageRank over the author-declared
-// edges among the candidate set: the restart distribution sits on the top-graphSeedK
-// cosine hits (∝ their cosine) and a few degree-normalized walk steps spread it along
-// edges — so a candidate on a MULTI-HOP path from a strong hit is lifted (unlike a 1-hop
-// boost), while a hub linked only to weak/unseeded candidates gets ~nothing (degree
-// normalization + seed anchoring keep it query-relevant, not centrality-biased). When
-// synThreshold > 0 the walk graph is densified with ephemeral, NON-persisted "synonym"
-// links between candidate pairs whose vectors have cosine ≥ synThreshold (a no-LLM
-// encoder signal; the persisted edge store stays author-declared only). It only REORDERS
-// the candidate set (no recall change); the displayed Hit.Score stays cosine (callers
-// read cosineByID, not these scores). A no-op when w<=0, fewer than 2 candidates, or no
-// edges/synonym links connect the set.
-func (e *Engine) blendGraphPPR(ordered []search.Result, cosineByID map[string]float64, vecByID map[string][]float32, w, synThreshold float64) ([]search.Result, error) {
+// blendGraph re-sorts candidates by α·cosine + (1−α)·g, where g is a candidate's
+// normalized connectivity to the query's STRONG HITS — the top-graphSeedK candidates
+// by cosine (the "seed" set) — via author-declared edges (1-hop, undirected, all
+// kinds). Anchoring g to the seeds (rather than to ALL neighbours) is the v2 fix for
+// v1's centrality bias: a candidate is lifted for being linked to what the query
+// matched, not for being a globally well-connected hub. It only REORDERS the visible
+// candidate set (no recall change); the displayed Hit.Score stays cosine (callers
+// read cosineByID, not these scores). A no-op when w<=0, fewer than 2 candidates, or
+// no edges connect a candidate to a seed.
+func (e *Engine) blendGraph(ordered []search.Result, cosineByID map[string]float64, w float64) ([]search.Result, error) {
 	if w <= 0 || len(ordered) < 2 {
 		return ordered, nil
 	}
 	if w > 1 {
 		w = 1
 	}
-	// Undirected adjacency among candidates: author-declared edges (both endpoints in
-	// the set) + optional ephemeral synonym links.
-	adj := make(map[string][]string, len(ordered))
-	addEdge := func(a, b string) {
-		adj[a] = append(adj[a], b)
-		adj[b] = append(adj[b], a)
-	}
 	edges, err := e.meta.AllEdges()
 	if err != nil {
 		return nil, err
 	}
+	// Undirected adjacency, restricted to edges whose BOTH endpoints are candidates.
+	adj := make(map[string][]string, len(ordered))
 	for _, ed := range edges {
 		from, to := ed.From.String(), ed.To.String()
 		if _, ok := cosineByID[from]; !ok {
@@ -97,28 +81,15 @@ func (e *Engine) blendGraphPPR(ordered []search.Result, cosineByID map[string]fl
 		if _, ok := cosineByID[to]; !ok {
 			continue
 		}
-		addEdge(from, to)
-	}
-	if synThreshold > 0 {
-		// O(N²) pairwise over candidates with a stored vector — opt-in only.
-		ids := make([]string, 0, len(vecByID))
-		for id := range vecByID {
-			ids = append(ids, id)
-		}
-		sort.Strings(ids) // deterministic
-		for i := 0; i < len(ids); i++ {
-			for j := i + 1; j < len(ids); j++ {
-				if search.Cosine(vecByID[ids[i]], vecByID[ids[j]]) >= synThreshold {
-					addEdge(ids[i], ids[j])
-				}
-			}
-		}
+		adj[from] = append(adj[from], to)
+		adj[to] = append(adj[to], from)
 	}
 	if len(adj) == 0 {
-		return ordered, nil // nothing connects the candidate set → unchanged order
+		return ordered, nil // no edges within the candidate set → unchanged order
 	}
-
-	// Restart distribution: mass on the top-graphSeedK candidates by cosine, ∝ cosine.
+	// Seed set = the top-graphSeedK candidates by cosine (the query's strongest hits).
+	// g counts a candidate's edges to THESE only, so a hub linked to many weak
+	// candidates gets nothing, while a dependent of a strong hit is lifted.
 	ids := make([]string, 0, len(cosineByID))
 	for id := range cosineByID {
 		ids = append(ids, id)
@@ -133,64 +104,31 @@ func (e *Engine) blendGraphPPR(ordered []search.Result, cosineByID map[string]fl
 	if k > len(ids) {
 		k = len(ids)
 	}
-	restart := make(map[string]float64, k)
-	var seedSum float64
+	isSeed := make(map[string]bool, k)
 	for _, id := range ids[:k] {
-		if c := cosineByID[id]; c > 0 {
-			restart[id] = c
-			seedSum += c
-		}
+		isSeed[id] = true
 	}
-	if seedSum <= 0 {
-		return ordered, nil // no positive-cosine seed → nothing to propagate
-	}
-	for id := range restart {
-		restart[id] /= seedSum
-	}
-
-	// Personalized PageRank: r⁰ = restart; r^{t+1} = (1−α)·restart + α·P·r^t, where
-	// P[i][j] = 1/deg(j) along undirected edges (degree-normalized random walk). Teleport
-	// (1−α) returns only to the seeds, so mass stays anchored to what the query matched.
-	deg := make(map[string]int, len(adj))
-	for id, nbrs := range adj {
-		deg[id] = len(nbrs)
-	}
-	r := make(map[string]float64, len(restart))
-	for id, m := range restart {
-		r[id] = m
-	}
-	alpha := graphPPRDamping
-	for step := 0; step < graphPPRSteps; step++ {
-		next := make(map[string]float64, len(r))
-		for id, m := range restart {
-			next[id] = (1 - alpha) * m
-		}
-		for j, mj := range r {
-			d := deg[j]
-			if mj == 0 || d == 0 {
-				continue
-			}
-			share := alpha * mj / float64(d)
-			for _, i := range adj[j] {
-				next[i] += share
-			}
-		}
-		r = next
-	}
-
+	raw := make(map[string]float64, len(ordered))
 	var gmax float64
-	for _, m := range r {
-		if m > gmax {
-			gmax = m
+	for _, r := range ordered {
+		var s float64
+		for _, nb := range adj[r.ID] {
+			if isSeed[nb] {
+				s += cosineByID[nb]
+			}
+		}
+		raw[r.ID] = s
+		if s > gmax {
+			gmax = s
 		}
 	}
 	if gmax <= 0 {
 		return ordered, nil
 	}
 	blended := make([]search.Result, len(ordered))
-	for i, res := range ordered {
-		g := r[res.ID] / gmax
-		blended[i] = search.Result{ID: res.ID, Score: (1-w)*cosineByID[res.ID] + w*g}
+	for i, r := range ordered {
+		g := raw[r.ID] / gmax
+		blended[i] = search.Result{ID: r.ID, Score: (1-w)*cosineByID[r.ID] + w*g}
 	}
 	sort.SliceStable(blended, func(i, j int) bool {
 		if blended[i].Score != blended[j].Score {
@@ -273,7 +211,6 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 	set := search.New()
 	bm := search.NewBM25()
 	byID := make(map[string]core.Artifact, len(arts))
-	vecByID := make(map[string][]float32, len(arts)) // candidate vectors, for synonym links
 	visible := make([]core.ID, 0, len(arts))
 	for _, a := range arts {
 		visible = append(visible, a.ID)
@@ -285,7 +222,6 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 			continue
 		}
 		set.Add(a.ID.String(), vec)
-		vecByID[a.ID.String()] = vec
 		// BM25 ranks the document CONTENT, not the "path:lines — first line"
 		// label (rankText loads CAS for documents); only build it in hybrid mode
 		// so vector-only queries pay no decompression cost. Deliberate cost: in
@@ -320,13 +256,12 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 		ordered = blendRecency(ordered, cosineByID, byID, q.RecencyHalfLifeDays)
 	}
 
-	// Optional graph-aware boost (opt-in, OFF by default): a query-seeded Personalized
-	// PageRank over author-declared edges lifts candidates on paths FROM the strong hits
-	// (the structural axis blended into the semantic order). Reorder-only — Hit.Score
-	// stays cosine; a no-op when no edges connect the set; skipped while reranking (the
-	// cross-encoder already orders). See Query.GraphBoost / GraphSynonym.
+	// Optional graph-aware boost (opt-in, OFF by default): lift candidates edge-linked
+	// to high-cosine candidates (the structural axis blended into the semantic order).
+	// Reorder-only — Hit.Score stays cosine; a no-op when no edges connect the set;
+	// skipped while reranking (the cross-encoder already orders). See Query.GraphBoost.
 	if q.GraphBoost > 0 && !willRerank {
-		ordered, err = e.blendGraphPPR(ordered, cosineByID, vecByID, q.GraphBoost, q.GraphSynonym)
+		ordered, err = e.blendGraph(ordered, cosineByID, q.GraphBoost)
 		if err != nil {
 			return core.NilID, nil, err
 		}

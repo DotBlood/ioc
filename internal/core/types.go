@@ -258,21 +258,14 @@ type Query struct {
 	RecencyHalfLifeDays float64
 
 	// GraphBoost, when > 0 (0 = OFF, default), blends the STRUCTURAL axis into the
-	// semantic ranking via a query-seeded Personalized PageRank over the author-declared
-	// edges among the candidate set (seed = the top-cosine hits, restart mass ∝ their
-	// cosine; a few degree-normalized walk steps). A candidate on a path FROM a strong
-	// hit is lifted — score = (1−w)·cosine + w·g, g = the candidate's normalized PPR mass.
-	// Unlike a 1-hop boost, PPR reaches MULTI-HOP dependents. It only REORDERS the
-	// visible candidate set (no recall change); Hit.Score stays cosine. A no-op when no
-	// edges connect the set, and ignored when reranking. Opt-in so the proven
-	// pure-semantic default is untouched. See docs/FSD.md §5.
+	// semantic ranking: a candidate that is edge-connected (author-declared edges) to
+	// high-cosine candidates is lifted — score = (1−w)·cosine + w·g, where g is the
+	// candidate's normalized connectivity to strong neighbours within the candidate
+	// set (1-hop, undirected, all kinds). It only REORDERS the visible candidate set
+	// (no recall change); Hit.Score stays cosine. A no-op when there are no edges, and
+	// ignored when reranking. Opt-in so the proven pure-semantic default is untouched.
+	// See docs/FSD.md §5.
 	GraphBoost float64
-	// GraphSynonym, when > 0 (0 = OFF, default), densifies the graph for the PPR walk by
-	// adding ephemeral, NON-persisted "synonym" links between candidate pairs whose
-	// summary embeddings have cosine ≥ GraphSynonym (a no-LLM, encoder-only signal). It
-	// helps PPR find paths when the author-declared graph is sparse; the persisted edge
-	// store stays author-declared only. Only takes effect when GraphBoost > 0.
-	GraphSynonym float64
 }
 
 // matchesKind reports whether k is in the (possibly empty=all) filter set.

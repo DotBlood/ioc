@@ -60,8 +60,3 @@ func dot(a, b []float32) float64 {
 	}
 	return sum
 }
-
-// Cosine returns the cosine similarity of two vectors. Vectors here are assumed
-// normalized (the embedder returns unit vectors), so this is the dot product; a
-// dimension mismatch scores 0 (consistent with Set.Search).
-func Cosine(a, b []float32) float64 { return dot(a, b) }
