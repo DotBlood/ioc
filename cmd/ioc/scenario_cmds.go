@@ -54,7 +54,7 @@ func runScenario(args []string) int {
 	}
 	defer tf.Close()
 
-	qm, hier := iocfmt.ParseModeSpec(*mode)
+	qm, hier, _ := iocfmt.ParseModeSpec(*mode) // scenario runner has no collapsed mode
 	rep, err := eval.Run(context.Background(), e, sc, tf, qm, hier, *coarseK, *rerank)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: run:", err)

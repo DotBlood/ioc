@@ -198,6 +198,7 @@ func (a *ioc) register(s *server.MCPServer) {
 		mcp.WithNumber("topk", mcp.Description("max results (default 5)")),
 		mcp.WithNumber("min_score", mcp.Description("drop hits with cosine score below this (0 = keep all)")),
 		mcp.WithBoolean("hierarchical", mcp.Description("coarse→fine: rank scope rollups, then search within top scopes (needs ioc_rollup on sub-scopes)")),
+		mcp.WithBoolean("collapsed", mcp.Description("DEFAULT true: flat search over the visible set ∪ ALL descendant scopes in one pass (descends into child scopes without rollups; dominates plain flat). Set false for flat (visible only); or use hierarchical for coarse→fine.")),
 		mcp.WithNumber("coarsek", mcp.Description("hierarchical coarse stage: # scopes to keep (0=default)")),
 		mcp.WithBoolean("rerank", mcp.Description("cross-encoder rerank the top candidates for higher precision")),
 		mcp.WithBoolean("include_superseded", mcp.Description("include superseded/archived (history); default false = current view only")),

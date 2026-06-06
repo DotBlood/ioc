@@ -233,6 +233,13 @@ type Query struct {
 
 	Hierarchical bool           // coarse→fine: rank scope rollups, then search within top scopes
 	CoarseK      int            // # of scopes to keep in the coarse stage (default 6)
+	// Collapsed searches the visible set ∪ ALL descendant-scope artifacts in one flat
+	// pass (no coarse→fine routing) — it fixes flat retrieval's blindness to descendant
+	// scopes AND hierarchical's routing-drop (RAPTOR's "collapsed tree" beats top-down
+	// traversal; see docs/RESEARCH_ROADMAP.md R1). Mutually exclusive with Hierarchical
+	// (Hierarchical wins if both set). Only changes the candidate SET; the ranking
+	// pipeline (cosine/hybrid/graph-boost/rerank) and Hit.Score are unchanged.
+	Collapsed    bool
 	Kinds        []ArtifactKind // restrict results to these kinds (empty = all)
 	Rerank       bool           // cross-encoder rerank the top RerankN candidates (needs a reranker)
 	RerankN      int            // # of candidates to rerank (default 20)

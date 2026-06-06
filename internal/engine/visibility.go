@@ -73,6 +73,49 @@ func (e *Engine) visibleArtifacts(scope core.ID, tier core.Tier, includeArchived
 	return out, nil
 }
 
+// collapsedCandidates implements RAPTOR's "collapsed tree" for IOC: the visible set
+// (own + ancestors + published siblings) UNION every artifact in EVERY descendant
+// scope, searched in one flat pass. Unlike flat retrieval it descends into child
+// scopes (fixing the descendant-blindness `visibleArtifacts` has); unlike
+// hierarchical it does NOT route coarse→fine, so it can never drop the correct scope.
+// Descendant artifacts are NOT required to be published (you own your subtree) —
+// matching coarseToFineCandidates; archived (superseded-version) descendant scopes are
+// skipped unless includeArchived; tier filters as usual.
+func (e *Engine) collapsedCandidates(scope core.ID, tier core.Tier, includeArchived bool) ([]core.Artifact, error) {
+	out, err := e.visibleArtifacts(scope, tier, includeArchived)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[core.ID]bool, len(out))
+	for _, a := range out {
+		seen[a.ID] = true
+	}
+	descs, err := e.descendantScopes(scope)
+	if err != nil {
+		return nil, err
+	}
+	for _, sc := range descs {
+		if sc.Archived && !includeArchived {
+			continue // superseded version scope: not in the current view
+		}
+		arts, err := e.meta.ArtifactsInScope(sc.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, a := range arts {
+			if seen[a.ID] {
+				continue
+			}
+			if tier != 0 && a.Tier != tier {
+				continue
+			}
+			seen[a.ID] = true
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
 func (e *Engine) ancestorsOf(scope core.ID) ([]core.Scope, error) {
 	var out []core.Scope
 	s, err := e.meta.GetScope(scope)

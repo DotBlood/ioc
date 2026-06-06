@@ -332,3 +332,38 @@ gb=0 vs gb=0.3 still identical on the edgeless corpus). So **graph-boost v2 now 
 the *explicit* `Related` walk (still cleaner/exact when you have the subject's ID). Some 1-hop-from-a-seed
 noise remains (artifacts connected to a different strong hit also rise) — acceptable, tunable via the
 blend weight; degree-normalization and kind/direction-filtered boost are the next refinements.
+
+---
+
+## 2026-06-06 — R1: collapsed-tree retrieval (RESEARCH_ROADMAP R1)
+
+Following the dream (`DREAM.md` §2): RAPTOR/ReTreever say search all levels at once ("collapsed tree")
+rather than route coarse→fine. IOC's `collapsedCandidates` = the visible set ∪ EVERY descendant-scope
+artifact, ranked in one flat pass (no routing, no rollups needed). Measured on real bge-small, 180
+artifacts (28 real + 152 distractors), 27 questions, recall@topK:
+
+| mode | TREE corpus (answers in descendant scopes) | DISTINCTIVE corpus (flat shape) |
+|---|---|---|
+| flat (`vector`) | **0.00** (currency 0/1 — blind to descendants) | 0.85 |
+| hierarchical (coarse→fine) | 0.74 (currency 1/1) | **0.96** (currency 1/1) |
+| **collapsed** | **0.85** (currency 1/1) | 0.85 (currency 1/1) |
+
+**Findings.**
+- **Collapsed STRICTLY DOMINATES flat as a default:** equal on distinctive (0.85), and 0.85 vs 0.00 on
+  tree — it is never worse and sometimes massively better, because flat is structurally blind to a
+  viewpoint's own descendant scopes (the normal nested-session case).
+- **Collapsed beats hierarchical on tree (0.85 vs 0.74):** no coarse routing means it never drops the
+  correct scope (exactly RAPTOR's collapsed-tree > tree-traversal finding, reproduced here). It also
+  needs **no rollups** to descend.
+- **Hierarchical still wins on dense/distinctive (0.96 vs 0.85):** the coarse stage's noise-cutting earns
+  its keep when many near-duplicate clusters compete — so hierarchical stays a useful **opt-in** for that
+  regime, not removed.
+
+**Decision (gate passed).** Flip the **user-facing default** (`ioc query`, MCP `ioc_query`) to
+**collapsed** — it dominates the old flat default. `vector` (flat) and `hierarchical` remain explicit
+modes. The engine `Query{}` zero-value stays flat (library callers choose explicitly; internal eval
+unaffected). Unit-tested: collapsed descends into a child without a rollup, equals flat with no
+descendants, and preserves the current view (excludes superseded + archived-scope artifacts).
+
+Reproduce: `ioc gen-wall -shape tree -n 180 -out tree.json` (and `-shape flat -distractor-clusters 12`),
+then `ioc wall tree.json -embed … -mode vector|hierarchical|collapsed`.

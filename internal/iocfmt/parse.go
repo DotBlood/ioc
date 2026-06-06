@@ -86,20 +86,25 @@ func ParseTier(s string) core.Tier {
 	}
 }
 
-// ParseModeSpec maps a -mode string to (retrieval mode, hierarchical?).
+// ParseModeSpec maps a -mode string to (retrieval mode, hierarchical?, collapsed?).
 //
-//	vector (default) | hybrid (experimental) | hierarchical (coarse→fine over rollups)
-func ParseModeSpec(s string) (core.QueryMode, bool) {
+//	vector (default) | hybrid | hierarchical (coarse→fine over rollups) |
+//	collapsed (flat over visible ∪ ALL descendants — no coarse→fine routing)
+func ParseModeSpec(s string) (core.QueryMode, bool, bool) {
 	switch strings.ToLower(s) {
 	case "hybrid":
-		return core.ModeHybrid, false
+		return core.ModeHybrid, false, false
 	case "hierarchical", "hierarchical-hybrid", "hybrid-hierarchical":
 		// coarse(rollups) + HYBRID fine — the configuration that works at scale
 		// (recall 0.94 vs 0.33 for vector-only at 180 artifacts).
-		return core.ModeHybrid, true
+		return core.ModeHybrid, true, false
 	case "hierarchical-vector":
-		return core.ModeVector, true // coarse + vector fine (weak; for comparison)
+		return core.ModeVector, true, false // coarse + vector fine (weak; for comparison)
+	case "collapsed", "collapsed-vector":
+		return core.ModeVector, false, true // flat over the whole subtree (RAPTOR collapsed-tree)
+	case "collapsed-hybrid", "hybrid-collapsed":
+		return core.ModeHybrid, false, true
 	default:
-		return core.ModeVector, false
+		return core.ModeVector, false, false
 	}
 }

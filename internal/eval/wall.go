@@ -112,7 +112,7 @@ type WallReport struct {
 // report (answer scoring happens externally against the gold file). mode/
 // hierarchical/coarseK/rerank select the retrieval configuration so the same
 // corpus+questions can be measured flat-vector vs hierarchical vs +rerank at scale.
-func WallRun(ctx context.Context, e *engine.Engine, spec *WallSpec, packetsW, goldW io.Writer, mode core.QueryMode, hierarchical bool, coarseK int, rerank bool, graphBoost float64) (*WallReport, error) {
+func WallRun(ctx context.Context, e *engine.Engine, spec *WallSpec, packetsW, goldW io.Writer, mode core.QueryMode, hierarchical, collapsed bool, coarseK int, rerank bool, graphBoost float64) (*WallReport, error) {
 	topK := spec.TopK
 	if topK <= 0 {
 		topK = 5
@@ -140,7 +140,7 @@ func WallRun(ctx context.Context, e *engine.Engine, spec *WallSpec, packetsW, go
 		}
 		_, hits, err := e.Query(ctx, core.Query{
 			Scope: scope, Text: q.Question, Detail: core.DetailOverview, TopK: topK,
-			Mode: mode, Hierarchical: hierarchical, CoarseK: coarseK, Rerank: rerank,
+			Mode: mode, Hierarchical: hierarchical, Collapsed: collapsed, CoarseK: coarseK, Rerank: rerank,
 			GraphBoost: graphBoost,
 		})
 		if err != nil {

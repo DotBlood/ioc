@@ -172,9 +172,12 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 	}
 
 	var arts []core.Artifact
-	if q.Hierarchical {
+	switch {
+	case q.Hierarchical:
 		arts, err = e.coarseToFineCandidates(q.Scope, qvec, q.CoarseK, q.Tier, q.IncludeSuperseded)
-	} else {
+	case q.Collapsed:
+		arts, err = e.collapsedCandidates(q.Scope, q.Tier, q.IncludeSuperseded)
+	default:
 		arts, err = e.visibleArtifacts(q.Scope, q.Tier, q.IncludeSuperseded)
 	}
 	if err != nil {

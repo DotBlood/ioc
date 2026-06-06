@@ -224,6 +224,10 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 	// Hierarchical uses a HYBRID fine stage (vector+BM25) — the configuration that
 	// holds up at scale; pure-vector hierarchy does not help.
 	hier := r.GetBool("hierarchical", false)
+	// Collapsed (visible ∪ all descendants, flat) is the DEFAULT: it dominates plain
+	// flat retrieval, which is blind to a viewpoint's own descendant scopes (the normal
+	// nested case → recall 0.00). Pass collapsed=false for flat, or hierarchical=true.
+	coll := r.GetBool("collapsed", true)
 	mode := core.ModeVector
 	if hier {
 		mode = core.ModeHybrid
@@ -238,6 +242,7 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 		MinScore:            r.GetFloat("min_score", 0),
 		Mode:                mode,
 		Hierarchical:        hier,
+		Collapsed:           coll,
 		CoarseK:             r.GetInt("coarsek", 0),
 		Rerank:              r.GetBool("rerank", false),
 		IncludeSuperseded:   r.GetBool("include_superseded", false),

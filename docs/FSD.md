@@ -172,12 +172,16 @@ For a `Query` from viewpoint `q.Scope` (pipeline as implemented in `internal/eng
 
 1. **Embed** `q.Text`; **guard** its dimension against the store's embedder (mismatch ⇒
    `ErrInvalidInput`, not silent zeros).
-2. **Candidate set.** If `q.Hierarchical`: coarse-rank descendant scope rollups by cosine, keep the top
-   `CoarseK` (adaptive; default ~6), and gather their artifacts — this **descends into child scopes**.
-   Else: `visibleArtifacts` (own + ancestors + published siblings — see §9). **Shape rule:** flat
-   retrieval is *structurally blind* to artifacts that live in descendant scopes; when querying from a
-   parent whose answers live in child scopes, hierarchical is mandatory (measured: flat recall 0.00 vs
-   hierarchical 0.74 on such a corpus — see [`WALL_EXPERIMENT.md`](WALL_EXPERIMENT.md)).
+2. **Candidate set.** Three builders: `q.Hierarchical` → coarse-rank descendant scope rollups by cosine,
+   keep the top `CoarseK` (adaptive; ~6), gather their artifacts (descends, but *routes* — can drop the
+   right scope). `q.Collapsed` → `collapsedCandidates` = `visibleArtifacts` ∪ **all** descendant-scope
+   artifacts, one flat pass (descends without routing or rollups). Else → `visibleArtifacts` (own +
+   ancestors + published siblings — see §9; does NOT descend). **Shape rule:** plain flat is
+   *structurally blind* to descendant scopes (measured flat recall 0.00 vs hierarchical 0.74 vs
+   **collapsed 0.85** on a tree corpus). **Collapsed is the user-facing default** (CLI/MCP) because it
+   strictly dominates flat; hierarchical stays an opt-in that still wins on dense/distinctive corpora
+   (0.96). The engine `Query{}` zero-value is flat (library callers pick explicitly). See
+   [`WALL_EXPERIMENT.md`](WALL_EXPERIMENT.md) R1.
 3. **Currency filter.** Unless `IncludeSuperseded`, drop artifacts with `SupersededBy` set (archived
    version scopes are already excluded at the visibility layer).
 4. **Kind filter** (`q.Kinds`), if any.

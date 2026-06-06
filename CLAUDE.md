@@ -46,13 +46,21 @@ Embedder `-embed`: empty = deterministic mock (pipeline only, not real wall numb
 refused unless `IOC_ALLOW_REMOTE_EMBED=1`, and a plaintext (http) remote is refused outright (https
 required); unix/loopback always allowed. Loopback is judged by literal host (no DNS).
 
-Retrieval modes (`-mode` / `Query.Mode`+`Hierarchical`+`CoarseK`):
-- `vector` (default) — cosine; best at small scale.
+Retrieval modes (`-mode` / `Query.Mode`+`Hierarchical`+`Collapsed`+`CoarseK`):
+- `collapsed` — **the user-facing default** (CLI `ioc query`, MCP `ioc_query`): flat cosine over the
+  visible set ∪ **ALL descendant-scope artifacts** in one pass (no coarse→fine routing, no rollups
+  needed). It **strictly dominates plain flat** (which is blind to a viewpoint's own descendants → recall
+  0.00 on nested memory) and beats hierarchical on tree-shaped corpora (0.85 vs 0.74) — RAPTOR's
+  collapsed-tree > tree-traversal, reproduced. `engine.Query{}` zero-value stays flat (library callers
+  set `Collapsed`/`Hierarchical` explicitly). Measured 2026-06-06; see `docs/WALL_EXPERIMENT.md`.
+- `vector` — flat cosine over the **visible set only** (own + ancestors + published siblings; does NOT
+  descend). Best at small scale / when answers are in the visible set.
 - `hybrid` — vector+BM25 via RRF; helps at scale, can hurt at small N.
 - `hierarchical` — coarse-rank scope rollups → **hybrid** fine within top `CoarseK` (~6) scopes;
   needs `RollupScope` on sub-scopes. Coarse→fine **descends into the viewpoint's child scopes**, which
-  flat retrieval does not (see the shape rule below). Pure-vector hierarchy does NOT help; the fine
-  stage must be hybrid.
+  flat retrieval does not (see the shape rule below). **Still the best on dense/distinctive corpora**
+  (0.96) where the coarse stage cuts near-duplicate noise — a useful opt-in there. Pure-vector hierarchy
+  does NOT help; the fine stage must be hybrid.
 - **Pick the mode by corpus SHAPE (are the answer artifacts visible from the query viewpoint?), not by
   density alone** (measured 2026-06-06, real bge-small, 180 artifacts, topK=5 — see the dated block in
   `docs/WALL_EXPERIMENT.md`; corrects the earlier "hierarchical hurts distinctive" claim, which compared

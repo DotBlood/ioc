@@ -69,8 +69,8 @@ func runWall(args []string) int {
 	}
 	defer gf.Close()
 
-	qm, hier := iocfmt.ParseModeSpec(*mode)
-	rep, err := eval.WallRun(context.Background(), e, spec, pf, gf, qm, hier, *coarseK, *rerank, *graphBoost)
+	qm, hier, coll := iocfmt.ParseModeSpec(*mode)
+	rep, err := eval.WallRun(context.Background(), e, spec, pf, gf, qm, hier, coll, *coarseK, *rerank, *graphBoost)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: wall run:", err)
 		return 1

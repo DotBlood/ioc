@@ -20,7 +20,12 @@ result.
 
 ---
 
-## R1 — Collapsed-tree retrieval *(IN PROGRESS, this run)*
+## R1 — Collapsed-tree retrieval *(DONE 2026-06-06 — gate passed, now the default)*
+
+**Result:** collapsed **strictly dominates flat** (tree 0.85 vs 0.00; distinctive 0.85 = 0.85) and beats
+hierarchical on tree (0.85 vs 0.74); hierarchical still wins dense/distinctive (0.96) and stays opt-in.
+Gate passed → collapsed is the user-facing default (`ioc query`, MCP). See `WALL_EXPERIMENT.md` (R1).
+
 
 - **Question.** Can a single flat pass over *all* levels (visible set ∪ all descendant-scope artifacts)
   beat both flat retrieval (blind to descendants) and hierarchical coarse→fine (which can route the

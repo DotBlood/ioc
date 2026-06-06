@@ -17,7 +17,7 @@ func query(args []string) error {
 	topk := fs.Int("topk", 5, "top-K")
 	tier := fs.String("tier", "", "worktree|workspace (empty=both)")
 	kind := fs.String("kind", "", "restrict to kinds (comma list: document,reasoning,insight,...)")
-	mode := fs.String("mode", "vector", "vector|hybrid|hierarchical")
+	mode := fs.String("mode", "collapsed", "collapsed (default: flat over visible ∪ all descendants)|vector (flat, visible only)|hybrid|hierarchical")
 	coarseK := fs.Int("coarsek", 0, "hierarchical coarse stage: # scopes to keep (0=default)")
 	minScore := fs.Float64("min-score", 0, "drop hits with cosine score below this")
 	rerank := fs.Bool("rerank", false, "cross-encoder rerank the top candidates (needs a real -embed)")
@@ -36,7 +36,7 @@ func query(args []string) error {
 	}
 	defer e.Close()
 
-	qm, hier := iocfmt.ParseModeSpec(*mode)
+	qm, hier, coll := iocfmt.ParseModeSpec(*mode)
 	qid, hits, err := e.Query(context.Background(), core.Query{
 		Scope:               scopeID,
 		Text:                *text,
@@ -46,6 +46,7 @@ func query(args []string) error {
 		Kinds:               iocfmt.ParseKinds(*kind),
 		Mode:                qm,
 		Hierarchical:        hier,
+		Collapsed:           coll,
 		CoarseK:             *coarseK,
 		MinScore:            *minScore,
 		Rerank:              *rerank,
