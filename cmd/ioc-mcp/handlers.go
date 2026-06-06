@@ -253,7 +253,7 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	return jsonResult(iocfmt.QueryOut(qid, hits, a.svc.EmbModel()))
+	return jsonResult(iocfmt.QueryOut(qid, hits, core.ResolveConfidence(a.svc.EmbModel(), a.svc.Config)))
 }
 
 func (a *ioc) neighbors(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {

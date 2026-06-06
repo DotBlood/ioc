@@ -70,6 +70,8 @@ func main() {
 		err = history(args)
 	case "query":
 		err = query(args)
+	case "calibrate":
+		err = calibrate(args)
 	case "neighbors":
 		err = neighbors(args)
 	case "traces":
@@ -92,6 +94,7 @@ func usage() {
 commands:
   run-scenario <file.json> [-dir d] [-embed e] [-mode m]  run a scripted eval scenario
   wall <spec.json> [-dir d] [-embed e] [-out D] [-mode m] [-coarsek N] [-rerank]  reasoning-wall: build corpus, emit blind judge packets + gold
+  calibrate -probe <spec.json> [-dir d] [-embed e] [-coverage 0.9] [-write]  derive per-embedder confidence floor from probe spec
   gen-wall -out F [-shape flat|tree] [-n N] [-distractor-clusters C]  generate a ~N-artifact wall spec (real seed + distractors)
   gen-scenario -out F [-n N] [-clusters C] [-shape flat|tree]  generate a scale scenario
   embed-ping [-embed e]                          check the embedding service

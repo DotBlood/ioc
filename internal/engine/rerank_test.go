@@ -102,7 +102,7 @@ func TestRerank_ConfidenceUsesRerankSignal(t *testing.T) {
 	require.InDelta(t, 0.9933, *hits[0].RerankScore, 0.01)
 	require.InDelta(t, 0.0067, *hits[1].RerankScore, 0.01)
 
-	out := iocfmt.QueryOut(qid, hits, e.EmbModel())
+	out := iocfmt.QueryOut(qid, hits, core.DefaultConfidence(e.EmbModel()))
 	require.Equal(t, "rerank", out["ranked_by"])
 	// Margin uses the rerank signal → strictly positive (cosine would be negative).
 	require.Greater(t, out["margin"].(float64), 0.0)
@@ -128,7 +128,7 @@ func TestRerank_WeakWhenRerankerRejects(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, hits, 1)
 
-	out := iocfmt.QueryOut(qid, hits, e.EmbModel())
+	out := iocfmt.QueryOut(qid, hits, core.DefaultConfidence(e.EmbModel()))
 	require.Equal(t, "rerank", out["ranked_by"])
 	require.True(t, out["weak_match"].(bool), "reranker rejected the only hit → weak_match")
 }
@@ -198,6 +198,6 @@ func TestQueryOut_CosinePathUnchanged(t *testing.T) {
 	require.Len(t, hits, 1)
 	require.Nil(t, hits[0].RerankScore)
 
-	out := iocfmt.QueryOut(qid, hits, e.EmbModel())
+	out := iocfmt.QueryOut(qid, hits, core.DefaultConfidence(e.EmbModel()))
 	require.Equal(t, "cosine", out["ranked_by"])
 }

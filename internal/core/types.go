@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"strconv"
 	"time"
 )
 
@@ -339,6 +340,56 @@ func MarginFloor(model string) float64 {
 	default:
 		return 0.03
 	}
+}
+
+// Confidence holds the per-embedder thresholds the confidence signals read. It is
+// resolved by the CALLER (hardcoded defaults or per-embedder calibration) and passed to
+// iocfmt.QueryOut, which therefore stays storage-free. Calibrated reports whether the
+// floor came from per-embedder calibration (R4b) rather than a transferred constant —
+// absolute cosine floors are NOT portable across embedders (arXiv:2403.05440).
+type Confidence struct {
+	Floor       float64 // cosine floor below which the top hit is weak (floor_miss)
+	MarginFloor float64 // top1−top2 cosine margin below which the result is ambiguous
+	RerankFloor float64 // rerank-score floor (the cosine path uses Floor)
+	Calibrated  bool    // floors came from calibration, not a default constant
+}
+
+// DefaultConfidence returns the hardcoded per-embedder defaults (not calibrated).
+func DefaultConfidence(model string) Confidence {
+	return Confidence{
+		Floor:       ConfidenceFloor(model),
+		MarginFloor: MarginFloor(model),
+		RerankFloor: RerankFloor(model),
+		Calibrated:  false,
+	}
+}
+
+// ResolveConfidence builds the thresholds for a model: per-embedder calibration written
+// to config (keys conf.floor/conf.margin/conf.rerank "."+model, R4b) overrides the
+// hardcoded DefaultConfidence. get is a config reader (engine.Config / runtime
+// Client.Config), so this works over both the embedded engine and the daemon.
+func ResolveConfidence(model string, get func(string) (string, bool)) Confidence {
+	c := DefaultConfidence(model)
+	if get == nil {
+		return c
+	}
+	if v, ok := get("conf.floor." + model); ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			c.Floor = f
+			c.Calibrated = true
+		}
+	}
+	if v, ok := get("conf.margin." + model); ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			c.MarginFloor = f
+		}
+	}
+	if v, ok := get("conf.rerank." + model); ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			c.RerankFloor = f
+		}
+	}
+	return c
 }
 
 // Hit is one retrieval result. Content is populated only at DetailRaw.

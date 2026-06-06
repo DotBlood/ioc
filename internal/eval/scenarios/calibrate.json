@@ -1,0 +1,51 @@
+{
+  "name": "calibrate-probe",
+  "topk": 5,
+  "build": [
+    { "op": "create_scope", "id": "wt", "parent": "root", "role": "worktree", "title": "ioc-calibrate" },
+
+    { "op": "push", "scope": "wt", "as": "C1", "kind": "reasoning",
+      "summary": "IOC stores a mini-summary and its embedding for every artifact; retrieval operates on those summaries, not on raw content." },
+    { "op": "push", "scope": "wt", "as": "C2", "kind": "reasoning",
+      "summary": "The confidence floor is a per-embedder cosine threshold; a top hit scoring below it triggers a weak_match flag indicating no specific artifact matched the query." },
+    { "op": "push", "scope": "wt", "as": "C3", "kind": "reasoning",
+      "summary": "Hierarchical retrieval first ranks scope-level rollup summaries (coarse stage), then runs hybrid search inside the top-ranked scopes (fine stage), allowing recall from descendant scopes invisible to flat retrieval." },
+    { "op": "push", "scope": "wt", "as": "C4", "kind": "reasoning",
+      "summary": "IOC never calls a language model; an external agent authors the summary text and IOC only embeds and stores it, keeping the memory mechanics strictly separate from text generation." },
+    { "op": "push", "scope": "wt", "as": "C5", "kind": "reasoning",
+      "summary": "The embedding store is append-only; durability is achieved by advancing a count header only after a new record is fully written and an fsync is issued." },
+    { "op": "push", "scope": "wt", "as": "C6", "kind": "reasoning",
+      "summary": "Supersession is append-only: a replaced artifact is marked SupersededBy but never deleted; retrieval excludes superseded artifacts by default and surfaces them only when include_superseded is set." },
+    { "op": "push", "scope": "wt", "as": "C7", "kind": "reasoning",
+      "summary": "A runtime daemon owns one store exclusively and serves multiple clients over a loopback framed-JSON protocol; direct multi-process access to the same store is deliberately rejected." },
+    { "op": "push", "scope": "wt", "as": "C8", "kind": "reasoning",
+      "summary": "Ingestion mirrors a directory tree into nested scopes, chunks text files at language-aware semantic boundaries, and embeds the raw chunk text while storing a short path:lines label as the summary." }
+  ],
+  "questions": [
+    { "id": "q-what-is-stored", "scope": "wt", "goldRefs": ["C1"],
+      "question": "What does IOC keep in its working layer for each artifact, and what does retrieval operate on?",
+      "gold": "IOC keeps a mini-summary and its embedding; retrieval ranks on those summaries, not raw content." },
+    { "id": "q-weak-match", "scope": "wt", "goldRefs": ["C2"],
+      "question": "What is the confidence floor and what happens when a top hit scores below it?",
+      "gold": "The confidence floor is a per-embedder cosine threshold; a hit below it triggers weak_match, indicating no specific match was found." },
+    { "id": "q-hierarchical", "scope": "wt", "goldRefs": ["C3"],
+      "question": "How does hierarchical retrieval find artifacts that flat retrieval cannot reach?",
+      "gold": "It first ranks scope rollups (coarse), then runs hybrid search inside top scopes (fine), reaching descendants invisible to flat bottom-up retrieval." },
+    { "id": "q-no-llm", "scope": "wt", "goldRefs": ["C4"],
+      "question": "Does IOC call a language model to produce or rewrite the summaries it stores?",
+      "gold": "No. An external agent writes the summary; IOC only embeds and stores it." },
+    { "id": "q-supersession", "scope": "wt", "goldRefs": ["C6"],
+      "question": "When an artifact is superseded, is it deleted from the store?",
+      "gold": "No. Superseded artifacts are marked but kept; retrieval hides them by default and shows them only when include_superseded is enabled." },
+
+    { "id": "q-absent-vacation", "scope": "wt", "goldRefs": [],
+      "question": "What is the company vacation policy and how many days off do employees receive per year?",
+      "gold": "INSUFFICIENT — IOC memory contains no information about company HR policies or vacation days." },
+    { "id": "q-absent-billing", "scope": "wt", "goldRefs": [],
+      "question": "Which payment processor does IOC use to bill customers and handle subscription renewals?",
+      "gold": "INSUFFICIENT — IOC has no billing or payment processing component; this information is not in memory." },
+    { "id": "q-absent-recipe", "scope": "wt", "goldRefs": [],
+      "question": "What ingredients and steps are required to bake a sourdough loaf?",
+      "gold": "INSUFFICIENT — IOC memory contains no culinary content; this question has no relevant artifact." }
+  ]
+}

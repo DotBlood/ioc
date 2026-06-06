@@ -99,7 +99,11 @@ only) + distinct `confidence` codes (ok/floor_miss/margin_ambiguous/empty); `cor
 over-flag; clear answers margin ≥0.067) but **largely redundant with the well-tuned bge-small floor** —
 its value is the confidence-code affordance + a portability hedge for embedders whose absolute floor is
 mis-calibrated, NOT a measured recall win on bge-small. No regression. Per-embedder floor calibration
-infra (conformal quantile) = R4b (deferred).
+infra (conformal quantile) = R4b — **SHIPPED 2026-06-06**: `ioc calibrate` derives the floor from probe
+data (split-conformal quantile) → per-embedder config; `core.ResolveConfidence` reads it (fallback to
+hardcoded default). Validated on real bge-small (floor 0.7064 reproduces 0.68 from data, separates
+absent≤0.56 / relevant≥0.70). Parity on bge-small; value = removes the non-portable hardcoded constant.
+Not persisted in-repo (default unchanged). See WALL_EXPERIMENT.md R4b.
 
 
 **Result (53-agent bounded fan-out, 7/16 claims confirmed; see `DREAM.md` §4):** the gap is CLOSED and

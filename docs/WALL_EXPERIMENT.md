@@ -442,3 +442,25 @@ floor is not transferable, so on an embedder whose floor is mis-calibrated the *
 the signal. It is NOT a measured recall/abstention win on bge-small — and it does not regress (safe,
 no over-flag). Shipped opt-out-free (it only changes the weak flag, never recall/order); per-embedder
 floor calibration infra (conformal quantile) remains R4b.
+
+---
+
+## 2026-06-06 — R4b: per-embedder floor calibration (conformal quantile) — SHIPPED + validated
+
+Removes the hardcoded-constant dependency for the confidence floor: `ioc calibrate -embed <ep> -probe
+<spec>` derives the floor from data (the (1−coverage) quantile of known-RELEVANT probe top-scores —
+split-conformal, arXiv:2511.17908) and writes it per-embedder to config (`conf.floor.<model>`).
+`core.ResolveConfidence` reads config (calibrated) and falls back to `DefaultConfidence` (hardcoded);
+`QueryOut` now takes a resolved `core.Confidence` (iocfmt stays storage-free). No Service/RPC change —
+callers resolve via `svc.EmbModel()` + `svc.Config`.
+
+**Validation (real bge-small, `internal/eval/scenarios/calibrate.json`, coverage 0.9, dry-run):**
+- calibrated floor = **0.7064** (relevant probe tops 0.70–0.78; absent tops 0.45–0.56, max 0.56).
+- The data-derived floor **reproduces the hardcoded 0.68 from data** (0.71 ≈ 0.68) AND cleanly separates
+  absent (≤0.56) from relevant (≥0.70) — floor 0.71 > max-absent 0.56.
+
+**Honest framing:** on the well-tuned bge-small this is **parity, not a recall win** — the value is
+(1) removing the non-portable hardcoded constant (a fixed cosine floor does not transfer across embedders,
+arXiv:2403.05440), and (2) a one-command path to a principled per-embedder floor when switching/fine-tuning
+the embedder. **Not persisted in the repo** — default behavior is unchanged (empty config → 0.68); the
+operator runs `ioc calibrate` per deployment. `confidence` output now also carries `calibrated` (bool).

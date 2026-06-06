@@ -78,7 +78,7 @@ func HitsOut(hits []core.Hit) []map[string]any {
 // core.ConfidenceFloor). Mixing them — e.g. cosine margin over rerank-ordered
 // hits — produces negative margins and false confidence (the H3 bug), so the
 // ranked_by field names which signal is in force.
-func QueryOut(queryID core.ID, hits []core.Hit, model string) map[string]any {
+func QueryOut(queryID core.ID, hits []core.Hit, conf core.Confidence) map[string]any {
 	reranked := len(hits) > 0 && hits[0].RerankScore != nil
 
 	var top, margin float64
@@ -101,10 +101,10 @@ func QueryOut(queryID core.ID, hits []core.Hit, model string) map[string]any {
 		margin = score(hits[0]) - score(hits[1])
 	}
 
-	floor := core.ConfidenceFloor(model)
+	floor := conf.Floor
 	rankedBy := "cosine"
 	if reranked {
-		floor = core.RerankFloor(model)
+		floor = conf.RerankFloor
 		rankedBy = "rerank"
 	}
 
@@ -114,7 +114,7 @@ func QueryOut(queryID core.ID, hits []core.Hit, model string) map[string]any {
 	// stated uncertainty, or retrieve one more turn). The margin gate is COSINE-path only
 	// — rerank scores are sigmoid-saturated, so their margin is unreliable (see above), so
 	// reranked queries stay floor-only. floor_miss takes priority. R4 / docs/DREAM.md §4.
-	marginAmbiguous := !reranked && marginValid && margin < core.MarginFloor(model)
+	marginAmbiguous := !reranked && marginValid && margin < conf.MarginFloor
 	confidence := "ok"
 	switch {
 	case len(hits) == 0:
@@ -129,6 +129,7 @@ func QueryOut(queryID core.ID, hits []core.Hit, model string) map[string]any {
 		"query_id":   queryID.String(),
 		"ranked_by":  rankedBy,
 		"confidence": confidence,
+		"calibrated": conf.Calibrated,
 		"weak_match": confidence != "ok",
 		"top_score":  top,
 		"margin":     margin,

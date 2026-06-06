@@ -59,7 +59,7 @@ func query(args []string) error {
 	if err != nil {
 		return err
 	}
-	return printJSON(iocfmt.QueryOut(qid, hits, e.EmbModel()))
+	return printJSON(iocfmt.QueryOut(qid, hits, core.ResolveConfidence(e.EmbModel(), e.Config)))
 }
 
 // neighbors finds the most similar CURRENT artifacts to text — the dedup/supersede

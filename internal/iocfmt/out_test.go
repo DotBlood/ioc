@@ -18,11 +18,11 @@ func TestOut_TrustSurfacing(t *testing.T) {
 	require.Nil(t, HitOut(authored)["trust"])
 	require.Equal(t, core.TrustIngested, HitOut(ingested)["trust"])
 
-	clean := QueryOut(core.NewID(), []core.Hit{authored}, "mock-bow")
+	clean := QueryOut(core.NewID(), []core.Hit{authored}, core.DefaultConfidence("mock-bow"))
 	_, hasFlag := clean["untrusted_content"]
 	require.False(t, hasFlag, "no untrusted_content when all hits authored")
 
-	mixed := QueryOut(core.NewID(), []core.Hit{authored, ingested}, "mock-bow")
+	mixed := QueryOut(core.NewID(), []core.Hit{authored, ingested}, core.DefaultConfidence("mock-bow"))
 	require.Equal(t, true, mixed["untrusted_content"])
 }
 
@@ -37,7 +37,7 @@ func TestQueryOut_CosinePath(t *testing.T) {
 	floor := core.ConfidenceFloor(bgeSmall) // ~0.68
 
 	t.Run("no hits → weak, zeroed", func(t *testing.T) {
-		out := QueryOut(core.NewID(), nil, bgeSmall)
+		out := QueryOut(core.NewID(), nil, core.DefaultConfidence(bgeSmall))
 		require.Equal(t, true, out["weak_match"])
 		require.Equal(t, "cosine", out["ranked_by"])
 		require.Equal(t, 0.0, out["top_score"])
@@ -47,7 +47,7 @@ func TestQueryOut_CosinePath(t *testing.T) {
 
 	t.Run("single strong hit → not weak, margin 0", func(t *testing.T) {
 		hits := []core.Hit{{Artifact: core.NewID(), Score: 0.82}}
-		out := QueryOut(core.NewID(), hits, bgeSmall)
+		out := QueryOut(core.NewID(), hits, core.DefaultConfidence(bgeSmall))
 		require.Equal(t, false, out["weak_match"])
 		require.InDelta(t, 0.82, out["top_score"].(float64), 1e-9)
 		require.Equal(t, 0.0, out["margin"], "margin needs ≥2 hits")
@@ -56,7 +56,7 @@ func TestQueryOut_CosinePath(t *testing.T) {
 
 	t.Run("single hit below floor → weak", func(t *testing.T) {
 		hits := []core.Hit{{Artifact: core.NewID(), Score: floor - 0.05}}
-		out := QueryOut(core.NewID(), hits, bgeSmall)
+		out := QueryOut(core.NewID(), hits, core.DefaultConfidence(bgeSmall))
 		require.Equal(t, true, out["weak_match"])
 	})
 
@@ -65,7 +65,7 @@ func TestQueryOut_CosinePath(t *testing.T) {
 			{Artifact: core.NewID(), Score: 0.81},
 			{Artifact: core.NewID(), Score: 0.66},
 		}
-		out := QueryOut(core.NewID(), hits, bgeSmall)
+		out := QueryOut(core.NewID(), hits, core.DefaultConfidence(bgeSmall))
 		require.Equal(t, false, out["weak_match"])
 		require.InDelta(t, 0.81, out["top_score"].(float64), 1e-9)
 		require.InDelta(t, 0.15, out["margin"].(float64), 1e-9)
@@ -80,8 +80,8 @@ func TestQueryOut_FloorIsPerEmbedder(t *testing.T) {
 	require.Greater(t, core.ConfidenceFloor(bgeSmall), 0.60)
 	require.Less(t, core.ConfidenceFloor("some-other-model"), 0.60)
 
-	weak := QueryOut(core.NewID(), hits, bgeSmall)
-	strong := QueryOut(core.NewID(), hits, "some-other-model")
+	weak := QueryOut(core.NewID(), hits, core.DefaultConfidence(bgeSmall))
+	strong := QueryOut(core.NewID(), hits, core.DefaultConfidence("some-other-model"))
 	require.Equal(t, true, weak["weak_match"])
 	require.Equal(t, false, strong["weak_match"])
 }
