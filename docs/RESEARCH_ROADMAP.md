@@ -43,7 +43,15 @@ Gate passed → collapsed is the user-facing default (`ioc query`, MCP). See `WA
   collapsed**. Otherwise keep opt-in and record why.
 - **Ship.** `Query.Collapsed` (opt-in) → CLI/wall/MCP `-mode collapsed`; flip default on a passed gate.
 
-## R2 — Graph-boost v3: query-seeded Personalized PageRank
+## R2 — Graph-boost v3: query-seeded Personalized PageRank *(CODE LANDED 2026-06-06; real-embedder benefit experiment PENDING)*
+
+Status: `blendGraphPPR` (k-step query-seeded PPR over author-declared edges, restart ∝ cosine on the
+top-`graphSeedK` hits, degree-normalized walk) replaced the v2 1-hop boost; opt-in synonym links
+(`Query.GraphSynonym`, encoder-cosine, ephemeral/non-persisted) added. Unit-tested incl. a 2-hop lift
+(`TestGraphBoost_MultiHopPPR`) that a 1-step walk cannot reach, and synonym densification. The
+real-embedder benefit experiment (PPR vs cosine vs PPR+synonym on a multi-hop corpus — does it help, is
+synonym needed?) is the **next step**.
+
 
 - **Question.** Does a 1–2 step PPR seeded on the query's top-cosine hits, over author-declared edges,
   measurably beat IOC's current seed-anchored PPR-lite reorder on multi-hop structural questions?

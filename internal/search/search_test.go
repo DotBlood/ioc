@@ -199,3 +199,22 @@ func TestRRF_EmptyInputs(t *testing.T) {
 	require.Empty(t, RRF(60))
 	require.Empty(t, RRF(60, []Result{}, []Result{}))
 }
+
+// --- Cosine ---
+
+func TestCosine(t *testing.T) {
+	// Two identical unit vectors: cosine = 1.
+	u := []float32{1, 0, 0}
+	require.InDelta(t, 1.0, Cosine(u, u), 1e-9, "identical unit vectors must have cosine 1")
+
+	// Two orthogonal unit vectors: cosine = 0.
+	a := []float32{1, 0}
+	b := []float32{0, 1}
+	require.InDelta(t, 0.0, Cosine(a, b), 1e-9, "orthogonal unit vectors must have cosine 0")
+
+	// Dimension mismatch: must return 0 (consistent with Set.Search behavior).
+	short := []float32{1}
+	long := []float32{1, 0}
+	require.Equal(t, 0.0, Cosine(short, long), "mismatched-length vectors must score 0")
+	require.Equal(t, 0.0, Cosine(long, short), "mismatched-length vectors must score 0 (reversed)")
+}

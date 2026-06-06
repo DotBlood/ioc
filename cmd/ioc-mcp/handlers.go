@@ -248,6 +248,7 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 		IncludeSuperseded:   r.GetBool("include_superseded", false),
 		RecencyHalfLifeDays: r.GetFloat("recency_halflife_days", 0),
 		GraphBoost:          r.GetFloat("graph_boost", 0),
+		GraphSynonym:        r.GetFloat("graph_synonym", 0),
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil

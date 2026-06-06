@@ -61,7 +61,7 @@ func TestWallRun(t *testing.T) {
 	}
 
 	var packets, gold bytes.Buffer
-	rep, err := WallRun(ctx, e, spec, &packets, &gold, core.ModeVector, false, false, 0, false, 0)
+	rep, err := WallRun(ctx, e, spec, &packets, &gold, core.ModeVector, false, false, 0, false, 0, 0)
 	if err != nil {
 		t.Fatalf("WallRun: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestWallRun_RejectsQueryInBuild(t *testing.T) {
 		Build: []Turn{{Op: "query", Scope: "root", Text: "x"}},
 	}
 	var p, g bytes.Buffer
-	if _, err := WallRun(ctx, e, spec, &p, &g, core.ModeVector, false, false, 0, false, 0); err == nil {
+	if _, err := WallRun(ctx, e, spec, &p, &g, core.ModeVector, false, false, 0, false, 0, 0); err == nil {
 		t.Fatal("expected an error for a query op in the build")
 	}
 }
@@ -161,7 +161,7 @@ func TestWallRun_Hierarchical(t *testing.T) {
 		},
 	}
 	var packets, gold bytes.Buffer
-	rep, err := WallRun(ctx, e, spec, &packets, &gold, core.ModeHybrid, true, false, 0, false, 0)
+	rep, err := WallRun(ctx, e, spec, &packets, &gold, core.ModeHybrid, true, false, 0, false, 0, 0)
 	if err != nil {
 		t.Fatalf("WallRun hierarchical: %v", err)
 	}
