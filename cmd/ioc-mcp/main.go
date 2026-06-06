@@ -164,6 +164,7 @@ func (a *ioc) register(s *server.MCPServer) {
 		mcp.WithString("content", mcp.Description("optional full content (kept cold in CAS)")),
 		mcp.WithBoolean("publish", mcp.Description("make visible to sibling scopes")),
 		mcp.WithString("supersedes", mcp.Description("comma-separated artifact IDs this insight replaces (they leave the current view)")),
+		mcp.WithString("relations", mcp.Description("comma-separated author-declared edges FROM this artifact, as kind:targetID (e.g. depends_on:01..,answers:01..)")),
 	), a.push)
 
 	s.AddTool(mcp.NewTool("ioc_supersede",
@@ -171,6 +172,21 @@ func (a *ioc) register(s *server.MCPServer) {
 		mcp.WithString("old", mcp.Required(), mcp.Description("artifact ID being superseded")),
 		mcp.WithString("by", mcp.Required(), mcp.Description("artifact ID that replaces it")),
 	), a.supersede)
+
+	s.AddTool(mcp.NewTool("ioc_relate",
+		mcp.WithDescription("Create an author-declared typed edge between two artifacts (a knowledge-graph link, not similarity). Record structure embeddings can't: from depends_on/contradicts/answers/refines/relates_to to. IOC never infers edges — you declare them, like supersedes. ioc_related then walks them (e.g. 'what depends on X')."),
+		mcp.WithString("from", mcp.Required(), mcp.Description("source artifact ID (the one that depends_on / contradicts / answers ...)")),
+		mcp.WithString("to", mcp.Required(), mcp.Description("target artifact ID")),
+		mcp.WithString("kind", mcp.Description("relation kind: depends_on|contradicts|answers|refines|relates_to (default relates_to)")),
+	), a.relate)
+
+	s.AddTool(mcp.NewTool("ioc_related",
+		mcp.WithDescription("Walk the edge graph from an artifact — STRUCTURAL retrieval (vs ioc_query's semantic similarity). dir=out follows this artifact's edges (what it depends on); dir=in follows edges pointing AT it (what depends on it); both = either. Filter by kind, bound by depth. Superseded artifacts are excluded."),
+		mcp.WithString("artifact", mcp.Required(), mcp.Description("the artifact to walk from")),
+		mcp.WithString("kind", mcp.Description("comma-separated relation kinds to follow (empty = all)")),
+		mcp.WithString("dir", mcp.Description("edge direction: out (its targets) | in (who points at it) | both (default out)")),
+		mcp.WithNumber("depth", mcp.Description("traversal depth (default 1)")),
+	), a.related)
 
 	s.AddTool(mcp.NewTool("ioc_query",
 		mcp.WithDescription("Progressive-disclosure semantic retrieval from a viewpoint scope. Start at detail=overview (cheap); drill only if needed. Returns query_id (for ioc_trace), weak_match, top_score, margin."),

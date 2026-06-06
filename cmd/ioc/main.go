@@ -62,6 +62,10 @@ func main() {
 		err = publish(args)
 	case "supersede":
 		err = supersede(args)
+	case "relate":
+		err = relate(args)
+	case "related":
+		err = related(args)
 	case "history":
 		err = history(args)
 	case "query":
@@ -92,8 +96,10 @@ commands:
   gen-scenario -out F [-n N] [-clusters C] [-shape flat|tree]  generate a scale scenario
   embed-ping [-embed e]                          check the embedding service
   create-scope [-parent ID] -role R -title T     create a scope
-  push -scope ID -summary S [-kind K] [-content X|-content-file F] [-publish] [-supersedes id1,id2]
+  push -scope ID -summary S [-kind K] [-content X|-content-file F] [-publish] [-supersedes id1,id2] [-relations kind:ID,...]
   supersede -old ID -by ID                       mark an artifact superseded by another (currency)
+  relate -from ID -to ID [-kind K]               create an author-declared edge between artifacts
+  related -artifact ID [-kind K,..] [-direction out|in|both] [-depth N]  walk the edge graph (e.g. what depends on X)
   history -artifact ID                           show an artifact's supersession chain
   ingest <path> [-scope ID] [-title T] [-maxchars N] [-overlap N]  mirror a dir tree into scopes; chunk files as documents (path must be inside IOC_INGEST_ROOT or cwd)
   config set-ingest-root <path> | get-ingest-root   pin/show the persisted ingest sandbox root

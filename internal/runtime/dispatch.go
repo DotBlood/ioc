@@ -323,6 +323,22 @@ func (s *Server) call(ctx context.Context, method string, params json.RawMessage
 			return nil, err
 		}
 		return nil, s.eng.Supersede(ctx, p.Old, p.Replacement)
+	case mRelate:
+		var p relateParams
+		if err := decode(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, s.eng.Relate(ctx, p.From, p.To, p.Kind)
+	case mRelated:
+		var p relatedParams
+		if err := decode(params, &p); err != nil {
+			return nil, err
+		}
+		hits, err := s.eng.Related(ctx, p.Artifact, p.Kinds, p.Dir, p.Depth)
+		if err != nil {
+			return nil, err
+		}
+		return marshalRaw(hits)
 	case mConfig:
 		var p configParams
 		if err := decode(params, &p); err != nil {

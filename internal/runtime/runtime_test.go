@@ -158,6 +158,67 @@ func TestRuntimeSupersede(t *testing.T) {
 	}
 }
 
+// Relate + Related round-trip over the RPC: an edge declared at push and a post-hoc
+// edge are both walkable through the daemon.
+func TestRuntimeRelate(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	srv := startDaemon(t, dir)
+	defer srv.Stop()
+
+	cli, err := Dial(dir)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer cli.Close()
+
+	root, err := cli.CreateScope(ctx, core.NilID, core.RoleWorktree, "root")
+	if err != nil {
+		t.Fatalf("create scope: %v", err)
+	}
+	a, err := cli.Push(ctx, core.PushRequest{Scope: root.ID, Summary: "bbolt storage decision"})
+	if err != nil {
+		t.Fatalf("push a: %v", err)
+	}
+	// b declares depends_on a at push time, over the wire.
+	b, err := cli.Push(ctx, core.PushRequest{Scope: root.ID, Summary: "runtime owns the store",
+		Relations: []core.EdgeSpec{{Kind: core.RelDependsOn, Target: a.ID}}})
+	if err != nil {
+		t.Fatalf("push b: %v", err)
+	}
+
+	// "what depends on a?" over the wire → b.
+	deps, err := cli.Related(ctx, a.ID, []core.RelationKind{core.RelDependsOn}, core.DirIn, 1)
+	if err != nil {
+		t.Fatalf("related: %v", err)
+	}
+	found := false
+	for _, h := range deps {
+		if h.Artifact == b.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected b among a's dependents, got %+v", deps)
+	}
+
+	// Post-hoc Relate over the wire, then walk OUT from b.
+	c, err := cli.Push(ctx, core.PushRequest{Scope: root.ID, Summary: "an unrelated note"})
+	if err != nil {
+		t.Fatalf("push c: %v", err)
+	}
+	if err := cli.Relate(ctx, b.ID, c.ID, core.RelRelatesTo); err != nil {
+		t.Fatalf("relate: %v", err)
+	}
+	out, err := cli.Related(ctx, b.ID, nil, core.DirOut, 1)
+	if err != nil {
+		t.Fatalf("related out: %v", err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("b should point at a (depends_on) and c (relates_to), got %d", len(out))
+	}
+}
+
 // Neighbors round-trips over the RPC and returns current artifacts.
 func TestRuntimeNeighbors(t *testing.T) {
 	ctx := context.Background()

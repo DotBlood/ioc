@@ -368,6 +368,11 @@ func (e *Engine) Push(ctx context.Context, r core.PushRequest) (core.Artifact, e
 	if err != nil {
 		return core.Artifact{}, fmt.Errorf("engine: push: %w", err)
 	}
+	// Validate edge targets BEFORE writing too, so a bad relation aborts the whole
+	// push rather than leaving a half-applied artifact.
+	if err := e.validateRelationTargets(r.Relations); err != nil {
+		return core.Artifact{}, fmt.Errorf("engine: push: %w", err)
+	}
 
 	a := core.Artifact{
 		ID:          core.NewID(),
@@ -386,6 +391,9 @@ func (e *Engine) Push(ctx context.Context, r core.PushRequest) (core.Artifact, e
 		return core.Artifact{}, err
 	}
 	if err := e.markSupersededBy(superseded, a.ID); err != nil {
+		return core.Artifact{}, err
+	}
+	if err := e.createPushEdges(a.ID, r.Relations); err != nil {
 		return core.Artifact{}, err
 	}
 	return a, nil

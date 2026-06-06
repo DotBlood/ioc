@@ -160,11 +160,53 @@ type PushRequest struct {
 	// caller-supplied Meta["trust"] and sets it only from here. Empty = authored
 	// (trusted), the default. See V17 in docs/SECURITY_AND_VULNERABILITIES.md.
 	Trust string
+	// Relations are author-declared typed edges FROM the new artifact TO existing
+	// artifacts (e.g. depends_on, contradicts, answers). Like Supersedes, the
+	// authoring LLM declares them at write time — IOC never infers edges (no LLM in
+	// the core). Each Target must already exist; Push validates before writing.
+	Relations []EdgeSpec
 }
 
 // TrustIngested marks an artifact whose content came from ingested files — it is
 // UNTRUSTED data (potential indirect prompt injection), not authored reasoning.
 const TrustIngested = "ingested"
+
+// RelationKind is the type of an author-declared directed edge between artifacts.
+// The vocabulary is open (any non-empty string); these are the conventional kinds.
+type RelationKind string
+
+const (
+	RelDependsOn   RelationKind = "depends_on"  // From depends on To
+	RelContradicts RelationKind = "contradicts" // From contradicts To
+	RelAnswers     RelationKind = "answers"     // From answers To (e.g. a question artifact)
+	RelRefines     RelationKind = "refines"     // From refines/elaborates To
+	RelRelatesTo   RelationKind = "relates_to"  // generic association
+)
+
+// EdgeDir selects which edges a traversal follows relative to a viewpoint artifact.
+type EdgeDir uint8
+
+const (
+	DirOut  EdgeDir = iota // edges FROM the artifact (its declared targets)
+	DirIn                  // edges TO the artifact (who points at it — e.g. "what depends on X")
+	DirBoth                // both directions
+)
+
+// Edge is a directed, author-declared relation From one artifact To another. The
+// triple (From, To, Kind) is unique — re-declaring the same edge is idempotent.
+type Edge struct {
+	From      ID           `json:"from"`
+	To        ID           `json:"to"`
+	Kind      RelationKind `json:"kind"`
+	CreatedAt time.Time    `json:"created_at"`
+}
+
+// EdgeSpec declares an edge to create at Push time: an edge of Kind from the
+// artifact being pushed TO Target.
+type EdgeSpec struct {
+	Kind   RelationKind `json:"kind"`
+	Target ID           `json:"target"`
+}
 
 // QueryMode selects the retrieval strategy.
 type QueryMode uint8

@@ -117,3 +117,49 @@ func TestMetaCRUD(t *testing.T) {
 		})
 	}
 }
+
+// TestMetaEdges covers the author-declared edge store under both plaintext and
+// at-rest encryption: directional scans, idempotency, and cleanup.
+func TestMetaEdges(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		box  func(*testing.T) *Box
+	}{
+		{"plaintext", func(*testing.T) *Box { return nil }},
+		{"encrypted", mustBox},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := openMetaT(t, tc.box(t))
+			a, b, c := core.NewID(), core.NewID(), core.NewID()
+
+			require.NoError(t, m.PutEdge(core.Edge{From: b, To: a, Kind: core.RelDependsOn, CreatedAt: time.Now()}))
+			require.NoError(t, m.PutEdge(core.Edge{From: c, To: a, Kind: core.RelDependsOn, CreatedAt: time.Now()}))
+			require.NoError(t, m.PutEdge(core.Edge{From: b, To: c, Kind: core.RelRelatesTo, CreatedAt: time.Now()}))
+
+			// Idempotent: re-Put the same (from,to,kind) does not add a second edge.
+			require.NoError(t, m.PutEdge(core.Edge{From: b, To: a, Kind: core.RelDependsOn, CreatedAt: time.Now()}))
+
+			fromB, err := m.EdgesFrom(b)
+			require.NoError(t, err)
+			require.Len(t, fromB, 2, "b → a (depends_on) and b → c (relates_to); dedup on re-put")
+
+			toA, err := m.EdgesTo(a)
+			require.NoError(t, err)
+			require.Len(t, toA, 2, "both b and c point at a")
+			for _, e := range toA {
+				require.Equal(t, core.RelDependsOn, e.Kind)
+				require.Equal(t, a, e.To)
+			}
+
+			// DeleteEdgesFor removes every edge touching the id (as From or To).
+			require.NoError(t, m.DeleteEdgesFor(a))
+			toA, err = m.EdgesTo(a)
+			require.NoError(t, err)
+			require.Empty(t, toA)
+			fromB, err = m.EdgesFrom(b)
+			require.NoError(t, err)
+			require.Len(t, fromB, 1, "only b → c (relates_to) survives; b → a was removed with a")
+			require.Equal(t, c, fromB[0].To)
+		})
+	}
+}

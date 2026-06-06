@@ -29,6 +29,8 @@ type Service interface {
 	Consolidate(ctx context.Context, scope core.ID, summary string, supersedes []core.ID) (core.Artifact, error)
 	CrossVersion(ctx context.Context, scope core.ID, seed core.Seed) (core.Scope, error)
 	Supersede(ctx context.Context, old, replacement core.ID) error
+	Relate(ctx context.Context, from, to core.ID, kind core.RelationKind) error
+	Related(ctx context.Context, artifact core.ID, kinds []core.RelationKind, dir core.EdgeDir, depth int) ([]core.Hit, error)
 	RollupScope(ctx context.Context, scope core.ID, summary string) error
 	Trace(ctx context.Context, queryID core.ID) (core.TraceRecord, error)
 	RecentTraces(n int) ([]core.TraceRecord, error)

@@ -25,6 +25,7 @@ var (
 	bkScopes    = []byte("scopes")
 	bkArtifacts = []byte("artifacts")
 	bkTraces    = []byte("traces")
+	bkEdges     = []byte("edges")
 )
 
 // plaintextConfigKeys are config values NEVER encrypted — they must be readable
@@ -51,7 +52,7 @@ func OpenMeta(path string, box *Box) (*Meta, error) {
 	}
 	_ = os.Chmod(path, 0o600)
 	err = db.Update(func(tx *bolt.Tx) error {
-		for _, b := range [][]byte{bkConfig, bkScopes, bkArtifacts, bkTraces} {
+		for _, b := range [][]byte{bkConfig, bkScopes, bkArtifacts, bkTraces, bkEdges} {
 			if _, err := tx.CreateBucketIfNotExists(b); err != nil {
 				return err
 			}
@@ -293,6 +294,84 @@ func (m *Meta) ListTraces() ([]core.TraceRecord, error) {
 		})
 	})
 	return out, err
+}
+
+// --- edges (author-declared relations between artifacts) ---
+
+// edgeKey is the unique composite key for an edge: re-Putting the same
+// (from, to, kind) overwrites in place, so edge creation is idempotent.
+func edgeKey(e core.Edge) string {
+	return e.From.String() + "|" + e.To.String() + "|" + string(e.Kind)
+}
+
+// PutEdge stores (or idempotently replaces) a directed edge.
+func (m *Meta) PutEdge(e core.Edge) error {
+	return m.putJSON(bkEdges, edgeKey(e), e)
+}
+
+// edgesWhere scans the edge bucket and returns those for which keep is true.
+func (m *Meta) edgesWhere(keep func(core.Edge) bool) ([]core.Edge, error) {
+	var out []core.Edge
+	err := m.db.View(func(tx *bolt.Tx) error {
+		return tx.Bucket(bkEdges).ForEach(func(k, v []byte) error {
+			dec, err := m.decodeValue(string(k), v)
+			if err != nil {
+				return err
+			}
+			var e core.Edge
+			if err := json.Unmarshal(dec, &e); err != nil {
+				return err
+			}
+			if keep(e) {
+				out = append(out, e)
+			}
+			return nil
+		})
+	})
+	return out, err
+}
+
+// EdgesFrom returns all edges originating at id.
+func (m *Meta) EdgesFrom(id core.ID) ([]core.Edge, error) {
+	return m.edgesWhere(func(e core.Edge) bool { return e.From == id })
+}
+
+// EdgesTo returns all edges pointing at id.
+func (m *Meta) EdgesTo(id core.ID) ([]core.Edge, error) {
+	return m.edgesWhere(func(e core.Edge) bool { return e.To == id })
+}
+
+// DeleteEdgesFor removes every edge touching id (as From or To) — called when an
+// artifact is deleted so no dangling edges remain. Keys are collected first, then
+// deleted (mutating a bucket mid-ForEach is unsafe).
+func (m *Meta) DeleteEdgesFor(id core.ID) error {
+	return m.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(bkEdges)
+		var del [][]byte
+		err := b.ForEach(func(k, v []byte) error {
+			dec, derr := m.decodeValue(string(k), v)
+			if derr != nil {
+				return derr
+			}
+			var e core.Edge
+			if derr := json.Unmarshal(dec, &e); derr != nil {
+				return derr
+			}
+			if e.From == id || e.To == id {
+				del = append(del, append([]byte(nil), k...))
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		for _, k := range del {
+			if err := b.Delete(k); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // --- helpers ---

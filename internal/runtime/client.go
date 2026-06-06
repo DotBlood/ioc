@@ -236,6 +236,16 @@ func (c *Client) Supersede(_ context.Context, old, replacement core.ID) error {
 	return c.call(mSupersede, supersedeParams{Old: old, Replacement: replacement}, nil)
 }
 
+func (c *Client) Relate(_ context.Context, from, to core.ID, kind core.RelationKind) error {
+	return c.call(mRelate, relateParams{From: from, To: to, Kind: kind}, nil)
+}
+
+func (c *Client) Related(_ context.Context, artifact core.ID, kinds []core.RelationKind, dir core.EdgeDir, depth int) ([]core.Hit, error) {
+	var hits []core.Hit
+	err := c.call(mRelated, relatedParams{Artifact: artifact, Kinds: kinds, Dir: dir, Depth: depth}, &hits)
+	return hits, err
+}
+
 func (c *Client) RollupScope(_ context.Context, scope core.ID, summary string) error {
 	return c.call(mRollupScope, scopeSummaryParams{Scope: scope, Summary: summary}, nil)
 }

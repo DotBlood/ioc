@@ -27,10 +27,13 @@ func (e *Engine) ListArtifacts(_ context.Context) ([]core.Artifact, error) {
 	return e.meta.ListArtifacts()
 }
 
-// DeleteArtifact removes an artifact record. Its embedding remains in the
-// append-only store but never re-surfaces in search (the candidate set is built
-// from live artifacts).
+// DeleteArtifact removes an artifact record and any edges touching it (so no
+// dangling relations remain). Its embedding remains in the append-only store but
+// never re-surfaces in search (the candidate set is built from live artifacts).
 func (e *Engine) DeleteArtifact(_ context.Context, id core.ID) error {
+	if err := e.meta.DeleteEdgesFor(id); err != nil {
+		return err
+	}
 	return e.meta.DeleteArtifact(id)
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -29,6 +30,53 @@ func parseIDList(s string) ([]core.ID, error) {
 		}
 	}
 	return out, nil
+}
+
+// parseRelations parses "kind:targetID,kind:targetID" into edge specs (empty => nil).
+func parseRelations(s string) ([]core.EdgeSpec, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	var out []core.EdgeSpec
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part == "" {
+			continue
+		}
+		kv := strings.SplitN(part, ":", 2)
+		if len(kv) != 2 || strings.TrimSpace(kv[0]) == "" {
+			return nil, fmt.Errorf("bad relation %q (want kind:targetID)", part)
+		}
+		id, err := core.ParseID(strings.TrimSpace(kv[1]))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, core.EdgeSpec{Kind: core.RelationKind(strings.TrimSpace(kv[0])), Target: id})
+	}
+	return out, nil
+}
+
+// parseKindList parses a comma-separated relation-kind list (empty => nil = all).
+func parseKindList(s string) []core.RelationKind {
+	var out []core.RelationKind
+	for _, k := range strings.Split(s, ",") {
+		if k = strings.TrimSpace(k); k != "" {
+			out = append(out, core.RelationKind(k))
+		}
+	}
+	return out
+}
+
+// parseEdgeDir maps "out|in|both" to core.EdgeDir (default out).
+func parseEdgeDir(s string) core.EdgeDir {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "in":
+		return core.DirIn
+	case "both":
+		return core.DirBoth
+	default:
+		return core.DirOut
+	}
 }
 
 func (a *ioc) createScope(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -64,6 +112,10 @@ func (a *ioc) push(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRes
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	rels, err := parseRelations(r.GetString("relations", ""))
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	art, err := a.svc.Push(ctx, core.PushRequest{
 		Scope:      id,
 		Kind:       iocfmt.ParseKind(r.GetString("kind", "insight")),
@@ -71,6 +123,7 @@ func (a *ioc) push(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRes
 		Content:    content,
 		Publish:    r.GetBool("publish", false),
 		Supersedes: sup,
+		Relations:  rels,
 	})
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -93,6 +146,38 @@ func (a *ioc) supersede(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallTo
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return jsonResult(map[string]any{"superseded": old.String(), "by": by.String()})
+}
+
+func (a *ioc) relate(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	from, err := requireID(r, "from")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	to, err := requireID(r, "to")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	kind := r.GetString("kind", "relates_to")
+	if err := a.svc.Relate(ctx, from, to, core.RelationKind(kind)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return jsonResult(map[string]any{"from": from.String(), "to": to.String(), "kind": kind})
+}
+
+func (a *ioc) related(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	id, err := requireID(r, "artifact")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	hits, err := a.svc.Related(ctx, id, parseKindList(r.GetString("kind", "")), parseEdgeDir(r.GetString("dir", "out")), r.GetInt("depth", 1))
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return jsonResult(iocfmt.HitsOut(hits))
 }
 
 func (a *ioc) ingest(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
