@@ -18,7 +18,6 @@ spec and the code disagree, the code wins**. These replaced the v0.1 formal spec
 
 - [`PDR.md`](PDR.md) — Product Definition: what IOC is, who it's for, differentiators, success metrics.
 - [`ROADMAP.md`](ROADMAP.md) — what's built, what's next, what's deferred/frozen.
-- [`RESEARCH_ROADMAP.md`](RESEARCH_ROADMAP.md) — the v0.3 experiment program (R1–R4 from the dream): question → hypothesis → gate.
 - [`FRD.md`](FRD.md) — Functional Requirements (what the system must do, as testable requirements).
 - [`FSD.md`](FSD.md) — Functional Specification (invariants, types, operation contracts, protocols).
 - [`PAD.md`](PAD.md) — Platform Architecture (packages, storage, runtime, interfaces).
@@ -28,8 +27,7 @@ spec and the code disagree, the code wins**. These replaced the v0.1 formal spec
 - [`CODE-STYLE.md`](CODE-STYLE.md) — Go conventions (naming, errors, imports, tests).
 - [`MCP_GUIDE.md`](MCP_GUIDE.md) — using IOC over MCP (the `ioc_*` tools).
 - [`SUPERSESSION.md`](SUPERSESSION.md) — the supersession / current-truth (currency) mechanism.
-- [`WALL_EXPERIMENT.md`](WALL_EXPERIMENT.md) — the reasoning-wall experiment: the empirical proof of the core thesis.
-- [`DREAM.md`](DREAM.md) — a deep-research-grounded rethink of IOC's theory vs the field (adopt/adapt/reject; direction, not spec).
+- [`WALL_EXPERIMENT.md`](WALL_EXPERIMENT.md) — the reasoning-wall experiment plus the v0.3 retrieval research (R1–R4): the empirical proof of the core thesis and the experiment record behind the retrieval defaults.
 - [`SECURITY_AND_VULNERABILITIES.md`](SECURITY_AND_VULNERABILITIES.md) — threat models, the vulnerability register, the SaaS security gate.
 - [`encryption.md`](encryption.md) — opt-in at-rest AES-256-GCM (key handling, caveats).
 

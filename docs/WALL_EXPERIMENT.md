@@ -335,9 +335,9 @@ blend weight; degree-normalization and kind/direction-filtered boost are the nex
 
 ---
 
-## 2026-06-06 — R1: collapsed-tree retrieval (RESEARCH_ROADMAP R1)
+## 2026-06-06 — R1: collapsed-tree retrieval
 
-Following the dream (`DREAM.md` §2): RAPTOR/ReTreever say search all levels at once ("collapsed tree")
+Per the deep-research review of the field: RAPTOR/ReTreever say search all levels at once ("collapsed tree")
 rather than route coarse→fine. IOC's `collapsedCandidates` = the visible set ∪ EVERY descendant-scope
 artifact, ranked in one flat pass (no routing, no rollups needed). Measured on real bge-small, 180
 artifacts (28 real + 152 distractors), 27 questions, recall@topK:
@@ -372,7 +372,7 @@ then `ioc wall tree.json -embed … -mode vector|hierarchical|collapsed`.
 
 ## 2026-06-06 — R2: graph-boost v3 (query-seeded PPR) — TRIED, REJECTED (kept v2)
 
-Hypothesis (RESEARCH_ROADMAP R2 / DREAM §1): a query-seeded Personalized PageRank over author-declared
+Hypothesis (R2): a query-seeded Personalized PageRank over author-declared
 edges (HippoRAG's mechanism) would beat the v2 1-hop boost by reaching MULTI-HOP dependents, optionally
 densified with no-LLM synonym edges. Implemented `blendGraphPPR` (restart ∝ cosine on the top-`graphSeedK`
 hits, degree-normalized walk, `graphPPRSteps`=2, `graphPPRDamping`=0.5) + opt-in `GraphSynonym` links.
@@ -399,7 +399,7 @@ edge-walk**, not by an implicit cosine-blended boost. Net for graph-boost: v2 st
 
 ## 2026-06-06 — R3: author-declared importance ranking (multi-signal) — SHIPPED (opt-in)
 
-RESEARCH_ROADMAP R3 / DREAM §3 (Generative Agents' relevance+recency+importance). Added `blendImportance`
+R3 (Generative Agents' relevance+recency+importance). Added `blendImportance`
 (opt-in `Query.ImportanceWeight`): blend `(1−w)·cosine + w·importance`, importance Tier-derived
 (TierWorktree=canonical=1.0, else 0.0) — author-declared (the Tier the agent pushed at), never LLM-scored.
 Reorder-only, Hit.Score stays cosine, vector-mode, skipped under rerank.
@@ -419,7 +419,7 @@ Reorder-only, Hit.Score stays cosine, vector-mode, skipped under rerank.
 
 ## 2026-06-06 — R4 code: margin-aware weak_match + confidence codes (SHIPPED, honest calibration)
 
-Implements the R4 research recommendation (DREAM §4): `weak_match = empty OR top<floor OR
+Implements the R4 research recommendation: `weak_match = empty OR top<floor OR
 margin<MarginFloor`, margin gate COSINE-path only (rerank scores are sigmoid-saturated → floor-only), plus
 a distinct `confidence` code (`ok` / `floor_miss` / `margin_ambiguous` / `empty`) for caller affordance.
 `core.MarginFloor` (bge-small=0.05) calibrated on real bge-small.

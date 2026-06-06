@@ -12,9 +12,12 @@ the formal v0.2 specifications.
 > **Status: v0.2 slice — the wall holds.** The load-bearing claim ("the wall": mini-summary +
 > embedding are good enough that an agent rarely drills to raw content) has been validated on the
 > real embedder (~0.96 overview-sufficiency, currency robust, no false confidence — see
-> [`docs/WALL_EXPERIMENT.md`](docs/WALL_EXPERIMENT.md)). On top of the proven semantic memory, the
-> author-declared knowledge-edge axis is in. Still intentionally not feature-complete. The previous
-> v0.1 engine lives in git history (branch `development/v0.2-review`).
+> [`docs/WALL_EXPERIMENT.md`](docs/WALL_EXPERIMENT.md)). On top of the proven semantic memory sit the
+> author-declared knowledge-edge axis and the v0.3 retrieval research: **collapsed-tree retrieval is
+> now the default**, graph-aware boost (v2, seed-anchored) and an opt-in author-declared importance
+> signal are in, and the confidence/abstention layer is margin-aware with a per-embedder calibrator
+> (`ioc calibrate`). Still intentionally not feature-complete. The previous v0.1 engine lives in git
+> history (branch `development/v0.2-review`).
 
 ## Layout
 
@@ -70,7 +73,8 @@ ioc create-scope -role worktree -title proj                  # -> {"id": ...}
 ioc create-scope -parent <ID> -role session -title t
 ioc push  -scope <ID> -summary "..." [-content "..."|-content-file f] [-publish] \
           [-supersedes id1,id2] [-relations depends_on:ID,answers:ID]   # declare currency + edges at write
-ioc query -scope <ID> -text "..." [-detail overview|entry|raw] [-topk 5] [-mode vector|hybrid|hierarchical] [-rerank]
+ioc query -scope <ID> -text "..." [-detail overview|entry|raw] [-topk 5] \
+          [-mode collapsed|vector|hybrid|hierarchical] [-rerank] [-graph-boost W] [-importance-weight W]  # collapsed is the default
 ioc drill -artifact <ID> -detail raw
 ioc neighbors -scope <ID> -text "..."           # most similar CURRENT memory (run before push to find what to supersede)
 ioc supersede -old <ID> -by <ID>                # mark an artifact replaced (currency)
@@ -83,6 +87,7 @@ ioc siblings -scope <ID>      # published sibling artifacts
 ioc ancestors -scope <ID>
 ioc publish  -artifact <ID>
 ioc trace    -query <ID>
+ioc calibrate -probe spec.json [-coverage 0.9] [-write]   # derive the per-embedder confidence floor (split-conformal)
 ```
 
 ## MCP server (agent-native surface)

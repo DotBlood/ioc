@@ -1,8 +1,8 @@
 # IOC — Vision & Direction
 
 > Status: direction document — the *why*. The formal, authoritative v0.2 specifications that make this
-> concrete live in [`docs/`](docs/) — [`PDR.md`](docs/PDR.md), [`ROADMAP.md`](docs/ROADMAP.md), and the
-> planned FRD/FSD/PAD.
+> concrete live in [`docs/`](docs/) — [`PDR.md`](docs/PDR.md), [`ROADMAP.md`](docs/ROADMAP.md),
+> [`FRD.md`](docs/FRD.md), [`FSD.md`](docs/FSD.md), and [`PAD.md`](docs/PAD.md).
 
 ## What IOC is
 
@@ -150,8 +150,15 @@ configuration, and the system abstained ("INSUFFICIENT") on absent questions rat
 runtime daemon, the security gate's first layers, and the author-declared knowledge-edge axis are
 all built. That unblocks the formal-spec rewrite and further investment.
 
-Next (tracked in [`docs/ROADMAP.md`](docs/ROADMAP.md)): finish the formal v0.2 specs (FRD, FSD,
-PAD); **graph-aware retrieval** (blend the structural edge axis into the semantic ranking, not just
-a separate traversal); a margin-aware weak-match experiment; and the remaining robustness items.
+Since then the v0.3 retrieval-research program has run (tracked in [`docs/ROADMAP.md`](docs/ROADMAP.md),
+detailed in [`docs/WALL_EXPERIMENT.md`](docs/WALL_EXPERIMENT.md)) and landed its on-thesis wins: the
+formal v0.2 specs (FRD, FSD, PAD) are written; **collapsed-tree retrieval** is now the user-facing
+default; **graph-aware retrieval** is in (v2 blends the structural edge axis into the semantic order,
+seed-anchored to the query's strong hits — a query-seeded PPR variant was tried and rejected); an
+opt-in **author-declared importance** signal (a third ranking axis beside relevance and recency)
+shipped; and the confidence/abstention layer became **margin-aware** with a per-embedder conformal
+calibrator (`ioc calibrate`). Open next (tracked in [`docs/ROADMAP.md`](docs/ROADMAP.md)): an auto
+mode-selector (pick hierarchical on dense/near-duplicate corpora instead of the caller choosing
+`-mode`), optional author-rewritten superseding summaries, and the remaining robustness items.
 Document-Kind retrieval stays frozen (it competes with grep) — the unique value is reasoning memory
 plus the knowledge graph over it.
