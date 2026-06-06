@@ -43,7 +43,13 @@ Gate passed → collapsed is the user-facing default (`ioc query`, MCP). See `WA
   collapsed**. Otherwise keep opt-in and record why.
 - **Ship.** `Query.Collapsed` (opt-in) → CLI/wall/MCP `-mode collapsed`; flip default on a passed gate.
 
-## R2 — Graph-boost v3: query-seeded Personalized PageRank
+## R2 — Graph-boost v3: query-seeded Personalized PageRank *(TRIED & REJECTED 2026-06-06 — kept v2)*
+
+**Result:** failed the gate on real bge-small — PPR regressed the v2 1-hop boost (dropped the direct
+dependents on "what depends on supersession" out of top-6) and never surfaced the 2-hop dependent, even at
+weight 0.7. Cause: multi-seed restart + degree-norm + teleport dilute the boost below v2's direct sum, and
+low-cosine deep dependents are dominated by the cosine term in the blend. Reverted to v2. The structural
+axis is reliably served by the explicit `Related` walk, not an implicit boost. See `WALL_EXPERIMENT.md` R2.
 
 - **Question.** Does a 1–2 step PPR seeded on the query's top-cosine hits, over author-declared edges,
   measurably beat IOC's current seed-anchored PPR-lite reorder on multi-hop structural questions?

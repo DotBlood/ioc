@@ -367,3 +367,30 @@ descendants, and preserves the current view (excludes superseded + archived-scop
 
 Reproduce: `ioc gen-wall -shape tree -n 180 -out tree.json` (and `-shape flat -distractor-clusters 12`),
 then `ioc wall tree.json -embed … -mode vector|hierarchical|collapsed`.
+
+---
+
+## 2026-06-06 — R2: graph-boost v3 (query-seeded PPR) — TRIED, REJECTED (kept v2)
+
+Hypothesis (RESEARCH_ROADMAP R2 / DREAM §1): a query-seeded Personalized PageRank over author-declared
+edges (HippoRAG's mechanism) would beat the v2 1-hop boost by reaching MULTI-HOP dependents, optionally
+densified with no-LLM synonym edges. Implemented `blendGraphPPR` (restart ∝ cosine on the top-`graphSeedK`
+hits, degree-normalized walk, `graphPPRSteps`=2, `graphPPRDamping`=0.5) + opt-in `GraphSynonym` links.
+
+**Result on real bge-small (the 20-fact edged `kg-exp` corpus with the 2-hop chain E3→S2→S1):**
+- *Multi-hop "what's affected by replacing bbolt"* (gold: 1-hop {daemon S2, edges S5}, 2-hop {token-auth
+  E3}): PPR lifted S5 (r3→r2) but **never surfaced S2 (1-hop) or E3 (2-hop)** into the top-6, even at
+  weight 0.7. Synonym links changed nothing.
+- *1-hop "what depends on supersession"* (gold {Neighbors C2, Consolidate C3}): **REGRESSION** — v2
+  surfaced C3@1 + C2@2; **PPR dropped both out of the top-6.**
+
+**Diagnosis (structural, not scale):** the multi-seed restart (seedK=5 spreads mass over unrelated
+seeds) + degree-normalized walk + (1−α) teleport dilute the propagated mass BELOW v2's direct
+seed-neighbour cosine sum, and low-cosine deep dependents are dominated by the cosine term in the
+`(1−w)·cosine + w·g` blend — so even reachable multi-hop mass can't lift them without a `w` so high it
+wrecks normal ranking. The unit tests passed only under a favourable `seedK=1` construction that does not
+hold at real scale. **PPR failed its gate** (regressed 1-hop, no multi-hop gain).
+
+**Decision:** reverted to the v2 1-hop seed-anchored boost (it honestly surfaces direct dependents). This
+reconfirms the earlier finding: the structural axis is reliably served by the **explicit `Related`
+edge-walk**, not by an implicit cosine-blended boost. Net for graph-boost: v2 stays, opt-in/off by default.
