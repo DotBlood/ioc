@@ -414,3 +414,31 @@ Reorder-only, Hit.Score stays cosine, vector-mode, skipped under rerank.
   is no `-tier` flag on `ioc push` yet — so the signal pays off mainly after consolidation. v1 applies
   importance as an independent tie-breaker (after recency); true joint `(1−wr−wi)·cos+wr·rec+wi·imp`
   weighting is a refinement. Default ranking untouched (opt-in/off).
+
+---
+
+## 2026-06-06 — R4 code: margin-aware weak_match + confidence codes (SHIPPED, honest calibration)
+
+Implements the R4 research recommendation (DREAM §4): `weak_match = empty OR top<floor OR
+margin<MarginFloor`, margin gate COSINE-path only (rerank scores are sigmoid-saturated → floor-only), plus
+a distinct `confidence` code (`ok` / `floor_miss` / `margin_ambiguous` / `empty`) for caller affordance.
+`core.MarginFloor` (bge-small=0.05) calibrated on real bge-small.
+
+**Calibration (kg-exp, real bge-small, MarginFloor=0.05):**
+- PRESENT (clear answers): margins 0.067–0.163 → all `ok`. **No over-flag** — 0.05 has headroom.
+- A genuinely ambiguous present query ("keep context small": top 0.618, margin 0.013) → `floor_miss`
+  (top<0.68) — correctly weak (R1≈R2 near-tie, consistent with earlier runs).
+- ABSENT probes (vacation policy / SMTP billing / bitcoin price): top 0.48–0.55 → `floor_miss` (caught by
+  the floor).
+- Near-duplicate probes ("bbolt …", "edges in bbolt …"): top 0.81–0.85, margin 0.11–0.13 → `ok` (bge-small
+  separates them cleanly).
+
+**Honest finding:** on bge-small the margin gate is **largely REDUNDANT with the well-tuned 0.68 floor** —
+weak cases have low top AND low margin together; strong cases have high top AND a healthy margin (≥0.067).
+The margin gate did **not** fire independently above the floor in these probes. Its value is therefore
+(a) the **confidence-code affordance** (immediate, embedder-independent: callers learn *why* a result is
+weak — "no match" vs "ambiguous"), and (b) a **portability hedge**: per arXiv:2403.05440 the absolute
+floor is not transferable, so on an embedder whose floor is mis-calibrated the *relative* margin carries
+the signal. It is NOT a measured recall/abstention win on bge-small — and it does not regress (safe,
+no over-flag). Shipped opt-out-free (it only changes the weak flag, never recall/order); per-embedder
+floor calibration infra (conformal quantile) remains R4b.

@@ -91,7 +91,16 @@ See `WALL_EXPERIMENT.md` R3.
   hurting the proven wall.
 - **Ship.** Opt-in ranking weights; default only if the gate passes.
 
-## R4 — Confidence / abstention / calibration *(RESEARCH DONE 2026-06-06; code next)*
+## R4 — Confidence / abstention / calibration *(RESEARCH DONE + CODE SHIPPED 2026-06-06)*
+
+**Code shipped:** margin-aware `weak_match` (`= empty OR top<floor OR margin<MarginFloor`, cosine-path
+only) + distinct `confidence` codes (ok/floor_miss/margin_ambiguous/empty); `core.MarginFloor`
+(bge-small 0.05, wall-calibrated). Honest calibration (WALL_EXPERIMENT R4 code): 0.05 is safe (no
+over-flag; clear answers margin ≥0.067) but **largely redundant with the well-tuned bge-small floor** —
+its value is the confidence-code affordance + a portability hedge for embedders whose absolute floor is
+mis-calibrated, NOT a measured recall win on bge-small. No regression. Per-embedder floor calibration
+infra (conformal quantile) = R4b (deferred).
+
 
 **Result (53-agent bounded fan-out, 7/16 claims confirmed; see `DREAM.md` §4):** the gap is CLOSED and
 IOC's margin instinct is validated. **Margin > absolute floor** (TARG arXiv:2511.09803); **absolute

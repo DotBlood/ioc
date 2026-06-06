@@ -96,7 +96,8 @@ func QueryOut(queryID core.ID, hits []core.Hit, model string) map[string]any {
 	// 1 — two very confident hits can show a tiny margin even when the cross-encoder
 	// clearly prefers one. Treat rerank margin as a soft separation hint; weak_match
 	// (an absolute floor) is the actionable signal.
-	if len(hits) > 1 && (!reranked || hits[1].RerankScore != nil) {
+	marginValid := len(hits) > 1 && (!reranked || hits[1].RerankScore != nil)
+	if marginValid {
 		margin = score(hits[0]) - score(hits[1])
 	}
 
@@ -107,10 +108,28 @@ func QueryOut(queryID core.ID, hits []core.Hit, model string) map[string]any {
 		rankedBy = "rerank"
 	}
 
+	// weak_match has two independent causes with DIFFERENT caller affordances, surfaced
+	// via the `confidence` code: floor_miss = no confident match at all (→ do not answer);
+	// margin_ambiguous = a match exists but the top two are nearly tied (→ answer with
+	// stated uncertainty, or retrieve one more turn). The margin gate is COSINE-path only
+	// — rerank scores are sigmoid-saturated, so their margin is unreliable (see above), so
+	// reranked queries stay floor-only. floor_miss takes priority. R4 / docs/DREAM.md §4.
+	marginAmbiguous := !reranked && marginValid && margin < core.MarginFloor(model)
+	confidence := "ok"
+	switch {
+	case len(hits) == 0:
+		confidence = "empty"
+	case top < floor:
+		confidence = "floor_miss"
+	case marginAmbiguous:
+		confidence = "margin_ambiguous"
+	}
+
 	out := map[string]any{
 		"query_id":   queryID.String(),
 		"ranked_by":  rankedBy,
-		"weak_match": len(hits) == 0 || top < floor,
+		"confidence": confidence,
+		"weak_match": confidence != "ok",
 		"top_score":  top,
 		"margin":     margin,
 		"hits":       HitsOut(hits),

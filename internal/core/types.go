@@ -318,6 +318,29 @@ func RerankFloor(model string) float64 {
 	return 0.5
 }
 
+// MarginFloor returns the top1−top2 cosine margin below which the top hit is treated
+// as "present but not decisive" (margin_ambiguous) for a given embedder — a SECOND,
+// independent weak_match condition beside the absolute ConfidenceFloor. A large gap
+// means one artifact clearly dominates (answer present and specific); a small gap means
+// two hits are nearly tied (ambiguous or absent). Validated direction: a top1-vs-top2
+// margin is a more robust abstention gate than an absolute threshold (TARG,
+// arXiv:2511.09803), and absolute floors are not portable across embedders
+// (arXiv:2403.05440) — so the margin is the more stable signal. CAVEAT: the threshold
+// is NOT transferable (it lives on the embedder's cosine distribution) — calibrate per
+// embedder on a probe set / the wall; the value below is a wall-calibrated start, not a
+// guarantee. Applies to the COSINE path only (rerank scores are sigmoid-saturated, so
+// their margin is unreliable — rerank stays floor-only). See docs/DREAM.md §4.
+func MarginFloor(model string) float64 {
+	switch model {
+	case "BAAI/bge-small-en-v1.5":
+		return 0.05
+	case "mock-bow":
+		return 0.0 // lexical toy — don't flag on margin
+	default:
+		return 0.03
+	}
+}
+
 // Hit is one retrieval result. Content is populated only at DetailRaw.
 type Hit struct {
 	Artifact  ID           `json:"artifact"`
