@@ -50,11 +50,22 @@ Retrieval modes (`-mode` / `Query.Mode`+`Hierarchical`+`CoarseK`):
 - `vector` (default) — cosine; best at small scale.
 - `hybrid` — vector+BM25 via RRF; helps at scale, can hurt at small N.
 - `hierarchical` — coarse-rank scope rollups → **hybrid** fine within top `CoarseK` (~6) scopes;
-  needs `RollupScope` on sub-scopes. **Best for DENSE near-duplicate corpora at scale:** recall@topK
-  ~0.94 at 180 artifacts vs 0.33 vector-only / 0.67 flat-hybrid (real bge-small). Pure-vector hierarchy
-  does NOT help. **Caveat (measured, `docs/WALL_EXPERIMENT.md` scale run):** for a corpus of *distinctive*
-  artifacts among topical distractors, hierarchical HURTS (0.74) — coarse routing drops the target's
-  scope — and **flat vector + rerank wins (0.93)**. Pick the mode by corpus density, not scale alone.
+  needs `RollupScope` on sub-scopes. Coarse→fine **descends into the viewpoint's child scopes**, which
+  flat retrieval does not (see the shape rule below). Pure-vector hierarchy does NOT help; the fine
+  stage must be hybrid.
+- **Pick the mode by corpus SHAPE (are the answer artifacts visible from the query viewpoint?), not by
+  density alone** (measured 2026-06-06, real bge-small, 180 artifacts, topK=5 — see the dated block in
+  `docs/WALL_EXPERIMENT.md`; corrects the earlier "hierarchical hurts distinctive" claim, which compared
+  two *different* corpus shapes):
+  - **Artifacts visible to the viewpoint** (own / ancestor / published-sibling — a "flat"-shaped corpus):
+    every mode works and **hierarchical is at least as good as flat+rerank** — recall flat vector 0.85,
+    flat+rerank 0.93, hierarchical **0.96**. Hierarchical does NOT hurt a distinctive corpus.
+  - **Artifacts in descendant scopes** (the normal nested case: you query from a parent and the answers
+    live in child sessions): **flat retrieval is structurally blind (recall 0.00)** because bottom-up
+    visibility (`visibleArtifacts`) never shows a viewpoint its descendants — **hierarchical is mandatory**
+    (recall 0.74 here; the only mode that retrieves anything). Locked by `engine.TestQuery_Hierarchical_DescendsIntoChild`.
+  - Density still matters within a shape (near-duplicate clusters are where the coarse stage earns its
+    keep), but shape/visibility is the first thing to check.
 
 `query` returns `query_id`, `weak_match`, `top_score`, `margin`, and `ranked_by` — these read the
 signal that actually ordered the hits: cosine (per-embedder `core.ConfidenceFloor`, ~0.68 bge-small)

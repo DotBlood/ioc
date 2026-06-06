@@ -172,3 +172,81 @@ Re-run after #61 (only the currency line changes):
 go run ./cmd/ioc wall internal/eval/scenarios/wall.json -embed http://127.0.0.1:8088 -out .ioc/wall
 # currency probes: 1/1 current outranked superseded (retrieval only)
 ```
+
+---
+
+## 2026-06-06 re-run — shape-vs-mode matrix corrects the "hierarchical hurts" claim
+
+A fresh full re-run on real bge-small (topK=5, code-measured gold-ref recall@topK +
+currency; 27 blind-judge packets graded for the 28-corpus). Two things changed vs the
+2026-06-05 record: the **full 4-mode sweep was run on EACH corpus shape** (the earlier table
+mixed shapes), and the wall-28 answer grading was repeated with isolated blind judges.
+
+### Wall-28 (hand-authored, real artifacts)
+
+| config | gold-ref recall@topK | currency | answer-grounded (blind judge) |
+|---|---|---|---|
+| vector | 0.93 | 1/1 | 23 correct + correct INSUFFICIENT on the absent probe |
+| vector + rerank | 0.93 | 1/1 | (rerank cannot change recall — see below) |
+
+Blind judging used one isolated subagent per packet (Haiku). Of the 4 non-answers, **1 is a
+genuine retrieval miss** (`q-scale-cosine` — its gold R1 is not in topK, rank 0), **1 is the
+absent probe answered correctly as INSUFFICIENT** (no false confidence), and **2 are
+over-strict judge abstentions** (`q-weak-floor`, `q-ingest-heal`) where the answering note was
+retrieved at **rank 1** but the Haiku judge pedantically declined. Adjusting for that judge
+noise, answer-grounded sufficiency is **~25/26 ≈ 0.96**, matching the prior record; the lone
+real weak spot (`q-scale-cosine`) is unchanged. **Rerank does not move wall-28 recall
+(0.93→0.93)** because the missing gold is outside the cosine candidate window — a direct,
+independent confirmation of the rerank-window theory.
+
+### 180 scale — the SAME 4 modes on BOTH shapes (this is the correction)
+
+| corpus shape | vector | vector+rerank | hierarchical | hierarchical+rerank | currency |
+|---|---|---|---|---|---|
+| **flat** (all artifacts in one visible session) | 0.85 | 0.93 | **0.96** | 0.93 | 1/1 |
+| **tree** (real artifacts in child sessions of the query viewpoint) | **0.00** | 0.00 | 0.74 | 0.74 | 1/1 |
+
+**The earlier "hierarchical HURTS distinctive (0.74) vs flat+rerank (0.93)" was an
+apples-to-oranges comparison across two different shapes** — flat-vector 0.85 was measured on
+the *flat* spec, hierarchical 0.74 on the *tree* spec. Measured on a **single, consistent
+shape**, hierarchical never loses here:
+- **flat shape:** hierarchical **0.96** ≥ flat+rerank 0.93 ≥ flat vector 0.85.
+- **tree shape:** flat vector **collapses to 0.00**, and hierarchical (0.74) is the *only* mode
+  that retrieves anything.
+
+**Why flat = 0.00 on the tree shape (structural, not density):** in the tree spec all 27
+questions query from the workspace `ws`, while the real artifacts live in `ws`'s **child
+sessions** (`retrieval/storage/runtime/direction`). IOC's bottom-up visibility
+(`visibleArtifacts`) shows a viewpoint its own + ancestor + *published-sibling* artifacts —
+**never its descendants.** So a flat query from `ws` cannot see artifacts that live below it; the
+gold is not even a candidate (recall 0, deterministically across all 27 questions).
+`coarseToFineCandidates` (hierarchical) *does* descend into the viewpoint's child scopes, so it
+is the only mode that finds them. (This is exactly the invariant locked by the new unit test
+`engine.TestQuery_Hierarchical_DescendsIntoChild`.)
+
+**Corrected lesson.** Pick the retrieval mode by **where the artifacts sit relative to the query
+viewpoint**, not by density alone:
+- If the answer artifacts are **visible to the viewpoint** (own/ancestor/published-sibling — the
+  "flat" shape), every mode works and **hierarchical is at least as good as flat+rerank** (0.96
+  vs 0.93 here) — hierarchical does *not* hurt a distinctive corpus.
+- If the answer artifacts live in **descendant scopes** (the normal nested-scope case when you
+  query from a parent), **flat retrieval is structurally blind (0.00) and hierarchical is
+  mandatory.** This is the dominant real-world case for nested worktree/workspace/session memory.
+
+Currency is **1/1 in all eight runs** (both shapes × four modes) — #61's mechanism is robust
+across shape and mode. The absent-billing probe remains INSUFFICIENT — no false confidence.
+
+### Reproduce
+
+```bash
+go run ./cmd/ioc wall internal/eval/scenarios/wall.json -embed http://127.0.0.1:8088 -out .ioc/wall28          # 0.93, currency 1/1
+go run ./cmd/ioc gen-wall -out .ioc/wall-180-flat.json -shape flat -n 180
+go run ./cmd/ioc gen-wall -out .ioc/wall-180-tree.json -shape tree -n 180
+for s in flat tree; do for m in "vector" "vector -rerank" "hierarchical" "hierarchical -rerank"; do
+  go run ./cmd/ioc wall .ioc/wall-180-$s.json -embed http://127.0.0.1:8088 -out .ioc/w-$s -mode $m; done; done
+```
+
+> NOTE: the CLAUDE.md "scale levers" table (flat 0.39 / hierarchical 0.94 / +rerank 1.0) was
+> measured on the **dense near-duplicate `gen-scenario` corpus**, a different generator than
+> `gen-wall`; it is not directly comparable to these distinctive-corpus numbers and was not
+> re-run here.
