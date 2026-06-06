@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
+	"syscall"
 
 	"github.com/DotBlood/ioc/internal/core"
 )
@@ -52,6 +54,23 @@ func DialWithToken(dir, token string) (*Client, error) {
 		return nil, err
 	}
 	return &Client{conn: conn, tok: token}, nil
+}
+
+// dialRefused reports whether err is a failure of the TCP connect leg itself (the
+// daemon's socket is dead — stale runtime.json / daemon gone), as opposed to a
+// connection that succeeded but failed later (e.g. a TLS handshake). The portable
+// discriminator is the error STRUCTURE: a refused/unreachable connect produces a
+// *net.OpError{Op:"dial"} on both POSIX and Windows. We do NOT key on
+// syscall.ECONNREFUSED alone: on Windows syscall.ECONNREFUSED is an invented
+// constant (APPLICATION_ERROR range) that never equals the real Winsock
+// WSAECONNREFUSED (10061) a refused dial carries, so errors.Is would miss it there.
+// The errors.Is is kept only as a POSIX belt-and-suspenders.
+func dialRefused(err error) bool {
+	var opErr *net.OpError
+	if errors.As(err, &opErr) && opErr.Op == "dial" {
+		return true
+	}
+	return errors.Is(err, syscall.ECONNREFUSED)
 }
 
 // dialConn opens the transport to the daemon: plain TCP, or mTLS when the daemon

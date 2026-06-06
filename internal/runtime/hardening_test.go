@@ -255,6 +255,195 @@ func TestJSONDepthLimit(t *testing.T) {
 	}
 }
 
+// --- bug #1: frame-tier unlocks ONLY on full-token auth (pre-auth bypass fix) ---
+
+// dialRaw opens a raw connection to the daemon owning dir (no auto-auth).
+func dialRaw(t *testing.T, dir string) (net.Conn, RuntimeInfo) {
+	t.Helper()
+	info, err := Info(dir)
+	if err != nil {
+		t.Fatalf("info: %v", err)
+	}
+	conn, err := net.Dial(info.Net, info.Addr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	return conn, info
+}
+
+// readResp reads and decodes one framed response (fatal on transport error).
+func readResp(t *testing.T, conn net.Conn) response {
+	t.Helper()
+	raw, err := readFrame(conn, maxDataFrame)
+	if err != nil {
+		t.Fatalf("read resp: %v", err)
+	}
+	var r response
+	if err := json.Unmarshal(raw, &r); err != nil {
+		t.Fatalf("unmarshal resp: %v", err)
+	}
+	return r
+}
+
+// oversizeReadFrame builds a valid-if-read request padded just past maxControlFrame
+// (and well under maxDataFrame). A server that has NOT lifted the frame cap rejects
+// it as too large and closes the connection; a server that wrongly lifted it would
+// read and process it and reply. The "pad" field is ignored by request's Unmarshal.
+func oversizeReadFrame(method, token string) []byte {
+	pad := strings.Repeat("x", maxControlFrame)
+	b, _ := json.Marshal(map[string]any{
+		"id": 2, "v": ProtoVersion, "method": method, "token": token, "pad": pad,
+	})
+	return b
+}
+
+// TestBadVersionDoesNotUnlockFrames is the core regression for the V6 bypass: an
+// UNAUTHENTICATED client sends a bogus-version frame (→ codeInvalid, returned before
+// the auth check) and must NOT thereby earn data-size frames.
+func TestBadVersionDoesNotUnlockFrames(t *testing.T) {
+	dir := t.TempDir()
+	defer startDaemon(t, dir).Stop()
+	conn, info := dialRaw(t, dir)
+	defer conn.Close()
+
+	// Frame 1: bogus version, NO token. Pre-auth → codeInvalid, no unlock.
+	b, _ := json.Marshal(request{ID: 1, V: 999, Method: mEmbModel, Token: ""})
+	if err := writeFrame(conn, b); err != nil {
+		t.Fatalf("write f1: %v", err)
+	}
+	if resp := readResp(t, conn); resp.Error == nil || resp.Error.Code != codeInvalid {
+		t.Fatalf("frame1: want codeInvalid, got %+v", resp.Error)
+	}
+
+	// Frame 2: oversize-for-control. With the fix the tier is still locked → the
+	// server rejects it and closes; our read then errors. (A write error is fine —
+	// the server may close mid-write.)
+	_ = writeFrame(conn, oversizeReadFrame(mEmbModel, info.Token))
+	if _, err := readFrame(conn, maxDataFrame); err == nil {
+		t.Fatal("frame tier unlocked after a pre-auth version error (V6 bypass regressed)")
+	}
+}
+
+// TestReadTokenDoesNotUnlockFrames: a read-only token authenticates a read (ACL ok)
+// but must never lift the frame cap — reads always fit the control-size frame.
+func TestReadTokenDoesNotUnlockFrames(t *testing.T) {
+	dir := t.TempDir()
+	defer startDaemon(t, dir).Stop()
+
+	full, err := Dial(dir)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	rt, err := full.MintReadToken()
+	if err != nil {
+		t.Fatalf("mint read token: %v", err)
+	}
+	_ = full.Close()
+
+	conn, _ := dialRaw(t, dir)
+	defer conn.Close()
+
+	// Frame 1: a read with the read token succeeds (tierRead accepts it)...
+	b, _ := json.Marshal(request{ID: 1, V: ProtoVersion, Method: mEmbModel, Token: rt})
+	if err := writeFrame(conn, b); err != nil {
+		t.Fatalf("write f1: %v", err)
+	}
+	if resp := readResp(t, conn); resp.Error != nil {
+		t.Fatalf("read-token read should succeed, got %+v", resp.Error)
+	}
+
+	// Frame 2: ...but does NOT unlock data-size frames.
+	_ = writeFrame(conn, oversizeReadFrame(mEmbModel, rt))
+	if _, err := readFrame(conn, maxDataFrame); err == nil {
+		t.Fatal("read-only token unlocked data-size frames")
+	}
+}
+
+// TestFullTokenReadUnlocksFrames: the positive companion — a READ with the FULL
+// token authenticates the owner and lifts the cap (read-first, complementing the
+// write-first TestPostAuthLargeFrame).
+func TestFullTokenReadUnlocksFrames(t *testing.T) {
+	dir := t.TempDir()
+	defer startDaemon(t, dir).Stop()
+	conn, info := dialRaw(t, dir)
+	defer conn.Close()
+
+	b, _ := json.Marshal(request{ID: 1, V: ProtoVersion, Method: mEmbModel, Token: info.Token})
+	if err := writeFrame(conn, b); err != nil {
+		t.Fatalf("write f1: %v", err)
+	}
+	if resp := readResp(t, conn); resp.Error != nil {
+		t.Fatalf("full-token read failed: %+v", resp.Error)
+	}
+
+	// An oversize-for-control frame is now accepted and processed.
+	if err := writeFrame(conn, oversizeReadFrame(mEmbModel, info.Token)); err != nil {
+		t.Fatalf("write f2: %v", err)
+	}
+	if resp := readResp(t, conn); resp.Error != nil {
+		t.Fatalf("post-full-auth large frame should be processed, got %+v", resp.Error)
+	}
+}
+
+// --- bug #2: runtime.json is written atomically (no torn reads under rotation) ---
+
+// TestRuntimeInfoAtomicWriteNoTornRead hammers readRuntimeInfo concurrently with
+// repeated writeRuntimeInfo (the token-rotation rewrite path). Every read must
+// decode a complete descriptor — never a half-written, unmarshal-failing file.
+func TestRuntimeInfoAtomicWriteNoTornRead(t *testing.T) {
+	dir := t.TempDir()
+	srv := startDaemon(t, dir)
+	defer srv.Stop()
+
+	base, err := readRuntimeInfo(dir)
+	if err != nil {
+		t.Fatalf("read base: %v", err)
+	}
+
+	errs := make(chan error, 16)
+	stop := make(chan struct{})
+	var writer sync.WaitGroup
+	writer.Add(1)
+	go func() {
+		defer writer.Done()
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			info := base
+			info.Token = fmt.Sprintf("rotated-token-%08d", i)
+			if err := writeRuntimeInfo(dir, info); err != nil {
+				errs <- fmt.Errorf("write: %w", err)
+				return
+			}
+		}
+	}()
+
+	const readers, iters = 8, 300
+	var rg sync.WaitGroup
+	for r := 0; r < readers; r++ {
+		rg.Add(1)
+		go func() {
+			defer rg.Done()
+			for i := 0; i < iters; i++ {
+				if _, err := readRuntimeInfo(dir); err != nil {
+					errs <- fmt.Errorf("torn read: %w", err)
+					return
+				}
+			}
+		}()
+	}
+	rg.Wait()
+	close(stop)
+	writer.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+}
+
 func TestStatsControl(t *testing.T) {
 	srv := startDaemon(t, t.TempDir())
 	defer srv.Stop()

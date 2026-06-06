@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"context"
+	"net"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -297,4 +299,93 @@ func TestOpenFallbackAndClient(t *testing.T) {
 		t.Fatal("expected a client when a daemon is running")
 	}
 	_ = svc2.Close()
+}
+
+// --- bug #3: Open classifies Dial errors instead of treating all as "no daemon" ---
+
+// TestOpenStaleRuntimeJSONFallsBack: runtime.json present but the socket is dead
+// (daemon gone, stale descriptor) → connection refused → embedded fallback.
+func TestOpenStaleRuntimeJSONFallsBack(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+
+	// Grab a real free port then close it → connects to it are refused deterministically.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+
+	if err := writeRuntimeInfo(dir, RuntimeInfo{Net: "tcp", Addr: addr, Token: "stale", DataDir: dir}); err != nil {
+		t.Fatalf("write stale info: %v", err)
+	}
+
+	svc, err := Open(dir, embed.NewMockEmbedder(32))
+	if err != nil {
+		t.Fatalf("open over stale runtime.json: %v", err)
+	}
+	defer svc.Close()
+	if _, isClient := svc.(*Client); isClient {
+		t.Fatal("stale runtime.json should fall back to an embedded engine, got a client")
+	}
+	if _, err := svc.CreateScope(ctx, core.NilID, core.RoleWorktree, "root"); err != nil {
+		t.Fatalf("embedded engine should work (lock free): %v", err)
+	}
+}
+
+// TestOpenLiveDaemonHandshakeFailureSurfaces: a live mTLS daemon owns the store; a
+// client that cannot complete the dial (no TLS material) must get a SURFACED error,
+// not a silent embedded fallback that would then fail on the daemon's bbolt lock.
+func TestOpenLiveDaemonHandshakeFailureSurfaces(t *testing.T) {
+	genTLSEnv(t)
+	dir := t.TempDir()
+	srv := startTLSDaemon(t, dir)
+	defer srv.Stop()
+
+	// Strip the client's TLS env so Dial cannot build a client config (the daemon is
+	// alive and holds the store lock).
+	os.Unsetenv(tlsCertEnv)
+	os.Unsetenv(tlsKeyEnv)
+	os.Unsetenv(tlsCAEnv)
+
+	svc, err := Open(dir, embed.NewMockEmbedder(16))
+	if err == nil {
+		svc.Close()
+		t.Fatal("expected Open to surface the dial failure against a live TLS daemon")
+	}
+	if !strings.Contains(err.Error(), "cannot reach daemon") {
+		t.Fatalf("error should explain the daemon was unreachable, got: %v", err)
+	}
+}
+
+// TestOpenWrongTokenStillReturnsClient: a reachable daemon with a stale/wrong token
+// in runtime.json must yield a CLIENT (connect succeeded); the bad token surfaces as
+// an auth error on the first call — NOT a silent embedded fallback (store-lock error).
+func TestOpenWrongTokenStillReturnsClient(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	srv := startDaemon(t, dir)
+	defer srv.Stop()
+
+	info, err := readRuntimeInfo(dir)
+	if err != nil {
+		t.Fatalf("read info: %v", err)
+	}
+	info.Token = "definitely-not-the-real-token"
+	if err := writeRuntimeInfo(dir, info); err != nil {
+		t.Fatalf("rewrite info: %v", err)
+	}
+
+	svc, err := Open(dir, embed.NewMockEmbedder(32))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer svc.Close()
+	if _, isClient := svc.(*Client); !isClient {
+		t.Fatal("a reachable daemon must yield a client even with a bad published token")
+	}
+	if _, err := svc.CreateScope(ctx, core.NilID, core.RoleWorktree, "root"); err == nil {
+		t.Fatal("expected an auth error from the wrong token, got nil")
+	}
 }

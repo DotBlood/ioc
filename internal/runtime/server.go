@@ -232,17 +232,20 @@ func (s *Server) serveConn(conn net.Conn) {
 		s.connsMu.Unlock()
 		conn.Close()
 	}()
-	// An unauthenticated connection may send only a control-size frame; once a
-	// request authenticates (any non-codeAuth response → the token matched), it may
-	// send data-size frames (large Push). This closes the pre-auth large allocation.
-	authed := false
+	// An unauthenticated connection may send only a control-size frame; only once a
+	// request authenticates with the FULL (owner) token does it earn data-size
+	// frames (a large Push rides inside). Gating on genuine full-token auth — not on
+	// "the response wasn't codeAuth" — closes the V6 bypass where a pre-auth error
+	// (e.g. a protocol-version mismatch → codeInvalid) used to lift the cap without
+	// any valid token. A read-only token never lifts it: reads fit the control cap.
+	fullAuthed := false
 	for {
 		// Idle read deadline (V6): a half-open / slow-loris connection that stops
 		// sending is dropped instead of pinning a goroutine forever. Refreshed each
 		// frame, so it bounds inter-frame inactivity, not total session length.
 		_ = conn.SetReadDeadline(time.Now().Add(connIdleTimeout))
 		max := uint32(maxControlFrame)
-		if authed {
+		if fullAuthed {
 			max = maxDataFrame
 		}
 		raw, err := readFrame(conn, max)
@@ -253,9 +256,9 @@ func (s *Server) serveConn(conn net.Conn) {
 		if err := json.Unmarshal(raw, &req); err != nil {
 			return
 		}
-		resp := s.handle(context.Background(), req)
-		if !authed && (resp.Error == nil || resp.Error.Code != codeAuth) {
-			authed = true // token matched → allow larger frames henceforth
+		resp, full := s.handle(context.Background(), req)
+		if full {
+			fullAuthed = true // full-token request → allow larger frames henceforth (latch)
 		}
 		out, err := json.Marshal(resp)
 		if err != nil {

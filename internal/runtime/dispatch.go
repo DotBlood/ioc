@@ -11,19 +11,28 @@ import (
 	"github.com/DotBlood/ioc/internal/core"
 )
 
-// handle authenticates and dispatches one request, returning its response. A
-// panic in dispatch is recovered into an internal error so one bad request
-// cannot crash the daemon.
-func (s *Server) handle(ctx context.Context, req request) (resp response) {
+// handle authenticates and dispatches one request, returning its response and
+// whether the request authenticated with the FULL (owner) token. A panic in
+// dispatch is recovered into an internal error so one bad request cannot crash the
+// daemon. fullAuthed is the signal serveConn uses to lift the per-connection frame
+// cap: ONLY a genuine full-token request unlocks data-size frames — never an error
+// response, never a read-only token (reads always fit the control-size cap). This
+// closes the V6 frame-guard bypass where any non-codeAuth response (e.g. a pre-auth
+// protocol-version mismatch) used to flip the tier.
+func (s *Server) handle(ctx context.Context, req request) (resp response, fullAuthed bool) {
 	defer func() {
 		if r := recover(); r != nil {
+			// fullAuthed is a named return set BEFORE dispatch, so a recovered panic
+			// on a valid full-token request still reports the connection as authed.
 			resp = response{ID: req.ID, Error: &wireError{Code: codeInternal, Msg: fmt.Sprintf("runtime: panic: %v", r)}}
 		}
 	}()
 	s.reqCount.Add(1)
 
 	if req.V != 0 && req.V != ProtoVersion {
-		return response{ID: req.ID, Error: &wireError{Code: codeInvalid, Msg: fmt.Sprintf("runtime: protocol version mismatch (client %d, server %d)", req.V, ProtoVersion)}}
+		// Pre-auth early return: token not yet checked, so the frame tier must NOT
+		// unlock here (this was the bypass).
+		return response{ID: req.ID, Error: &wireError{Code: codeInvalid, Msg: fmt.Sprintf("runtime: protocol version mismatch (client %d, server %d)", req.V, ProtoVersion)}}, false
 	}
 	// Tiered ACL (V3 + 2-principal model). Run BOTH constant-time compares
 	// unconditionally so timing doesn't reveal which token matched: control & write
@@ -31,6 +40,7 @@ func (s *Server) handle(ctx context.Context, req request) (resp response) {
 	ts := s.tokens.Load()
 	full := subtle.ConstantTimeCompare([]byte(req.Token), []byte(ts.full)) == 1
 	readOK := ts.read != "" && subtle.ConstantTimeCompare([]byte(req.Token), []byte(ts.read)) == 1
+	fullAuthed = full // frame-tier signal: only the owner token lifts the cap
 	authed := false
 	switch tierOf(req.Method) {
 	case tierControl, tierWrite:
@@ -39,37 +49,37 @@ func (s *Server) handle(ctx context.Context, req request) (resp response) {
 		authed = full || readOK
 	}
 	if !authed {
-		return response{ID: req.ID, Error: &wireError{Code: codeAuth, Msg: "runtime: bad or missing token"}}
+		return response{ID: req.ID, Error: &wireError{Code: codeAuth, Msg: "runtime: bad or missing token"}}, fullAuthed
 	}
 
 	switch req.Method {
 	case mShutdown:
 		// Acknowledge here; serveConn triggers the actual Stop after the reply
 		// is flushed (avoids closing the conn before the client reads OK).
-		return response{ID: req.ID}
+		return response{ID: req.ID}, fullAuthed
 	case mStats:
 		raw, _ := marshalRaw(serverStats{
 			ProtoVersion: ProtoVersion, Conns: s.connCount(), Requests: s.reqCount.Load(),
 			StartedAt: s.startedAt, EmbedModel: s.eng.EmbModel(),
 		})
-		return response{ID: req.ID, Result: raw}
+		return response{ID: req.ID, Result: raw}, fullAuthed
 	case mRotateToken:
 		ns, err := s.rotateTokens()
 		if err != nil {
-			return response{ID: req.ID, Error: errToWire(err)}
+			return response{ID: req.ID, Error: errToWire(err)}, fullAuthed
 		}
 		raw, _ := marshalRaw(rotateTokenResult{Full: ns.full, Read: ns.read})
-		return response{ID: req.ID, Result: raw}
+		return response{ID: req.ID, Result: raw}, fullAuthed
 	case mMintReadToken:
 		read, err := s.mintReadToken()
 		if err != nil {
-			return response{ID: req.ID, Error: errToWire(err)}
+			return response{ID: req.ID, Error: errToWire(err)}, fullAuthed
 		}
 		raw, _ := marshalRaw(mintReadTokenResult{Read: read})
-		return response{ID: req.ID, Result: raw}
+		return response{ID: req.ID, Result: raw}, fullAuthed
 	}
 	result, err := s.invoke(ctx, req.Method, req.Params)
-	return response{ID: req.ID, Result: result, Error: errToWire(err)}
+	return response{ID: req.ID, Result: result, Error: errToWire(err)}, fullAuthed
 }
 
 // invoke runs the engine call under the guard: writes take an exclusive Lock
