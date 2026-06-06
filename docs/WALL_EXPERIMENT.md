@@ -308,3 +308,27 @@ the edge-walk missed". It also noted IOC's confidence was honest (a broad query 
 
 Reproduce: seed an edged corpus, then `bin/ioc query … -graph-boost 0` vs `0.4` vs `bin/ioc related
 -artifact <subject> -direction in -kind depends_on`.
+
+### Follow-up the same day — graph-boost v2 (seed-anchored) fixes the centrality bias
+
+The v1 flaw (g = Σ ALL neighbours' cosine rewards node degree) was fixed by anchoring g to the query's
+**strong hits**: a seed set = the top-`graphSeedK` candidates by cosine, and a candidate is boosted only
+for its edges to those seeds — "connected to what the query matched", not "globally well-connected". The
+edged-corpus structural questions were re-run (real bge-small, `query -graph-boost 0` vs `0.4`):
+
+| structural question | gold | v1 (`graph-boost`) | **v2 (seed-anchored)** |
+|---|---|---|---|
+| replace bbolt — affected? | {daemon, edges-bucket} | only edges; hubs surfaced | edges (r3) **+ daemon (r4)** |
+| graph-aware retrieval relies on? | {edges, query} | neither | **edges (r4) + query (r5)** |
+| what depends on the daemon? | {token-auth} | demoted gold rank 2→5 | **gold preserved at rank 2** |
+| what depends on supersession? | {Neighbors, Consolidate} | only hubs | **both at ranks 1–2** |
+
+v2 lifts the correct dependents into top-K on all four (and stops demoting an already-correct hit); the
+global hubs (`progressive-disclosure`, `graph-aware`) no longer dominate unrelated queries. A unit test
+`TestGraphBoost_AnchoredNotCentrality` encodes the fix (a high-degree hub connected only to non-seeds is
+NOT lifted, while a dependent of the top seed is). The off-by-default no-op is preserved (`wall`
+gb=0 vs gb=0.3 still identical on the edgeless corpus). So **graph-boost v2 now adds value** as an
+*implicit* assist (surfaces dependents from a plain query without knowing the anchor ID), complementing
+the *explicit* `Related` walk (still cleaner/exact when you have the subject's ID). Some 1-hop-from-a-seed
+noise remains (artifacts connected to a different strong hit also rise) — acceptable, tunable via the
+blend weight; degree-normalization and kind/direction-filtered boost are the next refinements.

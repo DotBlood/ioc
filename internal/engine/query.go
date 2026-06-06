@@ -22,6 +22,13 @@ const recencyWeight = 0.15
 // clockNow is the time source for the recency tie-breaker; a var so tests can pin it.
 var clockNow = time.Now
 
+// graphSeedK is how many top-cosine candidates count as the query's "strong hits"
+// (the seed set) for graph-aware boost: a candidate is lifted only for its edges to
+// these seeds, NOT for its global degree — which is what fixes v1's centrality bias
+// (the 2026-06-06 experiment showed v1 lifted global hubs regardless of the query).
+// Package var so a test can lower it.
+var graphSeedK = 5
+
 // blendRecency re-sorts candidates by α·cosine + (1−α)·0.5^(ageDays/halfLife). It
 // only reorders — the displayed Hit.Score stays cosine (like the rerank path).
 func blendRecency(ordered []search.Result, cosineByID map[string]float64, byID map[string]core.Artifact, halfLifeDays float64) []search.Result {
@@ -45,11 +52,14 @@ func blendRecency(ordered []search.Result, cosineByID map[string]float64, byID m
 }
 
 // blendGraph re-sorts candidates by α·cosine + (1−α)·g, where g is a candidate's
-// normalized connectivity (sum of neighbours' cosine) to OTHER candidates via
-// author-declared edges (1-hop, undirected, all kinds) — so a candidate edge-linked
-// to strong hits is lifted. It only REORDERS the visible candidate set (no recall
-// change); the displayed Hit.Score stays cosine (callers read cosineByID, not these
-// scores). A no-op when w<=0, fewer than 2 candidates, or no edges connect the set.
+// normalized connectivity to the query's STRONG HITS — the top-graphSeedK candidates
+// by cosine (the "seed" set) — via author-declared edges (1-hop, undirected, all
+// kinds). Anchoring g to the seeds (rather than to ALL neighbours) is the v2 fix for
+// v1's centrality bias: a candidate is lifted for being linked to what the query
+// matched, not for being a globally well-connected hub. It only REORDERS the visible
+// candidate set (no recall change); the displayed Hit.Score stays cosine (callers
+// read cosineByID, not these scores). A no-op when w<=0, fewer than 2 candidates, or
+// no edges connect a candidate to a seed.
 func (e *Engine) blendGraph(ordered []search.Result, cosineByID map[string]float64, w float64) ([]search.Result, error) {
 	if w <= 0 || len(ordered) < 2 {
 		return ordered, nil
@@ -77,12 +87,35 @@ func (e *Engine) blendGraph(ordered []search.Result, cosineByID map[string]float
 	if len(adj) == 0 {
 		return ordered, nil // no edges within the candidate set → unchanged order
 	}
+	// Seed set = the top-graphSeedK candidates by cosine (the query's strongest hits).
+	// g counts a candidate's edges to THESE only, so a hub linked to many weak
+	// candidates gets nothing, while a dependent of a strong hit is lifted.
+	ids := make([]string, 0, len(cosineByID))
+	for id := range cosineByID {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		if cosineByID[ids[i]] != cosineByID[ids[j]] {
+			return cosineByID[ids[i]] > cosineByID[ids[j]]
+		}
+		return ids[i] < ids[j]
+	})
+	k := graphSeedK
+	if k > len(ids) {
+		k = len(ids)
+	}
+	isSeed := make(map[string]bool, k)
+	for _, id := range ids[:k] {
+		isSeed[id] = true
+	}
 	raw := make(map[string]float64, len(ordered))
 	var gmax float64
 	for _, r := range ordered {
 		var s float64
 		for _, nb := range adj[r.ID] {
-			s += cosineByID[nb]
+			if isSeed[nb] {
+				s += cosineByID[nb]
+			}
 		}
 		raw[r.ID] = s
 		if s > gmax {

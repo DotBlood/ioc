@@ -40,6 +40,8 @@ func seedCorpus(t *testing.T, n int) (*Engine, core.ID, []core.Hit) {
 		"gamma runtime daemon framed protocol",
 		"delta embedding bge small vectors",
 		"epsilon ingestion chunk language boundaries",
+		"zeta security token frame cap auth",
+		"eta visibility published siblings blackboard",
 	}
 	for i := 0; i < n; i++ {
 		pushInsight(t, e, s.ID, summaries[i])
@@ -114,4 +116,29 @@ func TestGraphBoost_UnconnectedNotLifted(t *testing.T) {
 	// The connected low artifact outranks the unconnected middle one after boosting.
 	require.Less(t, rankOf(boosted, low), rankOf(boosted, mid),
 		"the edge-connected artifact should outrank an unconnected one of higher cosine")
+}
+
+// v2: the boost is anchored to the query's STRONG hits (seed set), not to global
+// degree. A hub with several edges to NON-seed candidates must NOT be lifted, while a
+// dependent of the top hit IS — this is the fix for v1's centrality bias.
+func TestGraphBoost_AnchoredNotCentrality(t *testing.T) {
+	old := graphSeedK
+	graphSeedK = 1 // only the single top-cosine hit counts as a seed
+	defer func() { graphSeedK = old }()
+
+	ctx := context.Background()
+	e, scope, base := seedCorpus(t, 7)
+	top := base[0].Artifact // the only seed
+	d := base[6].Artifact   // lowest cosine; we connect it to the seed
+	h := base[5].Artifact   // a hub; we connect it to three NON-seed mids
+
+	require.NoError(t, e.Relate(ctx, d, top, core.RelDependsOn))
+	require.NoError(t, e.Relate(ctx, h, base[2].Artifact, core.RelDependsOn))
+	require.NoError(t, e.Relate(ctx, h, base[3].Artifact, core.RelDependsOn))
+	require.NoError(t, e.Relate(ctx, h, base[4].Artifact, core.RelDependsOn))
+
+	_, boosted, err := e.Query(ctx, core.Query{Scope: scope, Text: "retrieval ranking", TopK: 7, GraphBoost: 0.5})
+	require.NoError(t, err)
+	require.Less(t, rankOf(boosted, d), rankOf(boosted, h),
+		"a dependent of the query's strong hit must outrank a high-degree hub connected only to non-seeds")
 }
