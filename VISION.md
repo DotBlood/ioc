@@ -1,8 +1,8 @@
 # IOC — Vision & Direction
 
-> Status: direction document. It supersedes the positioning in `close/PDR.md`. The formal
-> specs in `close/` are **not** rewritten yet — see [`docs/MODEL-CHANGES.md`](docs/MODEL-CHANGES.md)
-> for the delta a future rewrite must reconcile.
+> Status: direction document — the *why*. The formal, authoritative v0.2 specifications that make this
+> concrete live in [`docs/`](docs/) — [`PDR.md`](docs/PDR.md), [`ROADMAP.md`](docs/ROADMAP.md), and the
+> planned FRD/FSD/PAD.
 
 ## What IOC is
 
@@ -51,8 +51,8 @@ document. Full content lives in content-addressable storage (cold); only a mini-
 embedding represent it in the working layer.
 
 **Reasoning is first-class and storable.** Distilled insights become artifacts; the raw
-transcript stays cheap/cold. (This deliberately changes the current spec, which treats
-runtime/reasoning as ephemeral — see MODEL-CHANGES.)
+transcript stays cheap/cold. (This deliberately reversed the old v0.1 design, which treated
+runtime/reasoning as ephemeral.)
 
 **Two-tier memory:**
 - *worktree memory* — canonical, finished truths + embeddings; long-lived.
@@ -98,9 +98,9 @@ requirement is dropped.
   runtime ACL + token rotation, and opt-in mTLS. Still required before true multi-tenant SaaS:
   per-tenant principals/ACLs (beyond full/read-only), MVCC/multi-writer, key management (KMS/keyring),
   and distinct per-client certs / cert rotation. Do not ship multi-tenant access until those land.
-- **Runtime (planned):** a single long-lived daemon owns a store and serves many clients/agents over
-  a local protocol, so CLI/MCP/sub-agents share one memory instead of fighting the bbolt lock. Phased
-  plan in [`docs/RUNTIME_ROADMAP.md`](docs/RUNTIME_ROADMAP.md).
+- **Runtime:** a single long-lived daemon owns a store and serves many clients/agents over a local
+  protocol, so CLI/MCP/sub-agents share one memory instead of fighting the bbolt lock. Implemented; see
+  [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## The load-bearing risk (honest)
 
@@ -115,8 +115,9 @@ SaaS), but they do not decide whether IOC works. Summary quality + memory naviga
 
 A first dogfood (IOC studying its own repo) confirmed this risk empirically and surfaced concrete
 retrieval/ingest bugs plus errors in the wall theory itself (e.g. document chunks embed raw content
-but the lexical/rerank stages run on a label, not the content). Root-cause analysis and the corrected,
-measured fix plan live in [`docs/RETRIEVAL_AND_WALL_FIXES.md`](docs/RETRIEVAL_AND_WALL_FIXES.md).
+but the lexical/rerank stages run on a label, not the content). The reasoning wall has since been
+proven on the real embedder — see [`docs/WALL_EXPERIMENT.md`](docs/WALL_EXPERIMENT.md); document-Kind
+retrieval is the weaker, now-frozen regime ([`docs/ROADMAP.md`](docs/ROADMAP.md)).
 
 ## Recommended next step
 

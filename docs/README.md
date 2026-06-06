@@ -1,47 +1,36 @@
 # IOC Documentation Map
 
-Where each kind of documentation lives.
+All project documentation lives in this one `docs/` folder. The v0.2 specifications and the focused
+design records sit side by side.
 
 ## Start here
 
 | If you want to… | Read |
 |-----------------|------|
 | Use the CLI / library, see limitations | [`/README.md`](../README.md) |
-| Work on the code as an AI agent | [`/CLAUDE.md`](../CLAUDE.md) |
-| Set up a dev environment, conventions | [`/AGENTS.md`](../AGENTS.md) |
-| Understand the design history & decisions | [`/devlog.md`](../devlog.md) |
+| The direction & why (product vision) | [`/VISION.md`](../VISION.md) |
+| Work on the code as an AI agent (commands, layout, current state) | [`/CLAUDE.md`](../CLAUDE.md) |
 
-## `docs/` — process & measurements
+## v0.2 specifications (authoritative)
+
+The live, authoritative design documents. They describe what the code actually implements — **where a
+spec and the code disagree, the code wins**. These replaced the v0.1 formal specs entirely.
+
+- [`PDR.md`](PDR.md) — Product Definition: what IOC is, who it's for, differentiators, success metrics.
+- [`ROADMAP.md`](ROADMAP.md) — what's built, what's next, what's deferred/frozen.
+- `FRD.md` / `FSD.md` / `PAD.md` — Functional Requirements / Specification / Platform Architecture (planned).
+
+## Focused design records & references
 
 - [`CODE-STYLE.md`](CODE-STYLE.md) — Go conventions (naming, errors, imports, tests).
-- [`METHODOLOGY.md`](METHODOLOGY.md) — development process, commits, PR size, CI.
-- [`benchmarks/v0.1.md`](benchmarks/v0.1.md) — performance baselines (graph, retrieval, CAS, embedding).
-
-## `close/` — locked specifications
-
-Formal, stable design documents. Treat these as the contract; do not edit casually.
-
-- `PDR.md` — product definition & vision.
-- `FRD.md` — functional requirements.
-- `FSD.md` — formal specification, system invariants **I1–I7**.
-- `PAD.md` — platform/technology architecture.
-- `ROADMAP.md` — phased implementation plan.
-- `Phase5.md`, `Phase6.md` — per-phase plans.
-- `SESSION_REPORT.md` — state snapshot after early phases.
-- `research/01–06` — background research (graph engines, CAS, embeddings, BM25, MVCC).
+- [`MCP_GUIDE.md`](MCP_GUIDE.md) — using IOC over MCP (the `ioc_*` tools).
+- [`SUPERSESSION.md`](SUPERSESSION.md) — the supersession / current-truth (currency) mechanism.
+- [`WALL_EXPERIMENT.md`](WALL_EXPERIMENT.md) — the reasoning-wall experiment: the empirical proof of the core thesis.
+- [`SECURITY_AND_VULNERABILITIES.md`](SECURITY_AND_VULNERABILITIES.md) — threat models, the vulnerability register, the SaaS security gate.
+- [`encryption.md`](encryption.md) — opt-in at-rest AES-256-GCM (key handling, caveats).
 
 ## Code entry points
 
-- CLI: `cmd/iocctl/` — Cobra commands.
-- Library API: `pkg/api/` — embeddable `Runtime`.
+- CLI: `cmd/ioc/` — the `ioc` command (memory ops, eval, ingest, daemon).
+- MCP server: `cmd/ioc-mcp/` — the `ioc_*` tools (a thin wrapper over the engine).
 - Embedding service: `py/embed_server.py` — optional external HTTP embedder.
-
-
-1. Как memory сама не разбухает? - для этого есть 2 memory. в worktree memory идет только уже готовый результат, истина, допустим информация как мы сделали матыгу, так же ее имбединги и какие то данные, workspace memory - изменяеммая, мало живуая, в целом для решения какой то маленькой задачи, она живет внутри scope, и делает сумарайз в переходе в новую ветку, она более мутабельна, и нужна именно для работы.
-2.  мы не храним в меммори всю информацию, мы храним мини сумарайз + эмбединги, миниум контекста
-3. про это я и говорил выше, и в прошлых ответах
-
-твои вопросы в конце:
-1. это так де было написанно в документации, а так вроде ответил в 1 ответе выше
-2. в документации так же все указанно: у memory есть графа на childe и parrent в котором есть просто указание почему мы пришли к этому вопросу, мы не храним весь контекст
-3. memory солой тоже важен но он идет паралельно главной задачи 

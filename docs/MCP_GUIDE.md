@@ -94,4 +94,4 @@ quality is only a lexical proxy).
 server, `ioc` CLI runs, and sub-agents, start a daemon on that dir first:
 `ioc serve -dir <IOC_DIR> -embed <endpoint>` (inspect with `ioc runtime status -dir <IOC_DIR>`).
 Without a daemon, only one process may hold the store at a time. See
-[`RUNTIME_ROADMAP.md`](RUNTIME_ROADMAP.md).
+[`ROADMAP.md`](ROADMAP.md).

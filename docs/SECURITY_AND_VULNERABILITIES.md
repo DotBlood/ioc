@@ -1,8 +1,8 @@
 # Errors & vulnerabilities — deep study
 
 Study artifact (no code changed). A security + integrity audit of IOC, grounded in a read-only pass
-with file:line. Complements [`REVIEW_FINDINGS.md`](REVIEW_FINDINGS.md) (general code+theory review)
-with a dedicated security/robustness lens — decompression bombs, DoS/parse limits, the embedder trust
+with file:line. Complements the general code+theory review (archived) with a dedicated
+security/robustness lens — decompression bombs, DoS/parse limits, the embedder trust
 boundary, secrets, path containment, and the py embed server, which the general review under-covered.
 
 ## Threat models (severity is meaningless without one)

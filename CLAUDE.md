@@ -1,8 +1,8 @@
 # CLAUDE.md
 
 Operational context for working in this repository. Source of truth for the **current** project.
-For direction/why see [`VISION.md`](VISION.md); for the delta vs the old specs see
-[`docs/MODEL-CHANGES.md`](docs/MODEL-CHANGES.md).
+For direction/why see [`VISION.md`](VISION.md); for the formal v0.2 specs see
+[`docs/PDR.md`](docs/PDR.md) and [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## What this is
 
@@ -75,7 +75,7 @@ by default, or the cross-encoder rerank score (sigmoid-normalized, vs `core.Rera
 (document chunk text from CAS, not the `path:lines` label; reasoning uses its summary) — the
 universal last-mile precision fix; each hit then carries a `rerank_score`. Hybrid BM25 likewise
 ranks document content. More commands: `ioc query|drill|traces|trace|
-rollup|consolidate|crossversion|...`, `ioc gen-scenario -shape flat|tree`.
+rollup|consolidate|crossversion|relate|related|...`, `ioc gen-scenario -shape flat|tree`.
 
 **Ingestion (`ioc ingest <path>` / MCP `ioc_ingest`, files as a first-class Kind):** mirrors the
 directory tree into nested scopes, chunks each text file at **language-aware semantic boundaries**
@@ -118,7 +118,7 @@ interface so it works over either path. Concurrency is in-process: `RWMutex` (pa
 serialized writes); writes flush embeddings (`engine.Sync`) for durability; per-request panic
 recovery; graceful shutdown via signal or the `shutdown` control op (`ioc runtime stop`). One daemon
 = one data-dir; **sharing = same `-dir`**. Multi-process access to one store is deliberately rejected
-in favor of the daemon (see `docs/RUNTIME_ROADMAP.md`). **Auth:** a full (owner) token in runtime.json
+in favor of the daemon (see `docs/ROADMAP.md`). **Auth:** a full (owner) token in runtime.json
 plus an optional read-only token (`ioc runtime mint-read-token`) gated by method tier (control/write =
 full, read = either); `ioc runtime rotate` regenerates the token(s). **mTLS** is opt-in and OFF by
 default (`IOC_RUNTIME_TLS=1` + `IOC_RUNTIME_TLS_CERT`/`_KEY`/`_CA`) — honest caveat: it is loopback-prep
@@ -178,6 +178,17 @@ Dependency direction (no cycles): `core` is a leaf; `embed`/`search` are leaves;
   declares `supersedes=<ids>`); `Consolidate`/`ioc_consolidate` takes `supersedes` to retire what it
   folds in atomically; `Query.RecencyHalfLifeDays` (`-recency-halflife-days` / `recency_halflife_days`)
   is an **opt-in, off-by-default** recency tie-breaker (vector mode; demotes stable old truths — sparingly).
+- **Knowledge edges (author-declared)** — typed directed relations between artifacts, so IOC unifies
+  *agent memory* (semantic retrieval) with a *queryable knowledge base* (structural retrieval). The
+  authoring LLM declares edges — `PushRequest.Relations []EdgeSpec{Kind,Target}` at write, or
+  `Relate(from,to,kind)` post-hoc (CLI `ioc relate`/`-relations kind:ID`, MCP `ioc_relate`/`relations`).
+  **IOC never infers edges** (no LLM in the core — same principle as supersession). Conventional kinds:
+  `depends_on|contradicts|answers|refines|relates_to` (vocabulary is open). `Related(artifact,kinds,dir,
+  depth)` (CLI `ioc related`, MCP `ioc_related`) walks the graph — `dir=in` answers "what depends on X",
+  `dir=out` "what does X depend on", with kind filter + depth; superseded artifacts are excluded.
+  Stored in a Meta `edges` bucket keyed `from|to|kind` (idempotent); `DeleteArtifact` clears its edges.
+  Distinct from the `DerivedFrom`/`SupersededBy` provenance edges. Graph-aware *ranking* of `Query`
+  (edge-boosted retrieval) is a deferred follow-up — edges are currently a separate retrieval axis.
 
 ## Conventions
 

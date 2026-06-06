@@ -4,7 +4,7 @@
 
 IOC is a **local-first, model-agnostic memory/context layer for working with LLMs** — a single
 model or many agents. See [`VISION.md`](VISION.md) for the full direction and
-[`docs/MODEL-CHANGES.md`](docs/MODEL-CHANGES.md) for how it diverges from the earlier v0.1 specs.
+[`docs/`](docs/) (PDR, ROADMAP) for the formal v0.2 specifications.
 
 > **Status: greenfield thin slice (v0.2 direction).** The repository currently holds a small,
 > end-to-end prototype whose purpose is to test one load-bearing claim ("the wall"):
@@ -113,8 +113,7 @@ ioc runtime stop   -dir .ioc/data                        # graceful shutdown
 Every other command (`push`, `query`, ingest, the MCP server, …) **auto-routes** to a daemon that
 owns the same `-dir` (discovered via `<dir>/runtime.json`) and falls back to opening the store
 embedded when none is running. Concurrency lives inside the daemon: reads run in parallel, writes are
-serialized (`RWMutex`). Sharing = point clients at the same `-dir`. Design + phasing:
-[`docs/RUNTIME_ROADMAP.md`](docs/RUNTIME_ROADMAP.md).
+serialized (`RWMutex`). Sharing = point clients at the same `-dir`. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Wall metrics (success targets)
 
