@@ -250,3 +250,61 @@ for s in flat tree; do for m in "vector" "vector -rerank" "hierarchical" "hierar
 > measured on the **dense near-duplicate `gen-scenario` corpus**, a different generator than
 > `gen-wall`; it is not directly comparable to these distinctive-corpus numbers and was not
 > re-run here.
+
+---
+
+## 2026-06-06 — graph-aware retrieval benefit + a blind-agent knowledge-base study
+
+A real edged corpus (20 hand-authored one-sentence facts ABOUT IOC itself + 13 author-declared edges:
+`depends_on`/`refines`/`answers`), seeded on real bge-small. Goal: does the structural axis (edges)
+help answer questions similarity cannot, and how good is IOC as a *blind* agent's knowledge base.
+
+### Part A — objective (code-measured), 4 semantic + 4 structural questions
+
+Structural questions ask "what depends on / relies on X", where the gold answer is **edge-connected to a
+strong semantic hit but NOT textually similar to the question** (e.g. "if we replaced bbolt, what's
+affected?" → the artifacts that `depends_on` bbolt, which never mention "replacing bbolt").
+
+| tool | semantic Qs | structural Qs |
+|---|---|---|
+| plain `query` (overview) | answers (top-1 right 3/4) | finds the *subject*, scatters/misses the *dependents* |
+| **`related` edge-walk** (`-direction in/out -kind depends_on`) | n/a | **exact, noise-free gold every time** (4/4) |
+| `query -graph-boost 0.4` | no change | **does NOT help — centrality-biased** |
+
+**Key finding — `Related` (explicit traversal) is the structural win; `graph-boost` v1 is flawed.**
+`related` returned exactly `{daemon, edges-bucket}` for "depends on bbolt", `{Neighbors, Consolidate}`
+for "depends on supersession", `{token-auth}` for "depends on the daemon", `{edges, query}` for "what
+graph-aware retrieval relies on" — precise, with no noise. The implicit `-graph-boost` blend, by
+contrast, lifts **global hubs** (the highly-connected `progressive-disclosure` and `graph-aware`
+artifacts) on *every* query regardless of the question, and on one structural question it *demoted* the
+correct answer (token-auth) from rank 2 to rank 5. Root cause: `g(c)=Σ neighbours' cosine` rewards node
+**degree (centrality)**, not connectivity to the *query's* strong hits. So graph-boost v1 is not
+query-anchored.
+
+### Part B — blind agent (no context, no repo files, IOC CLI only)
+
+A fresh general-purpose subagent was given only the store + the `ioc` CLI and the 8 questions (no gold,
+no labels), forbidden from reading repo files or using prior knowledge. In 8 commands it answered **8/8
+correctly**, and independently concluded — unprompted — that **the `related` edge-walk "won decisively"
+for the dependency questions** (exact, noise-free), that **plain `query` outright failed to surface the
+dependents on the supersession question**, and that **`-graph-boost` was "neutral-to-mildly-helpful and
+noticeably noisier… a weaker proxy"** that "scrambled the score ordering" and "never surfaced anything
+the edge-walk missed". It also noted IOC's confidence was honest (a broad query correctly flagged
+`weak_match=true` with a tiny margin on an ambiguous question).
+
+### Verdict
+
+- **The unified vision is validated on the structural axis: `Related` makes author-declared edges a
+  reliable, exact retrieval path for questions similarity cannot answer** — confirmed independently by a
+  blind agent. The knowledge graph works, with no LLM extraction.
+- **`graph-boost` v1 (the implicit edge-blend into `Query`) does NOT yet add value** — it is
+  centrality-biased, noisier than `related`, and occasionally harmful. It stays OFF by default (no
+  regression — proven separately), but it is **not the way to do structural retrieval today**.
+- **v2 redesign (gates shipping graph-boost as anything but off):** anchor the boost to the *query's*
+  top hits (personalized-PageRank seeded at strong hits) and/or degree-normalize `g`, so it rewards
+  "connected to what the query matched", not "globally well-connected". Until then, prefer `related`.
+- **IOC as a blind agent's knowledge base: it works.** Cheap overviews sufficed for factual recall;
+  `related` carried the structural questions; confidence flags were honest.
+
+Reproduce: seed an edged corpus, then `bin/ioc query … -graph-boost 0` vs `0.4` vs `bin/ioc related
+-artifact <subject> -direction in -kind depends_on`.
