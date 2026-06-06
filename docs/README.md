@@ -18,7 +18,9 @@ spec and the code disagree, the code wins**. These replaced the v0.1 formal spec
 
 - [`PDR.md`](PDR.md) — Product Definition: what IOC is, who it's for, differentiators, success metrics.
 - [`ROADMAP.md`](ROADMAP.md) — what's built, what's next, what's deferred/frozen.
-- `FRD.md` / `FSD.md` / `PAD.md` — Functional Requirements / Specification / Platform Architecture (planned).
+- [`FRD.md`](FRD.md) — Functional Requirements (what the system must do, as testable requirements).
+- [`FSD.md`](FSD.md) — Functional Specification (invariants, types, operation contracts, protocols).
+- [`PAD.md`](PAD.md) — Platform Architecture (packages, storage, runtime, interfaces).
 
 ## Focused design records & references
 
