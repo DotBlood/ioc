@@ -2,26 +2,30 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE)
 
-IOC is a **local-first, model-agnostic memory/context layer for working with LLMs** — a single
-model or many agents. See [`VISION.md`](VISION.md) for the full direction and
-[`docs/`](docs/) (PDR, ROADMAP) for the formal v0.2 specifications.
+IOC is a **local-first, model-agnostic memory & knowledge layer for working with LLMs** — a single
+model or many agents. It unifies two retrieval axes on one store: **semantic memory** (mini-summary
++ embedding, progressive disclosure, a maintained current-truth view) and a **queryable knowledge
+base** (author-declared typed edges between artifacts — a knowledge graph IOC never has to extract
+with an LLM). See [`VISION.md`](VISION.md) for the direction and [`docs/`](docs/) (PDR, ROADMAP) for
+the formal v0.2 specifications.
 
-> **Status: greenfield thin slice (v0.2 direction).** The repository currently holds a small,
-> end-to-end prototype whose purpose is to test one load-bearing claim ("the wall"):
-> mini-summary + embedding are good enough that an agent rarely drills to raw content, and memory
-> stays navigable across branch and version boundaries. It is intentionally not feature-complete.
-> The previous v0.1 engine lives in git history (branch `development/v0.2-review`).
+> **Status: v0.2 slice — the wall holds.** The load-bearing claim ("the wall": mini-summary +
+> embedding are good enough that an agent rarely drills to raw content) has been validated on the
+> real embedder (~0.96 overview-sufficiency, currency robust, no false confidence — see
+> [`docs/WALL_EXPERIMENT.md`](docs/WALL_EXPERIMENT.md)). On top of the proven semantic memory, the
+> author-declared knowledge-edge axis is in. Still intentionally not feature-complete. The previous
+> v0.1 engine lives in git history (branch `development/v0.2-review`).
 
 ## Layout
 
 ```
 internal/
-  core/      pure domain types (Scope, Artifact, Tier, Kind, Detail, Query, Hit, Seed, Trace)
+  core/      pure domain types (Scope, Artifact, Tier, Kind, Detail, Query, Hit, Seed, Edge, Trace)
   embed/     Embedder interface + MockEmbedder (offline) + HTTPEmbedder (py/embed_server.py)
-  storage/   CAS (sha256+zstd), EmbeddingStore (float32), Meta (bbolt)
-  search/    brute-force cosine
-  engine/    public API: Open / Push / Query / Drill / Publish / SiblingOverview /
-             Ancestors / Fork / Consolidate / CrossVersion / Trace
+  storage/   CAS (sha256+zstd), EmbeddingStore (float32), Meta (bbolt: scopes/artifacts/edges/traces)
+  search/    brute-force cosine + BM25 + RRF
+  engine/    public API: Open / Push / Query / Drill / Publish / SiblingOverview / Ancestors /
+             Neighbors / Supersede / Relate / Related / Fork / Consolidate / CrossVersion / Trace
   eval/      scripted scenario runner + metrics; eval/scenarios/hoe.json
 cmd/
   ioc/       CLI: run-scenario, embed-ping, and persistent memory commands
@@ -64,9 +68,14 @@ mock and real embeddings are different vector spaces.
 ```bash
 ioc create-scope -role worktree -title proj                  # -> {"id": ...}
 ioc create-scope -parent <ID> -role session -title t
-ioc push  -scope <ID> -summary "..." [-content "..."|-content-file f] [-publish]
-ioc query -scope <ID> -text "..." [-detail overview|entry|raw] [-topk 5]
+ioc push  -scope <ID> -summary "..." [-content "..."|-content-file f] [-publish] \
+          [-supersedes id1,id2] [-relations depends_on:ID,answers:ID]   # declare currency + edges at write
+ioc query -scope <ID> -text "..." [-detail overview|entry|raw] [-topk 5] [-mode vector|hybrid|hierarchical] [-rerank]
 ioc drill -artifact <ID> -detail raw
+ioc neighbors -scope <ID> -text "..."           # most similar CURRENT memory (run before push to find what to supersede)
+ioc supersede -old <ID> -by <ID>                # mark an artifact replaced (currency)
+ioc relate    -from <ID> -to <ID> -kind depends_on        # author-declared knowledge edge
+ioc related   -artifact <ID> -kind depends_on -direction in   # walk edges: e.g. "what depends on X?"
 ioc fork  -scope <ID> -title t
 ioc consolidate  -scope <ID> -summary "..."
 ioc crossversion -scope <ID> -constraints "..." -lessons "..."
@@ -79,8 +88,9 @@ ioc trace    -query <ID>
 ## MCP server (agent-native surface)
 
 `cmd/ioc-mcp` is a stdio MCP server exposing the engine as tools (`ioc_create_scope`, `ioc_push`,
-`ioc_query`, `ioc_drill`, `ioc_publish`, `ioc_siblings`, `ioc_ancestors`, `ioc_fork`,
-`ioc_consolidate`, `ioc_crossversion`, `ioc_trace`). Config via env `IOC_DIR`, `IOC_EMBED`.
+`ioc_query`, `ioc_drill`, `ioc_publish`, `ioc_neighbors`, `ioc_supersede`, `ioc_relate`,
+`ioc_related`, `ioc_siblings`, `ioc_ancestors`, `ioc_fork`, `ioc_consolidate`, `ioc_crossversion`,
+`ioc_trace`). Config via env `IOC_DIR`, `IOC_EMBED`.
 
 ```bash
 make build      # -> bin/ioc-mcp

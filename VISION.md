@@ -6,19 +6,32 @@
 
 ## What IOC is
 
-IOC is a **local-first, model-agnostic memory and context layer for working with LLMs** — a
+IOC is a **local-first, model-agnostic memory & knowledge layer for working with LLMs** — a
 single model or many agents. It keeps an LLM's working context small, persistent, and (when
 needed) shared; lets reasoning evolve as a branchable graph; and consolidates/forgets at
 version boundaries so memory does not grow without bound.
 
+It unifies **two retrieval axes on one store**:
+- **Semantic memory** — a mini-summary + embedding per result, retrieved by similarity with
+  progressive disclosure (cheap overview → raw on demand) and a maintained current-truth view.
+- **A queryable knowledge base** — **author-declared typed edges** between artifacts
+  (`depends_on`, `contradicts`, `answers`, …), traversed structurally ("what depends on X?").
+
+So IOC is *both* the memory that keeps an agent's context small *and* a knowledge graph you can
+query — not one or the other.
+
 IOC is **not** an LLM and does not bundle one. Reasoning, summarization, and embeddings are
 produced by whatever model the caller chooses; IOC stores, organizes, and serves the results,
 and exposes an API (plus an MCP wrapper) that any model can reach. "No LLM in the core" means
-**no vendor lock-in and no model baked in** — not "no LLM ever".
+**no vendor lock-in and no model baked in** — not "no LLM ever". Crucially, **IOC never *infers*
+the graph**: edges are declared by the authoring model at write time (just like it declares what
+a new conclusion supersedes), so there is no LLM-driven entity/relation extraction in the core.
 
-This reframes the earlier "stateful knowledge graph runtime for research" framing: the graph,
-versioning, and content-addressable storage are *means*, not the product. The product is a
-**context OS**.
+This deliberately reframes the earlier "stateful knowledge graph runtime for research": that
+design made a **heavy, LLM-extracted** knowledge graph *the product*. IOC keeps a **lightweight,
+author-declared** graph as one structural axis beside the semantic one. The graph machinery,
+versioning, and content-addressable storage are *means*; the product is a **memory + knowledge
+substrate** (a context OS).
 
 ## Who it's for, and the pain
 
@@ -67,6 +80,15 @@ private until published. Isolation is about *write/context*, not about hiding ev
 **Progressive disclosure is the core retrieval idea.** The API is not "return top-k chunks"; it
 is *resolution-controllable*: a cheap overview by default → more detail on request → raw content.
 This is the main thing that distinguishes IOC from a plain vector database.
+
+**Knowledge edges (author-declared) are the structural axis.** Beside similarity, artifacts carry
+typed directed relations the authoring model declares — `depends_on`, `contradicts`, `answers`,
+`refines`, `relates_to` (the vocabulary is open). Retrieval can then be *structural*, not just
+semantic: walk the edges to answer "what depends on X?", "what contradicts this?", or a multi-hop
+chain — questions similarity cannot answer because the related artifact need not be textually
+similar. IOC stores and traverses these edges but never extracts them; declaring them is the
+author's job, exactly like declaring supersession. (Provenance edges — `derived_from`, fork/seed
+lineage, `superseded_by` — already exist; these add the *semantic* relations.)
 
 **Consolidation and forgetting happen at two discrete boundaries:**
 1. *branch transition* within a version — workspace memory is summarized;
@@ -119,12 +141,17 @@ but the lexical/rerank stages run on a label, not the content). The reasoning wa
 proven on the real embedder — see [`docs/WALL_EXPERIMENT.md`](docs/WALL_EXPERIMENT.md); document-Kind
 retrieval is the weaker, now-frozen regime ([`docs/ROADMAP.md`](docs/ROADMAP.md)).
 
-## Recommended next step
+## Where this stands, and next
 
-Before rewriting the formal specs or investing further in storage, **prove the wall on a real
-dogfood loop**:
-- run IOC on the author's own workflow with a real LLM;
-- measure something task-grounded: did the working context stay small? did re-explaining drop?
-  did retrieved memory actually carry the right constraints forward?
+The load-bearing bet — **prove the wall** — has been met. On the real embedder, overview summaries
+answered ~0.96 of answerable questions with no drill, the current-truth view held in every
+configuration, and the system abstained ("INSUFFICIENT") on absent questions rather than inventing
+(see [`docs/WALL_EXPERIMENT.md`](docs/WALL_EXPERIMENT.md)). The supersession/currency loop, the
+runtime daemon, the security gate's first layers, and the author-declared knowledge-edge axis are
+all built. That unblocks the formal-spec rewrite and further investment.
 
-That measurement is the eval harness. Spec rewrites and storage work come after the wall holds.
+Next (tracked in [`docs/ROADMAP.md`](docs/ROADMAP.md)): finish the formal v0.2 specs (FRD, FSD,
+PAD); **graph-aware retrieval** (blend the structural edge axis into the semantic ranking, not just
+a separate traversal); a margin-aware weak-match experiment; and the remaining robustness items.
+Document-Kind retrieval stays frozen (it competes with grep) — the unique value is reasoning memory
+plus the knowledge graph over it.
