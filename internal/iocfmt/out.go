@@ -113,7 +113,7 @@ func QueryOut(queryID core.ID, hits []core.Hit, conf core.Confidence) map[string
 	// margin_ambiguous = a match exists but the top two are nearly tied (→ answer with
 	// stated uncertainty, or retrieve one more turn). The margin gate is COSINE-path only
 	// — rerank scores are sigmoid-saturated, so their margin is unreliable (see above), so
-	// reranked queries stay floor-only. floor_miss takes priority. R4 / docs/DREAM.md §4.
+	// reranked queries stay floor-only. floor_miss takes priority. R4 (docs/WALL_EXPERIMENT.md).
 	marginAmbiguous := !reranked && marginValid && margin < conf.MarginFloor
 	confidence := "ok"
 	switch {

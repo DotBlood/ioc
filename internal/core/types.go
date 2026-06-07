@@ -237,7 +237,7 @@ type Query struct {
 	// Collapsed searches the visible set ∪ ALL descendant-scope artifacts in one flat
 	// pass (no coarse→fine routing) — it fixes flat retrieval's blindness to descendant
 	// scopes AND hierarchical's routing-drop (RAPTOR's "collapsed tree" beats top-down
-	// traversal; see docs/RESEARCH_ROADMAP.md R1). Mutually exclusive with Hierarchical
+	// traversal; see the R1 collapsed-tree experiment in docs/WALL_EXPERIMENT.md). Mutually exclusive with Hierarchical
 	// (Hierarchical wins if both set). Only changes the candidate SET; the ranking
 	// pipeline (cosine/hybrid/graph-boost/rerank) and Hit.Score are unchanged.
 	Collapsed    bool
@@ -330,7 +330,7 @@ func RerankFloor(model string) float64 {
 // is NOT transferable (it lives on the embedder's cosine distribution) — calibrate per
 // embedder on a probe set / the wall; the value below is a wall-calibrated start, not a
 // guarantee. Applies to the COSINE path only (rerank scores are sigmoid-saturated, so
-// their margin is unreliable — rerank stays floor-only). See docs/DREAM.md §4.
+// their margin is unreliable — rerank stays floor-only). See the R4 confidence/abstention work in docs/WALL_EXPERIMENT.md.
 func MarginFloor(model string) float64 {
 	switch model {
 	case "BAAI/bge-small-en-v1.5":
