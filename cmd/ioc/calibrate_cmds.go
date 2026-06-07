@@ -23,7 +23,7 @@ func calibrate(args []string) error {
 	probe := fs.String("probe", "", "probe spec JSON file (required)")
 	coverage := fs.Float64("coverage", 0.9, "fraction of relevant probes the floor must cover (0..1)")
 	rerank := fs.Bool("rerank", false, "calibrate the cross-encoder rerank floor (conf.rerank.<model>) instead of the cosine floor; needs a real -embed with a /rerank endpoint")
-	write := fs.Bool("write", true, "persist the derived floor to the store config")
+	apply := fs.String("apply", "", "auto-apply: live store dir to persist the derived floor into (e.g. your IOC_DIR / MCP data dir). Routes through a daemon if one owns it. Empty = print only.")
 	_ = fs.Parse(args)
 
 	if *probe == "" {
@@ -69,19 +69,31 @@ func calibrate(args []string) error {
 		fmt.Fprintln(os.Stderr, "WARNING: floor does not separate absent probes — add more/stronger probes")
 	}
 
-	if *write {
-		key := "conf.floor." + rep.Model
-		if rep.Rerank {
-			key = "conf.rerank." + rep.Model
-		}
-		val := strconv.FormatFloat(rep.Floor, 'f', 4, 64)
-		if err := e.SetConfig(key, val); err != nil {
-			return fmt.Errorf("calibrate: write config: %w", err)
-		}
-		fmt.Printf("written to config: %s = %s\n", key, val)
-	} else {
-		fmt.Println("(dry run — floor not written to config; use -write=true to persist)")
+	// Auto-apply: persist the derived floor straight into the LIVE store named by -apply
+	// (the calibration corpus lives in the throwaway -dir, which is reset each run, so the
+	// floor must be written elsewhere). openService routes the write through a daemon when
+	// one owns the live dir; otherwise it opens the store directly (which fails if another
+	// process — e.g. the MCP server — holds the lock, so stop it or run a daemon).
+	key := "conf.floor." + rep.Model
+	if rep.Rerank {
+		key = "conf.rerank." + rep.Model
 	}
-
+	val := strconv.FormatFloat(rep.Floor, 'f', 4, 64)
+	if *apply == "" {
+		fmt.Printf("(not persisted — pass -apply <live-store-dir> to auto-apply; would set %s = %s)\n", key, val)
+		return nil
+	}
+	le, err := openService(*apply, *em, false)
+	if err != nil {
+		return fmt.Errorf("calibrate: open apply store %q: %w", *apply, err)
+	}
+	defer le.Close()
+	if le.EmbModel() != rep.Model {
+		return fmt.Errorf("calibrate: apply store embedder %q != calibration embedder %q — the floor is per-model; use the same -embed", le.EmbModel(), rep.Model)
+	}
+	if err := le.SetConfig(key, val); err != nil {
+		return fmt.Errorf("calibrate: persist to apply store: %w", err)
+	}
+	fmt.Printf("applied to %s: %s = %s\n", *apply, key, val)
 	return nil
 }
