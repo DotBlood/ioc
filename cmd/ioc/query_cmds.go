@@ -20,7 +20,9 @@ func query(args []string) error {
 	mode := fs.String("mode", "collapsed", "collapsed (default: flat over visible ∪ all descendants)|vector (flat, visible only)|hybrid|hierarchical")
 	coarseK := fs.Int("coarsek", 0, "hierarchical coarse stage: # scopes to keep (0=default)")
 	minScore := fs.Float64("min-score", 0, "drop hits with cosine score below this")
-	rerank := fs.Bool("rerank", false, "cross-encoder rerank the top candidates (needs a real -embed)")
+	rerank := fs.Bool("rerank", false, "force cross-encoder rerank of every query (needs a real -embed; default is borderline-only auto-rerank)")
+	rerankN := fs.Int("rerank-n", 0, "# of top cosine candidates to rerank (0=default 50)")
+	noAutoRerank := fs.Bool("no-auto-rerank", false, "disable borderline auto-rerank (pure cosine even when a reranker is available)")
 	includeSuperseded := fs.Bool("include-superseded", false, "include superseded/archived (history) — default current view only")
 	recencyHalfLife := fs.Float64("recency-halflife-days", 0, "opt-in recency tie-breaker half-life in days (0=off; vector mode only)")
 	graphBoost := fs.Float64("graph-boost", 0, "opt-in graph-aware boost weight 0..1 (0=off): lift candidates edge-connected to strong hits")
@@ -31,7 +33,8 @@ func query(args []string) error {
 	if err != nil {
 		return err
 	}
-	e, err := openService(*dir, *em, *rerank)
+	// Attach the reranker on any real endpoint so borderline auto-rerank can fire.
+	e, err := openService(*dir, *em, *em != "")
 	if err != nil {
 		return err
 	}
@@ -51,6 +54,8 @@ func query(args []string) error {
 		CoarseK:             *coarseK,
 		MinScore:            *minScore,
 		Rerank:              *rerank,
+		RerankN:             *rerankN,
+		AutoRerank:          !*noAutoRerank,
 		IncludeSuperseded:   *includeSuperseded,
 		RecencyHalfLifeDays: *recencyHalfLife,
 		GraphBoost:          *graphBoost,

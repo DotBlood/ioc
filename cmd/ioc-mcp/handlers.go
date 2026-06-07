@@ -245,6 +245,11 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 		Collapsed:           coll,
 		CoarseK:             r.GetInt("coarsek", 0),
 		Rerank:              r.GetBool("rerank", false),
+		RerankN:             r.GetInt("rerank_n", 0),
+		// Borderline auto-rerank ON by default (R5): when the cosine result is weak or
+		// near-tied, the cross-encoder (if attached) re-ranks and gates abstention; pass
+		// auto_rerank=false for pure cosine. No-op without a reranker.
+		AutoRerank:          r.GetBool("auto_rerank", true),
 		IncludeSuperseded:   r.GetBool("include_superseded", false),
 		RecencyHalfLifeDays: r.GetFloat("recency_halflife_days", 0),
 		GraphBoost:          r.GetFloat("graph_boost", 0),

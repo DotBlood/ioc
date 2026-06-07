@@ -79,60 +79,20 @@ func HitsOut(hits []core.Hit) []map[string]any {
 // hits — produces negative margins and false confidence (the H3 bug), so the
 // ranked_by field names which signal is in force.
 func QueryOut(queryID core.ID, hits []core.Hit, conf core.Confidence) map[string]any {
-	reranked := len(hits) > 0 && hits[0].RerankScore != nil
-
-	var top, margin float64
-	score := func(h core.Hit) float64 {
-		if reranked && h.RerankScore != nil {
-			return *h.RerankScore
-		}
-		return h.Score
-	}
-	if len(hits) > 0 {
-		top = score(hits[0])
-	}
-	// Only a margin between two hits ranked by the SAME signal is meaningful.
-	// Caveat: the rerank margin is on sigmoid-normalized scores, which saturate near
-	// 1 — two very confident hits can show a tiny margin even when the cross-encoder
-	// clearly prefers one. Treat rerank margin as a soft separation hint; weak_match
-	// (an absolute floor) is the actionable signal.
-	marginValid := len(hits) > 1 && (!reranked || hits[1].RerankScore != nil)
-	if marginValid {
-		margin = score(hits[0]) - score(hits[1])
-	}
-
-	floor := conf.Floor
-	rankedBy := "cosine"
-	if reranked {
-		floor = conf.RerankFloor
-		rankedBy = "rerank"
-	}
-
-	// weak_match has two independent causes with DIFFERENT caller affordances, surfaced
-	// via the `confidence` code: floor_miss = no confident match at all (→ do not answer);
-	// margin_ambiguous = a match exists but the top two are nearly tied (→ answer with
-	// stated uncertainty, or retrieve one more turn). The margin gate is COSINE-path only
-	// — rerank scores are sigmoid-saturated, so their margin is unreliable (see above), so
-	// reranked queries stay floor-only. floor_miss takes priority. R4 (docs/WALL_EXPERIMENT.md).
-	marginAmbiguous := !reranked && marginValid && margin < conf.MarginFloor
-	confidence := "ok"
-	switch {
-	case len(hits) == 0:
-		confidence = "empty"
-	case top < floor:
-		confidence = "floor_miss"
-	case marginAmbiguous:
-		confidence = "margin_ambiguous"
-	}
+	// core.Decide is the single source of truth for the confidence verdict, shared with
+	// the eval/calibration harness so production and the abstention metric judge a hit
+	// list identically. It reads the signal that ordered the hits (rerank if present,
+	// else cosine), gates the margin on the cosine path only, and prioritizes floor_miss.
+	d := core.Decide(hits, conf)
 
 	out := map[string]any{
 		"query_id":   queryID.String(),
-		"ranked_by":  rankedBy,
-		"confidence": confidence,
+		"ranked_by":  d.RankedBy,
+		"confidence": d.Confidence,
 		"calibrated": conf.Calibrated,
-		"weak_match": confidence != "ok",
-		"top_score":  top,
-		"margin":     margin,
+		"weak_match": d.WeakMatch,
+		"top_score":  d.TopScore,
+		"margin":     d.Margin,
 		"hits":       HitsOut(hits),
 	}
 	// Provenance flag (V17): warn the caller that some results are UNTRUSTED

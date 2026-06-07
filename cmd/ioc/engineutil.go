@@ -31,9 +31,14 @@ func buildEmbedder(endpoint string) (embed.Embedder, error) {
 	return embed.NewHTTPEmbedder(endpoint, allowRemoteEmbed())
 }
 
-// rerankOpts attaches a reranker when requested against a real endpoint.
+// rerankOpts attaches a cross-encoder reranker on any REAL endpoint, so both explicit
+// rerank (-rerank) and borderline AutoRerank are available without a second flag (R5);
+// the reranker is only invoked when a query asks for it, and construction does not dial.
+// The mock embedder (endpoint=="") gets none, so mock/offline paths stay pure-cosine. The
+// rerank bool is retained for call-site readability but no longer gates attachment.
 func rerankOpts(rerank bool, endpoint string) ([]engine.Option, error) {
-	if rerank && endpoint != "" {
+	_ = rerank
+	if endpoint != "" {
 		rr, err := embed.NewHTTPReranker(endpoint, allowRemoteEmbed())
 		if err != nil {
 			return nil, err

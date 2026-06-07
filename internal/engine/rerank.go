@@ -44,6 +44,30 @@ func truncRunes(s string, max int) string {
 // across queries and against a fixed relevance floor (see core.RerankFloor).
 func sigmoid(x float64) float64 { return 1 / (1 + math.Exp(-x)) }
 
+// borderlineCosine reports whether the cosine result is weak enough to warrant an
+// AutoRerank: the top cosine is below the per-embedder confidence floor (no confident
+// match), OR the top-two cosine margin is below the margin floor (near-duplicate cluster
+// — cosine cannot tell which, if any, actually answers). These are exactly the regions
+// where the bi-encoder fails to separate present from absent (R5); the cross-encoder
+// does. Confident, well-separated cosine results return false and skip rerank. Floors are
+// resolved per-embedder from config (calibration) or defaults via core.ResolveConfidence.
+func (e *Engine) borderlineCosine(ordered []search.Result, cosineByID map[string]float64) bool {
+	if len(ordered) == 0 {
+		return false // nothing to rerank; the result is "empty" regardless
+	}
+	conf := core.ResolveConfidence(e.EmbModel(), e.Config)
+	top := cosineByID[ordered[0].ID]
+	if top < conf.Floor {
+		return true
+	}
+	if len(ordered) > 1 {
+		if top-cosineByID[ordered[1].ID] < conf.MarginFloor {
+			return true
+		}
+	}
+	return false
+}
+
 // rerankTop reorders the top-n candidates by a cross-encoder over their rank
 // text (CONTENT for documents, Summary otherwise — see rankText). It returns the
 // reordered candidates with each Result.Score set to the RAW logit; the caller
@@ -51,7 +75,7 @@ func sigmoid(x float64) float64 { return 1 / (1 + math.Exp(-x)) }
 // sigmoid. Only ORDER changes here — Hit.Score stays cosine.
 func (e *Engine) rerankTop(ctx context.Context, query string, ordered []search.Result, byID map[string]core.Artifact, n int) ([]search.Result, error) {
 	if n <= 0 {
-		n = 20
+		n = 50
 	}
 	if n > len(ordered) {
 		n = len(ordered)

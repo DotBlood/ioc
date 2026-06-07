@@ -160,13 +160,28 @@ class RerankResponse(BaseModel):
     model: str
 
 
+def _identity_activation():
+    """Identity activation so CrossEncoder.predict returns RAW logits (no sigmoid).
+    Returns None when torch is absent (test stubs ignore it)."""
+    try:
+        import torch
+
+        return torch.nn.Identity()
+    except ImportError:
+        return None
+
+
 @app.post("/rerank")
 async def rerank(req: RerankRequest):
     if not req.passages:
         return RerankResponse(scores=[], model=RERANK_MODEL)
     ce = get_reranker()
     pairs = [[req.query, p] for p in req.passages]
-    scores = ce.predict(pairs)
+    # Return RAW cross-encoder logits. bge-reranker's default predict() applies a sigmoid;
+    # IOC applies its OWN sigmoid once (internal/engine/rerank.go). Emitting the sigmoid
+    # here would double-sigmoid and compress scores into ~[0.5, 0.73], collapsing the
+    # present/absent separation the rerank confidence floor relies on (R5).
+    scores = ce.predict(pairs, activation_fct=_identity_activation())
     return RerankResponse(scores=[float(s) for s in scores], model=RERANK_MODEL)
 
 

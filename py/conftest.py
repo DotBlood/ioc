@@ -20,8 +20,9 @@ class _FakeModel:
 
 
 class _FakeReranker:
-    def predict(self, pairs):
-        return [0.5 for _ in pairs]
+    def predict(self, pairs, activation_fct=None):
+        # Raw logit 0.0 (the server now requests identity activation, not sigmoid).
+        return [0.0 for _ in pairs]
 
 
 @pytest.fixture

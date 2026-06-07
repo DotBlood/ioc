@@ -22,7 +22,8 @@ func calibrate(args []string) error {
 	em := fs.String("embed", "", "embedder endpoint (empty=mock)")
 	probe := fs.String("probe", "", "probe spec JSON file (required)")
 	coverage := fs.Float64("coverage", 0.9, "fraction of relevant probes the floor must cover (0..1)")
-	write := fs.Bool("write", true, "persist the floor to conf.floor.<model> in the store config")
+	rerank := fs.Bool("rerank", false, "calibrate the cross-encoder rerank floor (conf.rerank.<model>) instead of the cosine floor; needs a real -embed with a /rerank endpoint")
+	write := fs.Bool("write", true, "persist the derived floor to the store config")
 	_ = fs.Parse(args)
 
 	if *probe == "" {
@@ -37,23 +38,32 @@ func calibrate(args []string) error {
 	if err := os.RemoveAll(*dir); err != nil {
 		return fmt.Errorf("calibrate: reset dir: %w", err)
 	}
-	e, err := openEngineEmbedded(*dir, *em, false)
+	e, err := openEngineEmbedded(*dir, *em, *rerank)
 	if err != nil {
 		return fmt.Errorf("calibrate: open engine: %w", err)
 	}
 	defer e.Close()
 
-	rep, err := eval.CalibrateRun(context.Background(), e, spec, *coverage)
+	rep, err := eval.CalibrateRun(context.Background(), e, spec, eval.CalibrateOpts{Coverage: *coverage, Rerank: *rerank})
 	if err != nil {
 		return fmt.Errorf("calibrate: run: %w", err)
 	}
 
+	signal := "cosine"
+	if rep.Rerank {
+		signal = "rerank"
+	}
 	fmt.Printf("model:          %s\n", rep.Model)
+	fmt.Printf("signal:         %s\n", signal)
 	fmt.Printf("calibrated floor: %.4f\n", rep.Floor)
 	fmt.Printf("coverage:       %.2f\n", rep.Coverage)
 	fmt.Printf("relevant probes: %d  (top scores: %v)\n", rep.RelevantN, rep.RelevantTops)
 	fmt.Printf("absent probes:  %d  (top scores: %v)\n", rep.AbsentN, rep.AbsentTops)
 	fmt.Printf("max absent top: %.4f\n", rep.MaxAbsentTop)
+
+	ab := rep.Abstention
+	fmt.Printf("abstention @ floor (%s): present %d (weak %d) absent %d (weak %d) — FPR %.2f (fakes answered) FNR %.2f (reals suppressed)\n",
+		ab.RankedBy, ab.PresentN, ab.PresentWeak, ab.AbsentN, ab.AbsentWeak, ab.FalsePosRate, ab.FalseNegRate)
 
 	if rep.Floor <= rep.MaxAbsentTop {
 		fmt.Fprintln(os.Stderr, "WARNING: floor does not separate absent probes — add more/stronger probes")
@@ -61,6 +71,9 @@ func calibrate(args []string) error {
 
 	if *write {
 		key := "conf.floor." + rep.Model
+		if rep.Rerank {
+			key = "conf.rerank." + rep.Model
+		}
 		val := strconv.FormatFloat(rep.Floor, 'f', 4, 64)
 		if err := e.SetConfig(key, val); err != nil {
 			return fmt.Errorf("calibrate: write config: %w", err)

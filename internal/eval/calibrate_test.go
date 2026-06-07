@@ -84,7 +84,7 @@ func TestCalibrateRun_Smoke(t *testing.T) {
 		},
 	}
 
-	rep, err := CalibrateRun(ctx, e, spec, 0.9)
+	rep, err := CalibrateRun(ctx, e, spec, CalibrateOpts{Coverage: 0.9})
 	require.NoError(t, err)
 	require.Equal(t, 3, rep.RelevantN)
 	require.Equal(t, 1, rep.AbsentN)

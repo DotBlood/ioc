@@ -243,7 +243,14 @@ type Query struct {
 	Collapsed    bool
 	Kinds        []ArtifactKind // restrict results to these kinds (empty = all)
 	Rerank       bool           // cross-encoder rerank the top RerankN candidates (needs a reranker)
-	RerankN      int            // # of candidates to rerank (default 20)
+	RerankN      int            // # of candidates to rerank (default 50)
+	// AutoRerank, when true and a reranker is attached, reranks ONLY when the cosine
+	// result is borderline (top below the confidence floor, or the top-two cosine margin
+	// below the margin floor) — the dense near-duplicate / weak-top region where cosine
+	// alone cannot separate present from absent. Confident cosine results skip the
+	// cross-encoder (no latency). Rerank=true always reranks regardless. A no-op without
+	// a reranker (pure-cosine fallback). See docs/WALL_EXPERIMENT.md (R5).
+	AutoRerank bool
 
 	// IncludeSuperseded surfaces non-current memory: by default retrieval returns
 	// only the current view (drops artifacts with SupersededBy set and artifacts in
@@ -390,6 +397,73 @@ func ResolveConfidence(model string, get func(string) (string, bool)) Confidence
 		}
 	}
 	return c
+}
+
+// Decision is the confidence verdict over a ranked hit list: which signal ordered the
+// hits, the top score and top1−top2 margin on that signal, the confidence code, and the
+// weak_match convenience flag. It is the single source of truth shared by the JSON
+// formatter (iocfmt.QueryOut) and the eval/calibration harness, so production and the
+// abstention metric judge a hit list IDENTICALLY.
+type Decision struct {
+	Confidence string  // "ok" | "floor_miss" | "margin_ambiguous" | "empty"
+	WeakMatch  bool    // Confidence != "ok"
+	RankedBy   string  // "cosine" | "rerank" — which signal is in force
+	TopScore   float64 // top hit's score on the in-force signal
+	Margin     float64 // top1−top2 on the in-force signal (0 if <2 comparable hits)
+}
+
+// Decide classifies a ranked hit list against the per-embedder Confidence thresholds.
+// It reads the signal that ACTUALLY ordered the hits — the cross-encoder rerank score
+// (vs RerankFloor) when present on the top hit, else cosine (vs Floor). weak_match has
+// two independent causes surfaced via the confidence code: floor_miss = no confident
+// match (→ do not answer); margin_ambiguous = a match exists but the top two are nearly
+// tied (→ answer with stated uncertainty). The margin gate is COSINE-path only — rerank
+// scores are sigmoid-saturated, so their margin is unreliable; floor_miss takes priority.
+// Mixing signals (cosine margin over rerank-ordered hits) produces false confidence (the
+// H3 bug), so RankedBy names the signal in force. See the R4 confidence/abstention work
+// in docs/WALL_EXPERIMENT.md.
+func Decide(hits []Hit, conf Confidence) Decision {
+	reranked := len(hits) > 0 && hits[0].RerankScore != nil
+	score := func(h Hit) float64 {
+		if reranked && h.RerankScore != nil {
+			return *h.RerankScore
+		}
+		return h.Score
+	}
+	var top, margin float64
+	if len(hits) > 0 {
+		top = score(hits[0])
+	}
+	// Only a margin between two hits ranked by the SAME signal is meaningful.
+	marginValid := len(hits) > 1 && (!reranked || hits[1].RerankScore != nil)
+	if marginValid {
+		margin = score(hits[0]) - score(hits[1])
+	}
+
+	floor := conf.Floor
+	rankedBy := "cosine"
+	if reranked {
+		floor = conf.RerankFloor
+		rankedBy = "rerank"
+	}
+
+	marginAmbiguous := !reranked && marginValid && margin < conf.MarginFloor
+	confidence := "ok"
+	switch {
+	case len(hits) == 0:
+		confidence = "empty"
+	case top < floor:
+		confidence = "floor_miss"
+	case marginAmbiguous:
+		confidence = "margin_ambiguous"
+	}
+	return Decision{
+		Confidence: confidence,
+		WeakMatch:  confidence != "ok",
+		RankedBy:   rankedBy,
+		TopScore:   top,
+		Margin:     margin,
+	}
 }
 
 // Hit is one retrieval result. Content is populated only at DetailRaw.

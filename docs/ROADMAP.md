@@ -31,6 +31,7 @@ wall was the gate before formal spec rewrites and further storage investment; th
 | **Eval harness + wall proof** — `ioc wall`/`run-scenario`, blind-judge methodology, currency probe; wall holds at 28 and 180 (real bge-small) | DONE | `internal/eval`, `WALL_EXPERIMENT.md` |
 | **Multi-signal ranking — author-declared importance (R3)** — opt-in `Query.ImportanceWeight` (CLI `-importance-weight`, OFF by default) blends `(1−w)·cosine + w·importance`, importance derived from `Tier` (worktree=canonical > workspace) — a third axis beside relevance + recency, kept no-LLM (declared, not LLM-scored). Clean no-op on the single-tier wall corpus (recall identical at w=0 vs 0.3 → no regression). | DONE (opt-in) | `internal/engine` (`blendImportance`), `WALL_EXPERIMENT.md` |
 | **Margin-aware confidence + per-embedder calibration (R4/R4b)** — `weak_match = empty OR top<floor OR margin<MarginFloor` (margin gate cosine-path only) plus a distinct `confidence` code (`ok`/`floor_miss`/`margin_ambiguous`/`empty`); `ioc calibrate` derives the floor per-embedder via split-conformal and writes `conf.floor.<model>` to config (output carries `calibrated`). Removes the hardcoded-floor dependency; honest finding: on bge-small the margin gate is largely redundant with the well-tuned floor — its value is the embedder-independent confidence-code affordance. | DONE | `internal/engine`, `internal/core` (`ResolveConfidence`), `WALL_EXPERIMENT.md` |
+| **Cross-encoder abstention — borderline auto-rerank + rerank-floor calibration (R5)** — root-caused the gameable cosine floor (absent questions clear it on shared vocabulary) and dense-cluster recall misses to one cause: bi-encoder cosine ranks/abstains on topical similarity, not answer-relevance. Shipped: `core.Decide` (shared verdict), an **abstention metric** (`eval.Abstention` FPR/FNR over present/absent probes, printed by `ioc calibrate`), `ioc calibrate -rerank` → `conf.rerank.<model>`, **borderline `Query.AutoRerank`** (ON by default for `ioc query`/`ioc_query`; reranks only weak/near-tied cosine results, cosine fallback when no reranker), RerankN 20→50 (+`-rerank-n`), `config set/get`, and a `/rerank` **double-sigmoid fix** in `py/embed_server.py` (raw logits → ~5× wider present/absent margin). Verified FPR 0 / FNR 0 with the rerank floor (gap 0.106 vs cosine 0.019). | DONE | `internal/{core,engine,eval,iocfmt}`, `cmd/ioc`, `py/embed_server.py`, `WALL_EXPERIMENT.md` |
 | **Core unit-test coverage** — search 0→98.8%, engine ~80%, storage ~79%, iocfmt ~53% | DONE | `internal/{search,engine,storage,iocfmt}/*_test.go` |
 
 ## NOW — formal v0.2 specs (this phase)
@@ -41,10 +42,10 @@ upkeep: keep each spec in step with the code as the open NEXT items land.
 
 ## NEXT (open, on-thesis; pick by need, not all required)
 
-The v0.3 retrieval-research program (R1–R4, recorded in [`WALL_EXPERIMENT.md`](WALL_EXPERIMENT.md))
+The v0.3 retrieval-research program (R1–R5, recorded in [`WALL_EXPERIMENT.md`](WALL_EXPERIMENT.md))
 closed most of this list — its shipped and rejected outcomes are in DONE above (collapsed default,
-graph-boost v2 / v3-PPR rejected, author-declared importance, margin-aware confidence + calibration).
-What remains open and on-thesis:
+graph-boost v2 / v3-PPR rejected, author-declared importance, margin-aware confidence + calibration,
+cross-encoder abstention + borderline auto-rerank). What remains open and on-thesis:
 
 | Item | What | Source |
 |------|------|--------|

@@ -61,6 +61,23 @@ type CalibrateReport struct {
 	MaxAbsentTop float64   // highest top-hit score among absent probes (0 if none)
 	RelevantTops []float64 // top-hit scores for each relevant question (len == RelevantN)
 	AbsentTops   []float64 // top-hit scores for each absent question (len == AbsentN)
+	// Abstention is the FPR/FNR the DERIVED floor would produce on this probe set
+	// (present vs absent), judged through the same core.Decide as production. It is the
+	// number that says whether the floor actually separates present from absent.
+	Abstention AbstentionReport
+	// Rerank reports which floor was calibrated: false = cosine floor (conf.floor.<model>),
+	// true = cross-encoder rerank floor (conf.rerank.<model>). Top scores in the report are
+	// on the corresponding signal.
+	Rerank bool
+}
+
+// CalibrateOpts configures a calibration run. Coverage is the fraction of relevant probes
+// the floor must keep at/above it. Rerank=true calibrates the cross-encoder rerank floor
+// (runs each probe reranked and reads rerank scores) instead of the cosine floor; it
+// requires a reranker attached to the engine (a real /rerank endpoint).
+type CalibrateOpts struct {
+	Coverage float64
+	Rerank   bool
 }
 
 // CalibrateRun builds the probe corpus from spec.Build, then for every question in
@@ -74,7 +91,8 @@ type CalibrateReport struct {
 //
 // It replicates the build-turn loop used by WallRun (copy, not refactor) so that
 // WallRun's own corpus-construction logic is never affected.
-func CalibrateRun(ctx context.Context, e *engine.Engine, spec *WallSpec, coverage float64) (CalibrateReport, error) {
+func CalibrateRun(ctx context.Context, e *engine.Engine, spec *WallSpec, opts CalibrateOpts) (CalibrateReport, error) {
+	coverage := opts.Coverage
 	topK := spec.TopK
 	if topK <= 0 {
 		topK = 5
@@ -94,34 +112,52 @@ func CalibrateRun(ctx context.Context, e *engine.Engine, spec *WallSpec, coverag
 	}
 
 	var relevantTops, absentTops []float64
+	var presentProbes, absentProbes []Probe
 
 	for _, q := range spec.Questions {
 		scope, err := resolveScopeName(scopes, q.Scope)
 		if err != nil {
 			return CalibrateReport{}, fmt.Errorf("calibrate: question %q: %w", q.ID, err)
 		}
-		// Plain vector query — calibration measures the raw cosine signal before any
-		// mode selection or reranking, which is what ConfidenceFloor guards.
+		// Cosine pass measures the raw cosine signal (ConfidenceFloor); rerank pass runs
+		// the same query reranked and reads the cross-encoder score (RerankFloor).
 		_, hits, err := e.Query(ctx, core.Query{
-			Scope: scope,
-			Text:  q.Question,
-			TopK:  topK,
-			// Mode, Hierarchical, etc. left at zero-values (ModeVector, flat) — the
-			// floor is a cosine gate; calibrate against the mode-agnostic signal.
+			Scope:  scope,
+			Text:   q.Question,
+			TopK:   topK,
+			Rerank: opts.Rerank,
+			// Mode/Hierarchical left at zero-values (ModeVector, flat) — calibrate against
+			// the mode-agnostic signal.
 		})
 		if err != nil {
 			return CalibrateReport{}, fmt.Errorf("calibrate: question %q: %w", q.ID, err)
 		}
+		// score reads the signal being calibrated: rerank score when reranking, else cosine.
+		sig := func(h core.Hit) float64 {
+			if opts.Rerank && h.RerankScore != nil {
+				return *h.RerankScore
+			}
+			return h.Score
+		}
+		if opts.Rerank && len(hits) > 0 && hits[0].RerankScore == nil {
+			return CalibrateReport{}, fmt.Errorf("calibrate: -rerank requires a reranker attached (real -embed with a /rerank endpoint); query %q was not reranked", q.ID)
+		}
 
 		var topScore float64
 		if len(hits) > 0 {
-			topScore = hits[0].Score
+			topScore = sig(hits[0])
+		}
+		probe := Probe{NumHits: len(hits), Top1: topScore, Reranked: opts.Rerank}
+		if len(hits) > 1 {
+			probe.Top2 = sig(hits[1])
 		}
 
 		if len(q.GoldRefs) > 0 {
 			relevantTops = append(relevantTops, topScore)
+			presentProbes = append(presentProbes, probe)
 		} else {
 			absentTops = append(absentTops, topScore)
+			absentProbes = append(absentProbes, probe)
 		}
 	}
 
@@ -134,6 +170,17 @@ func CalibrateRun(ctx context.Context, e *engine.Engine, spec *WallSpec, coverag
 		}
 	}
 
+	// Abstention the DERIVED floor would produce on this probe set, judged through the
+	// same core.Decide production uses. Apply the floor to the signal being calibrated:
+	// the rerank floor for a rerank pass, else the cosine floor (MarginFloor at default).
+	conf := core.DefaultConfidence(e.EmbModel())
+	if opts.Rerank {
+		conf.RerankFloor = floor
+	} else {
+		conf.Floor = floor
+		conf.Calibrated = true
+	}
+
 	return CalibrateReport{
 		Model:        e.EmbModel(),
 		Floor:        floor,
@@ -143,5 +190,7 @@ func CalibrateRun(ctx context.Context, e *engine.Engine, spec *WallSpec, coverag
 		MaxAbsentTop: maxAbsentTop,
 		RelevantTops: relevantTops,
 		AbsentTops:   absentTops,
+		Abstention:   Abstention(presentProbes, absentProbes, conf),
+		Rerank:       opts.Rerank,
 	}, nil
 }

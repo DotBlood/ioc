@@ -277,7 +277,11 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 	// term into the cosine order among current atoms. Only on the pure-cosine path
 	// and only when NOT reranking (the cross-encoder already orders); see the caveat
 	// on Query.RecencyHalfLifeDays. Hit.Score stays cosine — this only reorders.
-	willRerank := q.Rerank && e.reranker != nil
+	// Effective rerank decision: explicit Rerank always reranks; AutoRerank reranks only
+	// when the cosine result is borderline (weak top or near-tied top-two — the region
+	// where cosine cannot separate present from absent). Both need a reranker attached;
+	// without one this is a no-op and the pure-cosine path is unchanged. See R5.
+	willRerank := e.reranker != nil && (q.Rerank || (q.AutoRerank && e.borderlineCosine(ordered, cosineByID)))
 	if q.RecencyHalfLifeDays > 0 && q.Mode == core.ModeVector && !willRerank {
 		ordered = blendRecency(ordered, cosineByID, byID, q.RecencyHalfLifeDays)
 	}
@@ -328,7 +332,7 @@ func (e *Engine) Query(ctx context.Context, q core.Query) (core.ID, []core.Hit, 
 	// to retrieve-then-rerank; widen RerankN to trade compute for recall). NaN/Inf
 	// guarding on reranker output is deferred to the V8 input-validation hardening.
 	rerankByID := map[string]float64(nil)
-	if q.Rerank && e.reranker != nil {
+	if willRerank {
 		if reranked, rerr := e.rerankTop(ctx, q.Text, ordered, byID, q.RerankN); rerr == nil {
 			ordered = reranked
 			rerankByID = make(map[string]float64, len(reranked))

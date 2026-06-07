@@ -23,9 +23,57 @@ func configCmd(args []string) error {
 		return setIngestRoot(rest)
 	case "get-ingest-root":
 		return getIngestRoot(rest)
+	case "set":
+		return configSet(rest)
+	case "get":
+		return configGet(rest)
 	default:
 		return fmt.Errorf("config: unknown subcommand %q", sub)
 	}
+}
+
+// configSet persists an arbitrary store config key — notably the calibrated confidence
+// floors (conf.floor.<model> / conf.rerank.<model> / conf.margin.<model>) that
+// `ioc calibrate` prints, since calibrate runs in a throwaway dir and cannot write them
+// into a live store itself. Usage: config set <key> <value> [-dir d] [-embed e].
+func configSet(args []string) error {
+	fs := flag.NewFlagSet("config set", flag.ExitOnError)
+	dir, em := commonFlags(fs)
+	if len(args) < 2 {
+		return fmt.Errorf("config set: usage: config set <key> <value> [-dir d] [-embed e]")
+	}
+	key, val := args[0], args[1]
+	_ = fs.Parse(args[2:])
+	if key == "" {
+		return fmt.Errorf("config set: empty key")
+	}
+	e, err := openService(*dir, *em, false)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	if err := e.SetConfig(key, val); err != nil {
+		return err
+	}
+	return printJSON(map[string]any{"key": key, "value": val})
+}
+
+// configGet reads a store config key. Usage: config get <key> [-dir d] [-embed e].
+func configGet(args []string) error {
+	fs := flag.NewFlagSet("config get", flag.ExitOnError)
+	dir, em := commonFlags(fs)
+	if len(args) < 1 {
+		return fmt.Errorf("config get: usage: config get <key> [-dir d] [-embed e]")
+	}
+	key := args[0]
+	_ = fs.Parse(args[1:])
+	e, err := openService(*dir, *em, false)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	v, ok := e.Config(key)
+	return printJSON(map[string]any{"key": key, "value": v, "found": ok})
 }
 
 func setIngestRoot(args []string) error {

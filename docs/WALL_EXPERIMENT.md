@@ -464,3 +464,55 @@ callers resolve via `svc.EmbModel()` + `svc.Config`.
 arXiv:2403.05440), and (2) a one-command path to a principled per-embedder floor when switching/fine-tuning
 the embedder. **Not persisted in the repo** — default behavior is unchanged (empty config → 0.68); the
 operator runs `ioc calibrate` per deployment. `confidence` output now also carries `calibrated` (bool).
+
+## 2026-06-07 — R5: cross-encoder-based abstention (borderline auto-rerank + rerank-floor calibration)
+
+A 50-real + 10-fake blind MCP probe (live bge-small) surfaced two error classes the user wanted
+minimized: (1) **abstention false-positives** — 8/10 "fake" (absent) questions cleared the default cosine
+floor 0.68 (they scored 0.69–0.73, the same band as real answers 0.69–0.93), so `weak_match` did not fire;
+(2) **recall misses** — 2 real answers were buried below rank-5 by a dense near-duplicate cluster. Root
+cause is one thing: bi-encoder cosine measures *topical similarity*, not *"does this passage answer the
+question"*, so on a small vocabulary-overlapping corpus it cannot separate present from absent and it buries
+the exact answer among near-duplicates. The cross-encoder reranker (already in IOC) separates and recovers
+both — it was just off by default and its floor was uncalibrated.
+
+### What shipped
+- **`core.Decide`** — the weak_match/confidence verdict extracted into one pure function shared by
+  `iocfmt.QueryOut` (production) and the eval harness, so the metric and live behavior cannot diverge.
+- **Abstention metric** (`eval.Abstention`, `AbstentionReport`) — FPR (absent NOT flagged → a fake
+  "answered") and FNR (present wrongly flagged → a real answer suppressed) over present/absent probes,
+  judged through `core.Decide`. Printed by `ioc calibrate`. This is the number floors are tuned against.
+- **Rerank-floor calibration** — `ioc calibrate -rerank` runs the probes reranked and derives
+  `conf.rerank.<model>` via the same split-conformal quantile used for the cosine floor.
+- **Borderline auto-rerank** (`Query.AutoRerank`, ON by default for `ioc query` / MCP `ioc_query`) — rerank
+  fires only when the cosine result is borderline (top below the floor OR top-two margin below the margin
+  floor); confident queries skip the cross-encoder. No-op without a reranker (pure-cosine fallback). A
+  reranker is now attached on any real `-embed`.
+- **RerankN 20 → 50** (+ exposed as `-rerank-n` / `rerank_n`) so an answer just outside the old window is
+  still reranked.
+- **`config set/get`** — persist the calibrated floor into a live store (calibrate runs in a throwaway dir).
+- **Double-sigmoid fix** (`py/embed_server.py`) — `/rerank` returned the bge-reranker's default *sigmoid*
+  (a probability), and IOC sigmoided it again, compressing all rerank scores into ~[0.5, 0.73]. The server
+  now returns RAW logits (identity activation); IOC applies its one sigmoid. This widens the present/absent
+  separation ~5× (see below).
+
+### Verified (real bge-small + bge-reranker-base, 16 present + 6 absent probe, coverage=1.0)
+
+| signal | derived floor | max absent | min present | **gap** | FPR | FNR |
+|---|---|---|---|---|---|---|
+| cosine | 0.7387 | 0.7197 | 0.7387 | 0.019 | 0.00 | 0.00 |
+| rerank (double-sigmoid, old server) | 0.7202 | 0.6983 | 0.7202 | 0.022 | 0.00 | 0.00 |
+| **rerank (single sigmoid, fixed server)** | **0.9455** | **0.8392** | **0.9455** | **0.106** | **0.00** | **0.00** |
+
+All three separate present from absent on this set at coverage=1.0, but the **rerank margin is ~5.5× wider
+than cosine** (0.106 vs 0.019) — that width is the robustness against vocabulary-adjacent fakes. The hardest
+fake ("which gRPC port does the daemon listen on" vs the framed-JSON-RPC daemon fact) reranks to 0.839,
+still well below the 0.945 floor; on cosine it sat at 0.72, inside the present band. The original 8/10
+failure was the **uncalibrated default** floor (0.68), not the signal — calibration plus the wide rerank
+margin closes it. At the default coverage 0.9 the conformal floor deliberately clips the bottom ~10% of
+present probes (FNR≈0.12 there); choose coverage by the FPR/FNR trade you want.
+
+**Honest caveats:** (a) the probe corpus is small and IOC-internal (shared vocabulary — the stress case);
+(b) the calibrated `conf.rerank.<model>` must be persisted (`ioc config set`) into the live store and the
+embed server restarted to pick up the logit fix — default `RerankFloor` is still 0.5 (catches the easy
+fakes, not the 0.84 hard one), so tight abstention needs the calibration step per deployment.
