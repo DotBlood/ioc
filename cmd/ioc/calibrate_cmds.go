@@ -42,7 +42,7 @@ func calibrate(args []string) error {
 	if err != nil {
 		return fmt.Errorf("calibrate: open engine: %w", err)
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 
 	rep, err := eval.CalibrateRun(context.Background(), e, spec, eval.CalibrateOpts{Coverage: *coverage, Rerank: *rerank})
 	if err != nil {
@@ -87,7 +87,7 @@ func calibrate(args []string) error {
 	if err != nil {
 		return fmt.Errorf("calibrate: open apply store %q: %w", *apply, err)
 	}
-	defer le.Close()
+	defer func() { _ = le.Close() }()
 	// Guard against applying a floor under the wrong model key — but only when the live
 	// store's model is actually known. A freshly opened HTTP embedder reports "" until its
 	// first call, so an empty model means "unknown", not "mismatch" (trust the same -embed).

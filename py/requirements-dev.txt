@@ -1,9 +1,12 @@
-# Dev/test deps for the embed server. Deliberately OMITS sentence-transformers
-# and torch — the tests monkeypatch get_model/get_reranker, so CI stays fast and
-# offline (no ~400MB model download). Install with: pip install -r requirements-dev.txt
-pytest>=8,<9
-httpx>=0.27,<1
-fastapi>=0.115.0,<1.0.0
-pydantic>=2,<3
-numpy>=1.26.0,<2.0.0
-uvicorn>=0.32.0,<1.0.0
+# Dev/test deps for the embed server. Pinned to EXACT versions so the installed version
+# is determinable (Dependabot can track and propose updates — a version *range* made it
+# report "installed version can't be determined") and CI is reproducible. Deliberately
+# OMITS sentence-transformers and torch — the tests monkeypatch get_model/get_reranker,
+# so CI stays fast and offline (no ~400MB model download).
+# Install with: pip install -r requirements-dev.txt
+pytest==9.0.3        # 9.0.3 fixes the predictable /tmp/pytest-of-{user} dir issue (vulnerable through 9.0.2)
+httpx==0.28.1
+fastapi==0.136.3
+pydantic==2.13.4
+numpy==1.26.4
+uvicorn==0.48.0

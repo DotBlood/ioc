@@ -41,7 +41,7 @@ func runtimeRotate(dir string) error {
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	full, read, err := c.RotateToken()
 	if err != nil {
 		return err
@@ -60,7 +60,7 @@ func runtimeMintReadToken(dir string) error {
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	read, err := c.MintReadToken()
 	if err != nil {
 		return err

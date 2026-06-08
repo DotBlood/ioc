@@ -5,9 +5,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/DotBlood/ioc/internal/ingest"
 )
+
+// configSetAllowed gates which config keys `config set` may write. Only operator-tunable
+// values are allowed; SAFETY-CRITICAL keys are intentionally NOT writable here — `enc`
+// (the at-rest encryption sentinel) and `emb_model`/`emb_dims` (which gate the
+// embedder-mismatch guard that prevents querying across incompatible vector spaces). Use
+// `config set-ingest-root` for ingest_root (it validates the directory).
+func configSetAllowed(key string) bool {
+	if key == "ingest_root" {
+		return true
+	}
+	return strings.HasPrefix(key, "conf.floor.") ||
+		strings.HasPrefix(key, "conf.margin.") ||
+		strings.HasPrefix(key, "conf.rerank.")
+}
 
 // configCmd manages persisted store config. Subcommands:
 //
@@ -47,11 +62,14 @@ func configSet(args []string) error {
 	if key == "" {
 		return fmt.Errorf("config set: empty key")
 	}
+	if !configSetAllowed(key) {
+		return fmt.Errorf("config set: key %q is not settable here (allowed: conf.floor.* / conf.margin.* / conf.rerank.* / ingest_root); safety-critical keys (enc, emb_model, emb_dims) are protected", key)
+	}
 	e, err := openService(*dir, *em, false)
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	if err := e.SetConfig(key, val); err != nil {
 		return err
 	}
@@ -71,7 +89,7 @@ func configGet(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	v, ok := e.Config(key)
 	return printJSON(map[string]any{"key": key, "value": v, "found": ok})
 }
@@ -99,7 +117,7 @@ func setIngestRoot(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	if err := e.SetConfig("ingest_root", abs); err != nil {
 		return err
 	}
@@ -114,7 +132,7 @@ func getIngestRoot(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 
 	root := ingest.ResolveIngestRoot(e) // runtime.Service has Config(key)(string,bool)
 	source := "cwd"

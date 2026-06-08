@@ -106,7 +106,7 @@ func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option
 	// Encryption sentinel matrix (fail-closed, no silent mixing). The "enc" config
 	// value is always plaintext so it is readable without the key.
 	if err := e.checkEncryptionSentinel(); err != nil {
-		e.Close()
+		_ = e.Close()
 		return nil, err
 	}
 	if box.Enabled() {
@@ -123,17 +123,17 @@ func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option
 		dims, convErr := strconv.Atoi(v)
 		if convErr == nil {
 			if d := embedder.Dims(); d > 0 && d != dims {
-				e.Close()
+				_ = e.Close()
 				return nil, fmt.Errorf("engine: open %s: %w: store is %d-dim but embedder is %d-dim (one -dir = one embedder)", dir, core.ErrInvalidInput, dims, d)
 			}
 			if err := e.openEmb(dims); err != nil {
-				e.Close()
+				_ = e.Close()
 				return nil, err
 			}
 		}
 	} else if d := embedder.Dims(); d > 0 {
 		if err := e.openEmb(d); err != nil {
-			e.Close()
+			_ = e.Close()
 			return nil, err
 		}
 	}
@@ -143,7 +143,7 @@ func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option
 	// embedding-store file handle is released on the refuse path.
 	if m := embedder.Model(); m != "" {
 		if stored, ok := meta.GetConfig("emb_model"); ok && stored != m {
-			e.Close()
+			_ = e.Close()
 			return nil, fmt.Errorf("engine: open %s: %w: store built with embedder %q, got %q (one -dir = one embedder)", dir, core.ErrInvalidInput, stored, m)
 		}
 	}
@@ -306,9 +306,21 @@ func (e *Engine) CreateScope(_ context.Context, parent core.ID, role core.Role, 
 
 // Push writes content + a summary into IOC. The summary is REQUIRED and is the
 // text that gets embedded; full content (if any) goes to CAS.
+// MaxArtifactContentBytes bounds a single artifact's cold content (PushRequest.Content)
+// to defend the input side against memory exhaustion. 64 MiB = the runtime data-frame
+// cap, so a daemon push is already bounded there; this also covers the embedded engine.
+const MaxArtifactContentBytes = 64 << 20 // 64 MiB
+
 func (e *Engine) Push(ctx context.Context, r core.PushRequest) (core.Artifact, error) {
 	if r.Summary == "" {
 		return core.Artifact{}, fmt.Errorf("engine: push: %w: empty summary", core.ErrInvalidInput)
+	}
+	// Bound input size: cap the cold content so a single push can't spike memory
+	// (plaintext + compressed) before storage. 64 MiB matches the runtime data-frame
+	// cap, and is far above real artifacts (ingest chunks are ≤512 KiB). The
+	// decompression side is separately capped in CAS.Load (V5).
+	if len(r.Content) > MaxArtifactContentBytes {
+		return core.Artifact{}, fmt.Errorf("engine: push: %w: content %d bytes exceeds the %d-byte limit", core.ErrInvalidInput, len(r.Content), MaxArtifactContentBytes)
 	}
 	if _, err := e.meta.GetScope(r.Scope); err != nil {
 		return core.Artifact{}, fmt.Errorf("engine: push: scope: %w", err)

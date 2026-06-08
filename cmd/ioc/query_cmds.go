@@ -38,7 +38,7 @@ func query(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 
 	qm, hier, coll := iocfmt.ParseModeSpec(*mode)
 	qid, hits, err := e.Query(context.Background(), core.Query{
@@ -85,7 +85,7 @@ func neighbors(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	hits, err := e.Neighbors(context.Background(), scopeID, *text, *topk)
 	if err != nil {
 		return err
@@ -103,7 +103,7 @@ func traces(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	trs, err := e.RecentTraces(*n)
 	if err != nil {
 		return err
@@ -133,7 +133,7 @@ func traceCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	tr, err := e.Trace(context.Background(), id)
 	if err != nil {
 		return err

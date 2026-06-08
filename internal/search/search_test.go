@@ -107,9 +107,10 @@ func TestBM25_RarerTermScoresHigher(t *testing.T) {
 	got := idx.Search("common rare", 4)
 	require.Equal(t, "d1", got[0].ID)
 
-	// IDF of the rare term must exceed IDF of the common one (positive, monotone in df).
-	idfRare := math.Log(1 + (4-1+0.5)/(1+0.5))
-	idfCommon := math.Log(1 + (4-4+0.5)/(4+0.5))
+	// IDF = log(1 + (N - df + 0.5)/(df + 0.5)), N = 4 docs; rare term has df=1, common df=4.
+	const nDocs = 4.0
+	idfRare := math.Log(1 + (nDocs-1+0.5)/(1+0.5))
+	idfCommon := math.Log(1 + (nDocs-4+0.5)/(4+0.5))
 	require.Greater(t, idfRare, idfCommon)
 	require.Greater(t, idfCommon, 0.0, "smoothed IDF stays positive even for an all-docs term")
 }

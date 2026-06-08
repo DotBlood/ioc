@@ -65,7 +65,7 @@ func OpenEmbeddingStore(path string, dims int, box *Box) (*EmbeddingStore, error
 	ok := false
 	defer func() {
 		if !ok {
-			file.Close()
+			_ = file.Close()
 		}
 	}()
 

@@ -36,7 +36,7 @@ func ingestCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	ctx := context.Background()
 
 	given, err := iocfmt.ParseScopeID(*scope)

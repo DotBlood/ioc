@@ -9,6 +9,7 @@ import (
 	"time"
 
 	bolt "go.etcd.io/bbolt"
+	bolterrors "go.etcd.io/bbolt/errors"
 
 	"github.com/DotBlood/ioc/internal/core"
 )
@@ -45,7 +46,7 @@ func OpenMeta(path string, box *Box) (*Meta, error) {
 	// also tighten an existing 0o644 db (best-effort; chmod is a no-op on Windows).
 	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: time.Second})
 	if err != nil {
-		if errors.Is(err, bolt.ErrTimeout) {
+		if errors.Is(err, bolterrors.ErrTimeout) {
 			return nil, fmt.Errorf("meta: data dir %q is busy — locked by another ioc/ioc-mcp process (close it or use a different -dir): %w", path, err)
 		}
 		return nil, fmt.Errorf("meta: open: %w", err)
@@ -60,7 +61,7 @@ func OpenMeta(path string, box *Box) (*Meta, error) {
 		return nil
 	})
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("meta: init buckets: %w", err)
 	}
 	return &Meta{db: db, box: box}, nil

@@ -55,7 +55,7 @@ func (c *CAS) StoreBytes(_ context.Context, data []byte) (core.ContentHash, erro
 		return core.ContentHash{}, fmt.Errorf("cas store: zstd writer: %w", err)
 	}
 	compressed := enc.EncodeAll(data, nil)
-	enc.Close()
+	_ = enc.Close() // EncodeAll already returned the bytes; Close only releases the encoder
 	// Encrypt after compress (V4/at-rest): the content hash is of the PLAINTEXT, so
 	// dedup/Has/naming are unchanged; bind the ciphertext to its address via AAD.
 	if c.box.Enabled() {
@@ -76,26 +76,35 @@ func (c *CAS) StoreBytes(_ context.Context, data []byte) (core.ContentHash, erro
 	tmpName := tmp.Name()
 	_ = tmp.Chmod(0o600) // owner-only blob (CreateTemp is already 0o600, but be explicit vs umask)
 	if _, err := tmp.Write(compressed); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 		return core.ContentHash{}, fmt.Errorf("cas store: write: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return core.ContentHash{}, fmt.Errorf("cas store: close: %w", err)
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		os.Remove(tmpName)
+		_ = os.Remove(tmpName)
 		return core.ContentHash{}, fmt.Errorf("cas store: rename: %w", err)
 	}
 	return h, nil
 }
 
-// Store reads all of r and stores it. Convenience over StoreBytes.
+// maxCASStoreBytes bounds a streaming Store so an unbounded reader can't exhaust
+// memory before StoreBytes (the engine caps PushRequest.Content separately, but a
+// direct Store(io.Reader) caller is bounded here too). Matches the Push cap (64 MiB).
+// Package var so tests can lower it.
+var maxCASStoreBytes int64 = 64 << 20
+
+// Store reads all of r (bounded by maxCASStoreBytes) and stores it. Convenience over StoreBytes.
 func (c *CAS) Store(ctx context.Context, r io.Reader) (core.ContentHash, error) {
-	data, err := io.ReadAll(r)
+	data, err := io.ReadAll(io.LimitReader(r, maxCASStoreBytes+1))
 	if err != nil {
 		return core.ContentHash{}, fmt.Errorf("cas store: read: %w", err)
+	}
+	if int64(len(data)) > maxCASStoreBytes {
+		return core.ContentHash{}, fmt.Errorf("cas store: input exceeds the %d-byte limit", maxCASStoreBytes)
 	}
 	return c.StoreBytes(ctx, data)
 }

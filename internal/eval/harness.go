@@ -58,7 +58,7 @@ func Run(ctx context.Context, e *engine.Engine, sc *Scenario, traceW io.Writer, 
 		}
 		if traceW != nil {
 			line, _ := json.Marshal(m)
-			fmt.Fprintln(traceW, string(line))
+			_, _ = fmt.Fprintln(traceW, string(line))
 		}
 	}
 
