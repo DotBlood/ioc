@@ -57,7 +57,7 @@ func seedCorpus(t *testing.T, n int) (*Engine, core.ID, []core.Hit) {
 func TestGraphBoost_LiftsConnectedCandidate(t *testing.T) {
 	ctx := context.Background()
 	e, scope, base := seedCorpus(t, 5)
-	top := base[0].Artifact      // highest cosine
+	top := base[0].Artifact           // highest cosine
 	low := base[len(base)-1].Artifact // lowest cosine
 	baseScores := scoresByID(base)
 

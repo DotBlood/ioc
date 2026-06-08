@@ -232,18 +232,18 @@ type Query struct {
 	Mode     QueryMode // vector (default) or hybrid
 	MinScore float64   // cosine gate: drop candidates with cosine < MinScore before rerank (0 = keep all)
 
-	Hierarchical bool           // coarse→fine: rank scope rollups, then search within top scopes
-	CoarseK      int            // # of scopes to keep in the coarse stage (default 6)
+	Hierarchical bool // coarse→fine: rank scope rollups, then search within top scopes
+	CoarseK      int  // # of scopes to keep in the coarse stage (default 6)
 	// Collapsed searches the visible set ∪ ALL descendant-scope artifacts in one flat
 	// pass (no coarse→fine routing) — it fixes flat retrieval's blindness to descendant
 	// scopes AND hierarchical's routing-drop (RAPTOR's "collapsed tree" beats top-down
 	// traversal; see the R1 collapsed-tree experiment in docs/WALL_EXPERIMENT.md). Mutually exclusive with Hierarchical
 	// (Hierarchical wins if both set). Only changes the candidate SET; the ranking
 	// pipeline (cosine/hybrid/graph-boost/rerank) and Hit.Score are unchanged.
-	Collapsed    bool
-	Kinds        []ArtifactKind // restrict results to these kinds (empty = all)
-	Rerank       bool           // cross-encoder rerank the top RerankN candidates (needs a reranker)
-	RerankN      int            // # of candidates to rerank (default 50)
+	Collapsed bool
+	Kinds     []ArtifactKind // restrict results to these kinds (empty = all)
+	Rerank    bool           // cross-encoder rerank the top RerankN candidates (needs a reranker)
+	RerankN   int            // # of candidates to rerank (default 50)
 	// AutoRerank, when true and a reranker is attached, reranks ONLY when the cosine
 	// result is borderline (top below the confidence floor, or the top-two cosine margin
 	// below the margin floor) — the dense near-duplicate / weak-top region where cosine

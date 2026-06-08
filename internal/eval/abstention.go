@@ -38,10 +38,10 @@ func (p Probe) toHits() []core.Hit {
 // into PRESENT (the answer is in the corpus) and ABSENT (it is not), under one Confidence
 // config. It is the number floors are tuned against.
 type AbstentionReport struct {
-	PresentN    int     `json:"present_n"`
-	AbsentN     int     `json:"absent_n"`
-	PresentWeak int     `json:"present_weak"` // present probes flagged weak_match
-	AbsentWeak  int     `json:"absent_weak"`  // absent probes flagged weak_match (the desired outcome)
+	PresentN    int `json:"present_n"`
+	AbsentN     int `json:"absent_n"`
+	PresentWeak int `json:"present_weak"` // present probes flagged weak_match
+	AbsentWeak  int `json:"absent_weak"`  // absent probes flagged weak_match (the desired outcome)
 	// FalseNegRate = present probes WRONGLY flagged weak / PresentN — real answers suppressed.
 	FalseNegRate float64 `json:"false_neg_rate"`
 	// FalsePosRate = absent probes NOT flagged weak / AbsentN — a fake "answered" when the

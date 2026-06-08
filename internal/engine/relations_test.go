@@ -83,8 +83,8 @@ func TestRelated_KindFilterAndDirection(t *testing.T) {
 	e := openEng(t)
 	s, _ := e.CreateScope(ctx, core.NilID, core.RoleWorktree, "root")
 	a := pushInsight(t, e, s.ID, "anchor")
-	b := pushInsight(t, e, s.ID, "dep")       // a depends_on b
-	c := pushInsight(t, e, s.ID, "related")   // a relates_to c
+	b := pushInsight(t, e, s.ID, "dep")     // a depends_on b
+	c := pushInsight(t, e, s.ID, "related") // a relates_to c
 	require.NoError(t, e.Relate(ctx, a.ID, b.ID, core.RelDependsOn))
 	require.NoError(t, e.Relate(ctx, a.ID, c.ID, core.RelRelatesTo))
 

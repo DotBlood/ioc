@@ -233,19 +233,19 @@ func (a *ioc) query(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolRe
 		mode = core.ModeHybrid
 	}
 	qid, hits, err := a.svc.Query(ctx, core.Query{
-		Scope:               id,
-		Text:                text,
-		Detail:              iocfmt.ParseDetail(r.GetString("detail", "overview")),
-		TopK:                r.GetInt("topk", 5),
-		Tier:                iocfmt.ParseTier(r.GetString("tier", "")),
-		Kinds:               iocfmt.ParseKinds(r.GetString("kind", "")),
-		MinScore:            r.GetFloat("min_score", 0),
-		Mode:                mode,
-		Hierarchical:        hier,
-		Collapsed:           coll,
-		CoarseK:             r.GetInt("coarsek", 0),
-		Rerank:              r.GetBool("rerank", false),
-		RerankN:             r.GetInt("rerank_n", 0),
+		Scope:        id,
+		Text:         text,
+		Detail:       iocfmt.ParseDetail(r.GetString("detail", "overview")),
+		TopK:         r.GetInt("topk", 5),
+		Tier:         iocfmt.ParseTier(r.GetString("tier", "")),
+		Kinds:        iocfmt.ParseKinds(r.GetString("kind", "")),
+		MinScore:     r.GetFloat("min_score", 0),
+		Mode:         mode,
+		Hierarchical: hier,
+		Collapsed:    coll,
+		CoarseK:      r.GetInt("coarsek", 0),
+		Rerank:       r.GetBool("rerank", false),
+		RerankN:      r.GetInt("rerank_n", 0),
 		// Borderline auto-rerank ON by default (R5): when the cosine result is weak or
 		// near-tied, the cross-encoder (if attached) re-ranks and gates abstention; pass
 		// auto_rerank=false for pure cosine. No-op without a reranker.
