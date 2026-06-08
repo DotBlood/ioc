@@ -17,7 +17,11 @@ func runtimeCmd(args []string) error {
 	}
 	sub, rest := args[0], args[1:]
 	fs := flag.NewFlagSet("runtime "+sub, flag.ExitOnError)
-	dir := fs.String("dir", defaultDataDir, "data directory")
+	// Default -dir from the resolved process config (env/file) so runtime control
+	// commands target the SAME store that `ioc serve` opens; otherwise a config
+	// `dir` would make `serve` listen on one dir while `runtime stop` aimed at
+	// the hardcoded default and reported "no daemon".
+	dir := fs.String("dir", firstNonEmpty(appConfig.Dir, defaultDataDir), "data directory")
 	_ = fs.Parse(rest)
 
 	switch sub {

@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -37,21 +38,21 @@ func serveCmd(args []string) error {
 			return terr
 		}
 		srv = runtime.NewServerTLS(e, *dir, cfg)
-		fmt.Fprintln(os.Stderr, "ioc runtime: mTLS ENABLED")
+		slog.Info("runtime mTLS enabled")
 	} else {
 		srv = runtime.NewServer(e, *dir)
 	}
 
 	go func() {
 		<-srv.Ready()
-		fmt.Fprintf(os.Stderr, "ioc runtime: listening on %s (dir=%s, embed=%q)\n", srv.Addr(), *dir, e.EmbModel())
+		slog.Info("runtime listening", "addr", srv.Addr(), "dir", *dir, "embed_model", e.EmbModel())
 	}()
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigc
-		fmt.Fprintln(os.Stderr, "ioc runtime: shutting down…")
+		slog.Info("runtime shutting down")
 		_ = srv.Stop()
 	}()
 

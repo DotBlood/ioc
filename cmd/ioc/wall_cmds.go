@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -33,16 +34,16 @@ func runWall(args []string) int {
 	}
 	spec, err := eval.LoadWallSpec(specPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		slog.Error("wall failed", "err", err)
 		return 1
 	}
 	if err := os.RemoveAll(*dir); err != nil {
-		fmt.Fprintln(os.Stderr, "error: reset dir:", err)
+		slog.Error("wall failed", "err", err)
 		return 1
 	}
 	e, err := openEngineEmbedded(*dir, *em, *rerank)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: open engine:", err)
+		slog.Error("wall failed", "err", err)
 		return 1
 	}
 	defer func() { _ = e.Close() }()
@@ -52,20 +53,20 @@ func runWall(args []string) int {
 		outDir = *dir
 	}
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		fmt.Fprintln(os.Stderr, "error: out dir:", err)
+		slog.Error("wall failed", "err", err)
 		return 1
 	}
 	packetsPath := filepath.Join(outDir, "packets.jsonl")
 	goldPath := filepath.Join(outDir, "gold.jsonl")
 	pf, err := os.Create(packetsPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: packets file:", err)
+		slog.Error("wall failed", "err", err)
 		return 1
 	}
 	defer func() { _ = pf.Close() }()
 	gf, err := os.Create(goldPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: gold file:", err)
+		slog.Error("wall failed", "err", err)
 		return 1
 	}
 	defer func() { _ = gf.Close() }()
@@ -73,7 +74,7 @@ func runWall(args []string) int {
 	qm, hier, coll := iocfmt.ParseModeSpec(*mode)
 	rep, err := eval.WallRun(context.Background(), e, spec, pf, gf, qm, hier, coll, *coarseK, *rerank, *graphBoost, *importanceWeight)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: wall run:", err)
+		slog.Error("wall failed", "err", err)
 		return 1
 	}
 	fmt.Printf("config: mode=%s coarsek=%d rerank=%v graph-boost=%g importance-weight=%g\n", *mode, *coarseK, *rerank, *graphBoost, *importanceWeight)

@@ -7,21 +7,34 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
+	"github.com/DotBlood/ioc/internal/config"
 	"github.com/DotBlood/ioc/internal/embed"
 	"github.com/DotBlood/ioc/internal/engine"
+	"github.com/DotBlood/ioc/internal/logging"
 	"github.com/DotBlood/ioc/internal/runtime"
 )
 
 const defaultDataDir = ".ioc/data"
 
+// appConfig holds the resolved process configuration. main() overwrites it at
+// startup after calling config.Load; the default ensures pre-flag code paths
+// see sensible values.
+var appConfig = config.Default()
+
+// firstNonEmpty returns a if non-empty, else b.
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
 // allowRemoteEmbed reports whether non-loopback embedder endpoints are permitted
-// (V2). Operator-set via IOC_ALLOW_REMOTE_EMBED; even then, plaintext-remote is
-// always refused (https required) by the embed package.
+// (V2). Config already resolved env+file; plaintext-remote is always refused
+// (https required) by the embed package.
 func allowRemoteEmbed() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("IOC_ALLOW_REMOTE_EMBED")))
-	return v == "1" || v == "true" || v == "yes"
+	return appConfig.AllowRemoteEmbed
 }
 
 func buildEmbedder(endpoint string) (embed.Embedder, error) {
@@ -78,10 +91,31 @@ func openService(dir, endpoint string, rerank bool) (runtime.Service, error) {
 	return runtime.Open(dir, emb, opts...)
 }
 
-// commonFlags registers -dir and -embed on a flag set.
+// commonFlags registers -dir, -embed, and the three side-effecting global flags
+// (-config, -log-level, -log-format) on a flag set.  It returns (dir, embed)
+// exactly as before so all call sites stay unchanged.
 func commonFlags(fs *flag.FlagSet) (*string, *string) {
-	dir := fs.String("dir", defaultDataDir, "persistent data directory")
-	em := fs.String("embed", "", "embedder endpoint (empty=mock; http://host:port or unix:/path)")
+	dir := fs.String("dir", firstNonEmpty(appConfig.Dir, defaultDataDir), "persistent data directory")
+	em := fs.String("embed", appConfig.Embed, "embedder endpoint (empty=mock; http://host:port or unix:/path)")
+
+	fs.Func("config", "path to ioc.json (reloads process config)", func(p string) error {
+		c, err := config.Load(p)
+		if err != nil {
+			return err
+		}
+		appConfig = c
+		logging.Init(c.LogLevel, c.LogFormat)
+		return nil
+	})
+	fs.Func("log-level", "debug|info|warn|error", func(s string) error {
+		logging.SetLevel(s)
+		return nil
+	})
+	fs.Func("log-format", "text|json", func(s string) error {
+		logging.SetFormat(s)
+		return nil
+	})
+
 	return dir, em
 }
 

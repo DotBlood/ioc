@@ -13,15 +13,17 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
-	"strings"
 	"sync"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/DotBlood/ioc/internal/config"
 	"github.com/DotBlood/ioc/internal/embed"
 	"github.com/DotBlood/ioc/internal/engine"
+	"github.com/DotBlood/ioc/internal/logging"
 	"github.com/DotBlood/ioc/internal/runtime"
 )
 
@@ -72,13 +74,24 @@ type ioc struct {
 	svc runtime.Service
 }
 
-func main() {
-	dir := envOr("IOC_DIR", ".ioc/mcp-data")
-	endpoint := os.Getenv("IOC_EMBED")
+// firstNonEmpty returns a if non-empty, else b.
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
 
-	// V2: allow a non-loopback embedder only when explicitly opted in; plaintext
-	// remote is always refused by the embed package.
-	allowRemote := envTrue("IOC_ALLOW_REMOTE_EMBED")
+func main() {
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "ioc-mcp: config:", err) // pre-logging failure stays plain stderr
+		os.Exit(2)
+	}
+	logging.Init(cfg.LogLevel, cfg.LogFormat)
+	dir := firstNonEmpty(cfg.Dir, ".ioc/mcp-data")
+	endpoint := cfg.Embed
+	allowRemote := cfg.AllowRemoteEmbed
 
 	var embedder embed.Embedder
 	if endpoint == "" {
@@ -86,7 +99,7 @@ func main() {
 	} else {
 		he, err := embed.NewHTTPEmbedder(endpoint, allowRemote)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "ioc-mcp:", err)
+			slog.Error("embedder init failed", "err", err)
 			os.Exit(1)
 		}
 		embedder = he
@@ -96,14 +109,14 @@ func main() {
 	if endpoint != "" {
 		rr, err := embed.NewHTTPReranker(endpoint, allowRemote)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "ioc-mcp:", err)
+			slog.Error("reranker init failed", "err", err)
 			os.Exit(1)
 		}
 		opts = append(opts, engine.WithReranker(rr))
 	}
 	svc, err := runtime.Open(dir, embedder, opts...)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "ioc-mcp: open store:", err)
+		slog.Error("open store failed", "err", err)
 		os.Exit(1)
 	}
 	defer func() { _ = svc.Close() }()
@@ -116,24 +129,9 @@ func main() {
 	app.register(s)
 
 	if err := server.ServeStdio(s); err != nil {
-		fmt.Fprintln(os.Stderr, "ioc-mcp:", err)
+		slog.Error("serve failed", "err", err)
 		os.Exit(1)
 	}
-}
-
-func envOr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
-}
-
-func envTrue(key string) bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
-	case "1", "true", "yes":
-		return true
-	}
-	return false
 }
 
 func (a *ioc) register(s *server.MCPServer) {

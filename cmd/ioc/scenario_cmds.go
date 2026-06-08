@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,16 +33,16 @@ func runScenario(args []string) int {
 	}
 	sc, err := eval.LoadScenario(scenarioPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		slog.Error("scenario failed", "err", err)
 		return 1
 	}
 	if err := os.RemoveAll(*dir); err != nil {
-		fmt.Fprintln(os.Stderr, "error: reset dir:", err)
+		slog.Error("scenario failed", "err", err)
 		return 1
 	}
 	e, err := openEngineEmbedded(*dir, *em, *rerank)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: open engine:", err)
+		slog.Error("scenario failed", "err", err)
 		return 1
 	}
 	defer func() { _ = e.Close() }()
@@ -49,7 +50,7 @@ func runScenario(args []string) int {
 	tracePath := filepath.Join(*dir, "trace.jsonl")
 	tf, err := os.Create(tracePath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: trace file:", err)
+		slog.Error("scenario failed", "err", err)
 		return 1
 	}
 	defer func() { _ = tf.Close() }()
@@ -57,7 +58,7 @@ func runScenario(args []string) int {
 	qm, hier, _ := iocfmt.ParseModeSpec(*mode) // scenario runner has no collapsed mode
 	rep, err := eval.Run(context.Background(), e, sc, tf, qm, hier, *coarseK, *rerank)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error: run:", err)
+		slog.Error("scenario failed", "err", err)
 		return 1
 	}
 	fmt.Println(rep.String())

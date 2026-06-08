@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -66,7 +67,7 @@ func calibrate(args []string) error {
 		ab.RankedBy, ab.PresentN, ab.PresentWeak, ab.AbsentN, ab.AbsentWeak, ab.FalsePosRate, ab.FalseNegRate)
 
 	if rep.Floor <= rep.MaxAbsentTop {
-		fmt.Fprintln(os.Stderr, "WARNING: floor does not separate absent probes — add more/stronger probes")
+		slog.Warn("calibration: floor does not separate absent probes — add more/stronger probes")
 	}
 
 	// Auto-apply: persist the derived floor straight into the LIVE store named by -apply

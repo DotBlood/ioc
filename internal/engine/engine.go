@@ -5,6 +5,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -110,7 +111,7 @@ func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option
 		return nil, err
 	}
 	if box.Enabled() {
-		fmt.Fprintln(os.Stderr, "ioc: at-rest encryption ENABLED (AES-256-GCM) — losing the key means losing the data; there is no recovery")
+		slog.Warn("at-rest encryption enabled (AES-256-GCM); losing the key means losing the data — there is no recovery")
 	}
 
 	// Refuse to open a store with an incompatible embedder. A store records its

@@ -11,10 +11,47 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
+	"strings"
+
+	"github.com/DotBlood/ioc/internal/config"
+	"github.com/DotBlood/ioc/internal/logging"
 )
 
+// configPath resolves the config-file path from the command line — a -config /
+// --config flag anywhere in args — falling back to config.DefaultPath()
+// (IOC_CONFIG env, then ./ioc.json). This pre-parse runs BEFORE per-command flag
+// parsing so the resolved config can seed the -dir/-embed flag defaults in
+// commonFlags. Without it, -config would take effect only during fs.Parse, after
+// those defaults are already baked, so an explicit -config's dir/embed would be
+// silently ignored.
+func configPath(args []string) string {
+	for i, a := range args {
+		if a == "-config" || a == "--config" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		}
+		if v, ok := strings.CutPrefix(a, "-config="); ok {
+			return v
+		}
+		if v, ok := strings.CutPrefix(a, "--config="); ok {
+			return v
+		}
+	}
+	return config.DefaultPath()
+}
+
 func main() {
+	cfg, cerr := config.Load(configPath(os.Args[1:]))
+	if cerr != nil {
+		fmt.Fprintln(os.Stderr, cerr) // Load already prefixes "config: …"
+		os.Exit(2)
+	}
+	appConfig = cfg
+	logging.Init(cfg.LogLevel, cfg.LogFormat)
+
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)
@@ -83,7 +120,7 @@ func main() {
 		os.Exit(2)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		slog.Error("command failed", "command", cmd, "err", err)
 		os.Exit(1)
 	}
 }
