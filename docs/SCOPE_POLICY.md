@@ -1,11 +1,15 @@
 # Scope policy — inducing tree structure (design / FRD)
 
-> **STATUS 2026-06-08 — DESIGN ONLY (Phase 3, design-doc-first).** No code yet. This FRD specifies a
-> **no-LLM, opt-in, advisory** mechanism that helps an agent keep memory tree-shaped. It changes NO
-> default behavior: retrieval, visibility, and the runtime are untouched until the agent explicitly
-> asks for advice and acts on it. Per the repo rule *ask before changing defaults*, anything here ships
-> additive/off-by-default; nothing auto-forks, auto-consolidates, or moves artifacts. Implementation
-> (P3.2) follows review of this doc.
+> **STATUS 2026-06-09 — IMPLEMENTED (P3.2) AS A STRUCTURAL ADVISORY; RECALL PAYOFF NOT CONFIRMED.**
+> The `no-LLM, opt-in, advisory` mechanism shipped (`engine.ScopeStats` / `ioc scope-advise`) and changes
+> NO default behavior. BUT the §8 payoff measurement (real bge) **falsified the recall premise** of §1:
+> acting on the advice does NOT reliably improve retrieval. The proven default mode (`collapsed`) is
+> partition-independent and already ties flat; `hierarchical`'s outcome is dominated by ROLLUP quality
+> (which needs an LLM IOC won't call), not by the clustering. An earlier "payoff confirmed 0.93" reading
+> was an artifact of a rollup that leaked member-summary text into the routing key (§8). So scope-advise
+> stands as a **structural/navigational detector** ("this scope holds K topics"), not a measured recall
+> win. The τ default stays `ConfidenceFloor` (the "recalibrate to 0.75" idea was dropped — it rested on
+> the artifact). Nothing auto-forks/consolidates/moves artifacts.
 
 ## 1. The problem (the "we only work in one scope" gap)
 
@@ -92,7 +96,8 @@ dispersion (thresholds in §7), with a one-line human explanation.
 ## 6. What this deliberately does NOT do (documented limits, not silent gaps)
 
 - No automatic fork/consolidate and no artifact re-homing — *mechanical re-structuring* is a separate,
-  riskier future step (P3.3), gated on this advisory proving useful.
+  riskier future step (P3.3). **It was gated on this advisory proving useful; the §8 payoff did NOT
+  confirm a recall benefit, so P3.3's rationale must be re-examined before it is built.**
 - No LLM-based topic labelling — clusters are unnamed index groups; naming a sub-scope is the agent's job.
 - No change to retrieval/visibility defaults.
 - No cross-scope (sibling/parent) advice in v1 — only "is THIS scope over-broad". The symmetric signals
@@ -101,16 +106,49 @@ dispersion (thresholds in §7), with a one-line human explanation.
 
 ## 7. Thresholds & defaults (tunable, opt-in)
 
-- **`τ` (cluster edge threshold)** — default to the embedder's calibrated **`core.ConfidenceFloor`**
-  (~0.68 for bge-small): two summaries above the floor are "about the same thing", which is exactly the
-  semantics we want for "same topic". Reusing the calibrated floor avoids a second calibration knob.
+- **`τ` (cluster edge threshold)** — defaults to the embedder's calibrated **`core.ConfidenceFloor`**
+  (~0.68 for bge-small), overridable via `scope.split.tau`. CAVEAT (§8, 2026-06-09): τ controls cluster
+  granularity but, because the recall payoff is unconfirmed, **no τ is recall-validated**. A dedicated
+  higher split-τ (~0.75) was tested and rejected — its apparent win was a rollup-leak artifact, not τ.
+  Treat τ as a granularity knob for the structural report, not a tuned retrieval parameter.
 - **`min_artifacts`** — default ~8; below this, dispersion/clusters are too noisy to advise on.
 - **`min_cluster_size`** — default ~2; singleton components are outliers, not a topic worth its own scope.
 - **Recommendation = "split"** when `ArtifactCount ≥ min_artifacts` AND `ClusterCount ≥ 2` AND at least
   two components have size `≥ min_cluster_size`. Otherwise "ok" (or "too-small" below the gate).
 - All defaults documented in the advisory output; the agent stays the decision-maker.
 
-## 8. Validation plan (measurement-first, per repo ethos)
+## 8. Validation — RESULTS (real bge-small, 2026-06-09; `internal/eval/payoff_test.go`)
+
+Falsifiable check, real embedder, same corpus (real wall + synthetic distractors, 118/328/628 artifacts —
+identical at all scales) in flat vs tree layouts; **gold-recall@5**. The decisive variable turned out to
+be the ROLLUP, so it was made a control (`IOC_PAYOFF_ROLLUP`), holding the PARTITION fixed:
+
+| rollup synthesis | mech-tree τ=0.75 (hier) | hand-tree (hier) | flat (vector) | any tree (collapsed) |
+|---|---|---|---|---|
+| `join` — concatenate ALL member summaries (LEAKS gold text into the rollup) | 0.93 | 0.89 | 0.85 | 0.85 |
+| `first` — one representative member summary (realistic short rollup) | 0.89 | 0.63 | 0.85 | 0.85 |
+| `label` — content-free placeholder | 0.41 | 0.70 | 0.85 | 0.85 |
+
+**Verdict: the recall payoff is NOT confirmed.** Reading the controls:
+
+1. **`collapsed` = flat = 0.85, always** — independent of the partition and τ. Splitting buys the *proven
+   default mode* **nothing** (it descends into all descendants regardless). Consistent with R6 in
+   `WALL_EXPERIMENT.md` ("coarse routing beats collapsed in no measured regime").
+2. **`hierarchical` is dominated by rollup quality** (0.41 → 0.93), not by the clustering. The initial
+   "0.93 payoff" used `join`, whose rollup literally contains the gold summary → the coarse stage routes
+   trivially. That is a harness leak, not a real signal. With a realistic one-summary rollup (`first`) the
+   mechanical tree gives 0.89 — only +0.04 over flat, fragile, and the hand-authored tree *drops* to 0.63.
+3. A good rollup is exactly what IOC **cannot** synthesize mechanically (`RollupScope` expects an
+   LLM-authored summary; the core never calls an LLM). So the lever that would make hierarchical win is
+   not available to the no-LLM signal.
+
+**Consequence for the feature:** scope-advise is kept as an honest **structural detector** (it does find
+topic clusters) with navigational value, but it must NOT claim a retrieval-recall improvement. The τ
+default stays `ConfidenceFloor`; a dedicated higher split-τ was considered and dropped (it only "won" via
+the rollup leak). Auto-restructuring (P3.3) is **no longer justified by a measured payoff** — revisit its
+rationale before building it.
+
+### Original validation plan (kept for reference)
 
 The doc is not done until P3.2 ships a falsifiable check, mirroring `WALL_EXPERIMENT.md`:
 
@@ -135,6 +173,8 @@ The doc is not done until P3.2 ships a falsifiable check, mirroring `WALL_EXPERI
 
 - **Dispersion metric** — mean pairwise cosine vs centroid variance; pick by a quick measurement on the
   §8 corpora.
-- **`τ` source** — reuse `ConfidenceFloor` (preferred) vs a dedicated `scope.split.tau` calibration.
+- ~~**`τ` source**~~ **RESOLVED (§8, 2026-06-09):** kept at `ConfidenceFloor`. A dedicated higher split-τ
+  was tested and dropped — it only "won" via a rollup-leak artifact, and no τ delivers a confirmed recall
+  payoff. τ is a granularity knob for the structural report, not a tuned retrieval parameter.
 - **Where advice surfaces** — `ioc scope-advise` only (v1), or also a soft hint inside `query` trace
   output when a viewpoint scope looks over-broad (kept off the default query path either way).

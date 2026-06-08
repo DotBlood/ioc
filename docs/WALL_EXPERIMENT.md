@@ -557,3 +557,35 @@ superseded by this entry.
 
 Reproduce: `ioc gen-wall -shape tree|flat -n 180 [-distractor-clusters C]`, then
 `ioc wall <spec> -embed http://127.0.0.1:8088 -mode vector|collapsed|collapsed-hybrid|hierarchical|hierarchical-vector`.
+
+## 2026-06-09 — R7: scope-advise payoff (mechanical split vs flat) — NOT CONFIRMED (rollup-leak confound)
+
+Does acting on the `scope-advise` signal (P3.2) — taking a flat multi-topic dump and splitting it into a
+sub-scope per *mechanical* cluster (`engine.ScopeStats`, connected components at cosine ≥ τ) — improve
+retrieval? Harness `internal/eval/payoff_test.go` (gated on `IOC_PAYOFF_EMBED`): same corpus (real wall +
+synthetic distractors, 118/328/628 artifacts, identical at all scales) in flat vs tree layouts, gold-
+recall@5, **rollup synthesis made a control** (`IOC_PAYOFF_ROLLUP`) with the partition held fixed.
+
+| rollup | mech-tree τ=0.75 (hier) | hand-tree (hier) | flat (vector) | any tree (collapsed) |
+|---|---|---|---|---|
+| `join` (concatenate ALL member summaries — leaks gold text into the rollup) | 0.93 | 0.89 | 0.85 | 0.85 |
+| `first` (one representative summary — realistic) | 0.89 | 0.63 | 0.85 | 0.85 |
+| `label` (content-free) | 0.41 | 0.70 | 0.85 | 0.85 |
+
+**Findings.** (1) `collapsed` = flat = **0.85 always**, independent of partition/τ — splitting buys the
+proven default mode nothing (it descends into all descendants regardless), reinforcing R6. (2)
+`hierarchical` swings 0.41→0.93 purely on ROLLUP quality, not the clustering: the eye-catching 0.93 was an
+artifact of `join`, whose rollup contains the gold summary verbatim so the coarse stage routes trivially.
+With a realistic one-summary rollup the mechanical tree is 0.89 (+0.04 over flat, fragile) and the hand
+tree collapses to 0.63. (3) A good rollup is what IOC can't build mechanically (`RollupScope` wants an
+LLM-authored summary; the core never calls an LLM), so the lever that would make hierarchical win is out
+of reach for a no-LLM signal.
+
+**Conclusion.** No measured recall payoff for scope-advise. It is kept as an honest **structural detector**
+(navigational value), the τ default stays `ConfidenceFloor` (a dedicated 0.75 split-τ was rejected — it
+only "won" via the leak), and the auto-restructuring follow-up (P3.3) loses its measured justification.
+Methodological lesson: when measuring hierarchical routing, the rollup is a first-class variable — never
+synthesize it from the very text the gold lives in. (Corrects an initial same-day "payoff confirmed 0.93"
+reading made before the rollup control was added.) See docs/SCOPE_POLICY.md §8.
+
+Reproduce: `IOC_PAYOFF_EMBED=http://127.0.0.1:8088 IOC_PAYOFF_DISTRACTORS=300 IOC_PAYOFF_ROLLUP=first|join|label go test ./internal/eval/ -run TestScopeAdvisePayoff -v -count=1 -timeout 900s`.

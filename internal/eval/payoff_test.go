@@ -97,15 +97,30 @@ func payoffRealTopic(as string) string {
 	}
 }
 
-// synthRollup builds a mechanical (no-LLM) rollup for a cluster: its member
-// summaries joined and truncated. Held CONSTANT across the mechanical and
-// hand-authored trees so the only variable is the PARTITION, not rollup quality.
-func synthRollup(summaries []string) string {
-	s := strings.Join(summaries, "; ")
-	if len(s) > 600 {
-		s = s[:600]
+// synthRollup builds a mechanical (no-LLM) rollup for a cluster. The MODE is a
+// control for the rollup-leak confound: "join" concatenates ALL member summaries
+// (so the rollup literally contains the gold summary text — inflates coarse
+// routing, NOT realistic); "first" uses one representative member summary (a
+// realistic short rollup); "label" uses a content-free placeholder (no routing
+// signal — pessimistic bound). Selected by IOC_PAYOFF_ROLLUP (default "first",
+// the honest one). Held constant across the mechanical and hand-authored trees so
+// the only variable is the PARTITION.
+func synthRollup(sess string, summaries []string) string {
+	switch os.Getenv("IOC_PAYOFF_ROLLUP") {
+	case "join":
+		s := strings.Join(summaries, "; ")
+		if len(s) > 600 {
+			s = s[:600]
+		}
+		return s
+	case "label":
+		return "topic cluster " + sess
+	default: // "first" — one representative summary, the realistic case
+		if len(summaries) > 0 {
+			return summaries[0]
+		}
+		return "topic cluster " + sess
 	}
-	return s
 }
 
 func retarget(qs []WallQuestion, scope string) []WallQuestion {
@@ -220,6 +235,21 @@ func TestScopeAdvisePayoff(t *testing.T) {
 			tau, st.ClusterCount, st.Dispersion, recMechHier, recMechColl)
 	}
 
+	// Log the DEFAULT-tau path (tau=0 → the shipped ConfidenceFloor default) for
+	// reference. NOTE: the hierarchical numbers here are dominated by rollup quality
+	// (IOC_PAYOFF_ROLLUP), not the partition — see the rollup-leak control below.
+	stDef, derr := cl.ScopeStats(ctx, scopes["all"], 0, 2)
+	require.NoError(t, derr)
+	defClusterOf := map[string]int{}
+	for ci, comp := range stDef.Clusters {
+		for _, id := range comp {
+			defClusterOf[idToName[id]] = ci
+		}
+	}
+	mechDef := buildTreeSpec(t, pushes, real.Questions, func(p Turn) string { return fmt.Sprintf("c%d", defClusterOf[p.As]) }, real.TopK)
+	recDefHier := runRecall(t, endpoint, mechDef, true, false, 6)
+	t.Logf("RESULT  DEFAULT-tau=%.2f clusters=%d  mech-tree(hier)=%.2f  (flat=%.2f, hand=%.2f)", stDef.Tau, stDef.ClusterCount, recDefHier, recFlat, recHand)
+
 	require.Greater(t, recFlat, -1.0) // harness produced numbers; verdict is read from the logs
 }
 
@@ -249,7 +279,7 @@ func buildTreeSpec(t *testing.T, pushes []Turn, questions []WallQuestion, assign
 	}
 	sort.Strings(order)
 	for _, sess := range order {
-		spec.Build = append(spec.Build, Turn{Op: "rollup", Scope: sess, Summary: synthRollup(members[sess])})
+		spec.Build = append(spec.Build, Turn{Op: "rollup", Scope: sess, Summary: synthRollup(sess, members[sess])})
 	}
 	spec.Questions = retarget(questions, "ws")
 	return spec
