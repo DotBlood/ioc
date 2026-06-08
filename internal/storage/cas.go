@@ -91,11 +91,20 @@ func (c *CAS) StoreBytes(_ context.Context, data []byte) (core.ContentHash, erro
 	return h, nil
 }
 
-// Store reads all of r and stores it. Convenience over StoreBytes.
+// maxCASStoreBytes bounds a streaming Store so an unbounded reader can't exhaust
+// memory before StoreBytes (the engine caps PushRequest.Content separately, but a
+// direct Store(io.Reader) caller is bounded here too). Matches the Push cap (64 MiB).
+// Package var so tests can lower it.
+var maxCASStoreBytes int64 = 64 << 20
+
+// Store reads all of r (bounded by maxCASStoreBytes) and stores it. Convenience over StoreBytes.
 func (c *CAS) Store(ctx context.Context, r io.Reader) (core.ContentHash, error) {
-	data, err := io.ReadAll(r)
+	data, err := io.ReadAll(io.LimitReader(r, maxCASStoreBytes+1))
 	if err != nil {
 		return core.ContentHash{}, fmt.Errorf("cas store: read: %w", err)
+	}
+	if int64(len(data)) > maxCASStoreBytes {
+		return core.ContentHash{}, fmt.Errorf("cas store: input exceeds the %d-byte limit", maxCASStoreBytes)
 	}
 	return c.StoreBytes(ctx, data)
 }

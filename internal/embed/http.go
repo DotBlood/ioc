@@ -65,10 +65,18 @@ type HTTPEmbedder struct {
 	dims       atomic.Int32
 }
 
+// noRedirect refuses HTTP redirects: the endpoint policy (validateEndpoint) vets the
+// CONFIGURED URL, but the default client would follow up to 10 redirects without
+// re-checking — letting a validated https endpoint redirect to http:// (downgrade) or
+// another host and exfiltrate all POSTed text. Returning ErrUseLastResponse hands the
+// 3xx back as-is, so the caller's `StatusCode != 200` check rejects it. No legitimate
+// embedder/reranker uses redirects.
+func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
 // dialClient builds an HTTP client + base URL for a TCP URL or Unix socket endpoint.
 func dialClient(endpoint string) (*http.Client, string) {
 	if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
-		return &http.Client{Timeout: 120 * time.Second}, strings.TrimRight(endpoint, "/")
+		return &http.Client{Timeout: 120 * time.Second, CheckRedirect: noRedirect}, strings.TrimRight(endpoint, "/")
 	}
 	sock := strings.TrimPrefix(endpoint, "unix:")
 	return &http.Client{
@@ -78,7 +86,8 @@ func dialClient(endpoint string) (*http.Client, string) {
 				return d.DialContext(ctx, "unix", sock)
 			},
 		},
-		Timeout: 120 * time.Second,
+		Timeout:       120 * time.Second,
+		CheckRedirect: noRedirect,
 	}, "http://unix"
 }
 

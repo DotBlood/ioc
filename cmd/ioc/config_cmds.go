@@ -5,9 +5,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/DotBlood/ioc/internal/ingest"
 )
+
+// configSetAllowed gates which config keys `config set` may write. Only operator-tunable
+// values are allowed; SAFETY-CRITICAL keys are intentionally NOT writable here — `enc`
+// (the at-rest encryption sentinel) and `emb_model`/`emb_dims` (which gate the
+// embedder-mismatch guard that prevents querying across incompatible vector spaces). Use
+// `config set-ingest-root` for ingest_root (it validates the directory).
+func configSetAllowed(key string) bool {
+	if key == "ingest_root" {
+		return true
+	}
+	return strings.HasPrefix(key, "conf.floor.") ||
+		strings.HasPrefix(key, "conf.margin.") ||
+		strings.HasPrefix(key, "conf.rerank.")
+}
 
 // configCmd manages persisted store config. Subcommands:
 //
@@ -46,6 +61,9 @@ func configSet(args []string) error {
 	_ = fs.Parse(args[2:])
 	if key == "" {
 		return fmt.Errorf("config set: empty key")
+	}
+	if !configSetAllowed(key) {
+		return fmt.Errorf("config set: key %q is not settable here (allowed: conf.floor.* / conf.margin.* / conf.rerank.* / ingest_root); safety-critical keys (enc, emb_model, emb_dims) are protected", key)
 	}
 	e, err := openService(*dir, *em, false)
 	if err != nil {

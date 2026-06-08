@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 )
 
@@ -91,6 +92,18 @@ func LoadKey() ([]byte, error) {
 		return decodeKey(v, EncryptionKeyEnv)
 	}
 	if path := strings.TrimSpace(os.Getenv(EncryptionKeyfileEnv)); path != "" {
+		// Refuse a group/world-readable keyfile: the at-rest key must be owner-only, or
+		// any local user can read it and decrypt the store. POSIX modes only (Windows
+		// uses NTFS ACLs — chmod is a no-op there, consistent with the rest of storage).
+		if runtime.GOOS != "windows" {
+			fi, err := os.Stat(path)
+			if err != nil {
+				return nil, fmt.Errorf("storage: stat %s: %w", EncryptionKeyfileEnv, err)
+			}
+			if fi.Mode().Perm()&0o077 != 0 {
+				return nil, fmt.Errorf("storage: %s %q is group/world-accessible (mode %#o) — `chmod 0600` it; the at-rest key must be owner-only", EncryptionKeyfileEnv, path, fi.Mode().Perm())
+			}
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("storage: read %s: %w", EncryptionKeyfileEnv, err)
