@@ -88,8 +88,11 @@ func calibrate(args []string) error {
 		return fmt.Errorf("calibrate: open apply store %q: %w", *apply, err)
 	}
 	defer le.Close()
-	if le.EmbModel() != rep.Model {
-		return fmt.Errorf("calibrate: apply store embedder %q != calibration embedder %q — the floor is per-model; use the same -embed", le.EmbModel(), rep.Model)
+	// Guard against applying a floor under the wrong model key — but only when the live
+	// store's model is actually known. A freshly opened HTTP embedder reports "" until its
+	// first call, so an empty model means "unknown", not "mismatch" (trust the same -embed).
+	if lm := le.EmbModel(); lm != "" && lm != rep.Model {
+		return fmt.Errorf("calibrate: apply store embedder %q != calibration embedder %q — the floor is per-model; use the same -embed", lm, rep.Model)
 	}
 	if err := le.SetConfig(key, val); err != nil {
 		return fmt.Errorf("calibrate: persist to apply store: %w", err)
