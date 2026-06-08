@@ -358,6 +358,11 @@ artifacts (28 real + 152 distractors), 27 questions, recall@topK:
 - **Hierarchical still wins on dense/distinctive (0.96 vs 0.85):** the coarse stage's noise-cutting earns
   its keep when many near-duplicate clusters compete — so hierarchical stays a useful **opt-in** for that
   regime, not removed.
+  > **⚠ SUPERSEDED (2026-06-08, see the R6 block below).** This was a CONFOUND. The `hierarchical` mode
+  > bundles a HYBRID (BM25+RRF) fine stage; the 0.96 came from BM25, not coarse routing —
+  > `hierarchical-vector` (routing + pure vector) scores 0.85, identical to flat/collapsed. And the hybrid
+  > gain itself is a *synthetic gen-wall* artifact (lexical overlap): on the real 28-artifact wall every
+  > mode ties at 0.93. Coarse/hierarchical routing wins in **no** measured regime.
 
 **Decision (gate passed).** Flip the **user-facing default** (`ioc query`, MCP `ioc_query`) to
 **collapsed** — it dominates the old flat default. `vector` (flat) and `hierarchical` remain explicit
@@ -516,3 +521,39 @@ present probes (FNR≈0.12 there); choose coverage by the FPR/FNR trade you want
 (b) the calibrated `conf.rerank.<model>` must be persisted (`ioc config set`) into the live store and the
 embed server restarted to pick up the logit fix — default `RerankFloor` is still 0.5 (catches the easy
 fakes, not the 0.84 hard one), so tight abstention needs the calibration step per deployment.
+
+## 2026-06-08 — R6: auto mode-selector investigated → NOT BUILT (premise was a confound)
+
+The ROADMAP "auto mode-selector (auto-pick hierarchical on dense/near-duplicate corpora)" rested on the
+R1 claim "hierarchical wins on dense/distinctive 0.96 vs collapsed 0.85". An experiment-first probe
+(real bge-small on :8088, 180 artifacts, topK=5) **refuted the premise**.
+
+Generated `gen-wall` corpora and measured recall@topK per mode:
+
+| corpus | `vector` | `collapsed` | `collapsed-hybrid` | `hierarchical` (coarse+hybrid) | `hierarchical-vector` (coarse+vector) |
+|---|---|---|---|---|---|
+| tree, 15 clusters | — | 0.85 | 0.96 | 0.74 | — |
+| tree, 40 clusters (denser) | — | 0.89 | 0.96 | 0.74 | — |
+| flat / distinctive | 0.85 | 0.85 | 0.96 | 0.96 | **0.85** |
+| **real 28-artifact wall** | 0.93 | 0.93 | 0.93 | — | — |
+
+**Two confounds, both fatal to the premise:**
+1. **`hierarchical` bundles a HYBRID fine stage.** `iocfmt.ParseModeSpec("hierarchical")` →
+   `(ModeHybrid, hierarchical=true)`. The 0.96 it scored on the flat corpus came from BM25+RRF, NOT the
+   coarse routing: `hierarchical-vector` (coarse routing + pure vector) scores **0.85** — identical to
+   flat/collapsed. Coarse routing adds nothing on flat, and on tree it **hurts** (0.74 < collapsed
+   0.85–0.89) by dropping the scope that holds the answer.
+2. **The hybrid gain is a synthetic-corpus artifact.** `collapsed-hybrid` scores 0.96 on every gen-wall
+   corpus but the gen-wall questions share surface tokens with the seed facts (BM25 loves that). On the
+   hand-authored 28-artifact wall (paraphrased questions, low lexical overlap) **all modes tie at 0.93** —
+   hybrid neither helps nor hurts.
+
+**Conclusion.** Coarse/hierarchical routing beats `collapsed` in **no** measured regime; `collapsed`
+(the current default, R1) dominates flat and hierarchical everywhere. There is no regime an
+"auto-pick-hierarchical" selector could improve, so it is **not built** (stopped before any code). The
+genuine recall lever at scale is the cross-encoder **rerank** (R5), not mode routing. The prior
+"hierarchical 0.96 wins on dense" record (R1 block above) is the hierarchical=hybrid confound and is
+superseded by this entry.
+
+Reproduce: `ioc gen-wall -shape tree|flat -n 180 [-distractor-clusters C]`, then
+`ioc wall <spec> -embed http://127.0.0.1:8088 -mode vector|collapsed|collapsed-hybrid|hierarchical|hierarchical-vector`.

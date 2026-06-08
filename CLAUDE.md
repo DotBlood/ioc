@@ -57,17 +57,20 @@ Retrieval modes (`-mode` / `Query.Mode`+`Hierarchical`+`Collapsed`+`CoarseK`):
   descend). Best at small scale / when answers are in the visible set.
 - `hybrid` — vector+BM25 via RRF; helps at scale, can hurt at small N.
 - `hierarchical` — coarse-rank scope rollups → **hybrid** fine within top `CoarseK` (~6) scopes;
-  needs `RollupScope` on sub-scopes. Coarse→fine **descends into the viewpoint's child scopes**, which
-  flat retrieval does not (see the shape rule below). **Still the best on dense/distinctive corpora**
-  (0.96) where the coarse stage cuts near-duplicate noise — a useful opt-in there. Pure-vector hierarchy
-  does NOT help; the fine stage must be hybrid.
+  needs `RollupScope` on sub-scopes. Coarse→fine descends into the viewpoint's child scopes — but so does
+  `collapsed`, without routing or rollups, and **collapsed dominates it** (0.85 vs 0.74 on tree).
+  **Coarse routing wins in NO measured regime (R6, 2026-06-08):** the earlier "best on dense/distinctive
+  0.96" was a confound — that 0.96 came from the **hybrid fine stage** (BM25), not the routing
+  (`hierarchical-vector` = coarse + pure vector = 0.85 = flat), and the hybrid gain is itself synthetic
+  (neutral on the real wall). Kept as an explicit mode; not recommended. See `docs/WALL_EXPERIMENT.md` R6.
 - **Pick the mode by corpus SHAPE (are the answer artifacts visible from the query viewpoint?), not by
   density alone** (measured 2026-06-06, real bge-small, 180 artifacts, topK=5 — see the dated block in
   `docs/WALL_EXPERIMENT.md`; corrects the earlier "hierarchical hurts distinctive" claim, which compared
   two *different* corpus shapes):
   - **Artifacts visible to the viewpoint** (own / ancestor / published-sibling — a "flat"-shaped corpus):
-    every mode works and **hierarchical is at least as good as flat+rerank** — recall flat vector 0.85,
-    flat+rerank 0.93, hierarchical **0.96**. Hierarchical does NOT hurt a distinctive corpus.
+    every mode works — recall flat vector 0.85, flat+rerank 0.93. (The earlier "hierarchical 0.96" here
+    was the hybrid-fine confound — R6, 2026-06-08; coarse routing alone scores 0.85, and the hybrid/BM25
+    gain is a synthetic-corpus artifact, neutral on the hand-authored 28-wall where all modes tie at 0.93.)
   - **Artifacts in descendant scopes** (the normal nested case: you query from a parent and the answers
     live in child sessions): **flat retrieval is structurally blind (recall 0.00)** because bottom-up
     visibility (`visibleArtifacts`) never shows a viewpoint its descendants — **hierarchical is mandatory**
