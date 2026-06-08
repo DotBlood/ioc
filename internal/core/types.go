@@ -114,6 +114,21 @@ type Scope struct {
 	RollupEmbRef  EmbeddingRef `json:"rollup_emb_ref,omitempty"`
 }
 
+// CompactStats reports the result of a store compaction (engine.Compact): how
+// many embedding records existed, how many were live (still referenced), how
+// many were reclaimed, the file-size delta, and how many artifact/scope records
+// had their embedding refs remapped.
+type CompactStats struct {
+	OldRecords     int   `json:"old_records"`
+	LiveRecords    int   `json:"live_records"`
+	Reclaimed      int   `json:"reclaimed_records"`
+	OldBytes       int64 `json:"old_bytes"`
+	NewBytes       int64 `json:"new_bytes"`
+	ReclaimedBytes int64 `json:"reclaimed_bytes"`
+	Artifacts      int   `json:"artifacts_rewritten"`
+	Scopes         int   `json:"scopes_rewritten"`
+}
+
 // Artifact is a leaf result/insight. Full content lives in CAS (cold); the
 // working layer holds only a mini-summary + an embedding OF THE SUMMARY.
 type Artifact struct {

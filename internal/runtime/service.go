@@ -42,5 +42,6 @@ type Service interface {
 	Config(key string) (string, bool)
 	SetConfig(key, val string) error
 	EmbModel() string
+	Compact(ctx context.Context) (core.CompactStats, error)
 	Close() error
 }

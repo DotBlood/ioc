@@ -218,6 +218,10 @@ func (s *EmbeddingStore) Len() int {
 // Dims returns the fixed vector dimension.
 func (s *EmbeddingStore) Dims() int { return s.dims }
 
+// Path returns the file path backing this store (used by compaction to locate
+// and replace the old file).
+func (s *EmbeddingStore) Path() string { return s.path }
+
 // Sync fsyncs records written since the last Sync (records already hit the file
 // on Put; this makes them durable to power loss). No whole-file rewrite.
 func (s *EmbeddingStore) Sync() error {

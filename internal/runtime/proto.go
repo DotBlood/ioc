@@ -52,6 +52,7 @@ const (
 	mConfig          = "config"
 	mSetConfig       = "set_config"
 	mEmbModel        = "emb_model"
+	mCompact         = "compact"
 
 	// mShutdown is a control op (not part of Service): it asks the daemon to
 	// stop gracefully. Handled specially, never reaches the engine.
@@ -92,11 +93,12 @@ func tierOf(method string) tier {
 
 // serverStats is the daemon's self-report (control op mStats).
 type serverStats struct {
-	ProtoVersion int    `json:"proto_version"`
-	Conns        int    `json:"conns"`
-	Requests     uint64 `json:"requests"`
-	StartedAt    string `json:"started_at"`
-	EmbedModel   string `json:"embed_model"`
+	ProtoVersion  int    `json:"proto_version"`
+	Conns         int    `json:"conns"`
+	Requests      uint64 `json:"requests"`
+	StartedAt     string `json:"started_at"`
+	EmbedModel    string `json:"embed_model"`
+	SchemaVersion int    `json:"schema_version"`
 }
 
 // writeMethods mutate the store; the daemon flushes embeddings (eng.Sync) after
@@ -105,7 +107,7 @@ var writeMethods = map[string]bool{
 	mCreateScope: true, mPush: true, mPublish: true, mFork: true,
 	mConsolidate: true, mCrossVersion: true, mRollupScope: true,
 	mDeleteArtifact: true, mDeleteScope: true, mSetConfig: true,
-	mSupersede: true, mRelate: true,
+	mSupersede: true, mRelate: true, mCompact: true,
 }
 
 // --- envelopes ---

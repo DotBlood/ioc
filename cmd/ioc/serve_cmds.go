@@ -8,6 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/DotBlood/ioc/internal/config"
+	"github.com/DotBlood/ioc/internal/logging"
 	"github.com/DotBlood/ioc/internal/runtime"
 )
 
@@ -55,6 +57,28 @@ func serveCmd(args []string) error {
 		slog.Info("runtime shutting down")
 		_ = srv.Stop()
 	}()
+
+	// SIGHUP (where the platform has it — see reload_*.go) re-reads ioc.json and
+	// re-applies the log level/format WITHOUT reopening the store, so an operator
+	// can change verbosity on a long-lived daemon. The store/embedder are NOT
+	// reloaded (a zero-downtime restart is out of scope; stop+start for those).
+	if reloadSigs := reloadSignals(); len(reloadSigs) > 0 {
+		hupc := make(chan os.Signal, 1)
+		signal.Notify(hupc, reloadSigs...)
+		// Process-lifetime goroutine: it is intentionally not torn down — the daemon
+		// exits right after srv.Serve() returns, taking this with it.
+		go func() {
+			for range hupc {
+				cfg, rerr := config.Load(config.DefaultPath())
+				if rerr != nil {
+					slog.Warn("reload: config load failed", "err", rerr)
+					continue
+				}
+				logging.Init(cfg.LogLevel, cfg.LogFormat)
+				slog.Info("reloaded config", "log_level", cfg.LogLevel, "log_format", cfg.LogFormat)
+			}
+		}()
+	}
 
 	return srv.Serve()
 }

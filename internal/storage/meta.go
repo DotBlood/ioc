@@ -86,13 +86,17 @@ func (m *Meta) decodeValue(key string, blob []byte) ([]byte, error) {
 // Close closes the database.
 func (m *Meta) Close() error { return m.db.Close() }
 
-// IsEmpty reports whether the store has no scopes, artifacts, or config keys — a
-// brand-new store. It inspects key COUNTS only (no value decryption), so it is
-// safe to call before the encryption box is validated.
+// IsEmpty reports whether the store has no scopes or artifacts — a brand-new
+// store before any user data has been written. The config bucket is excluded
+// because sentinels (encryption, schema version) are written there before any
+// user data exists; including it would cause a freshly-stamped store to appear
+// non-empty and break schema-version bootstrapping. It inspects key COUNTS only
+// (no value decryption), so it is safe to call before the encryption box is
+// validated.
 func (m *Meta) IsEmpty() bool {
 	empty := true
 	_ = m.db.View(func(tx *bolt.Tx) error {
-		for _, b := range [][]byte{bkScopes, bkArtifacts, bkConfig} {
+		for _, b := range [][]byte{bkScopes, bkArtifacts} {
 			if tx.Bucket(b).Stats().KeyN > 0 {
 				empty = false
 			}
@@ -116,6 +120,14 @@ func (m *Meta) PutConfig(key, val string) error {
 	}
 	return m.db.Update(func(tx *bolt.Tx) error {
 		return tx.Bucket(bkConfig).Put([]byte(key), data)
+	})
+}
+
+// DeleteConfig removes a config key. It is a no-op when the key is absent.
+// Primarily used in tests and migration helpers; normal writes use PutConfig.
+func (m *Meta) DeleteConfig(key string) error {
+	return m.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(bkConfig).Delete([]byte(key))
 	})
 }
 
@@ -379,6 +391,128 @@ func (m *Meta) DeleteEdgesFor(id core.ID) error {
 		}
 		return nil
 	})
+}
+
+// --- compaction ---
+
+// RemapEmbeddings atomically rewrites every artifact's EmbRef and every scope's
+// RollupEmbRef through remap, and applies configUpdates, in a SINGLE bbolt
+// transaction — the commit is the atomic switch point for engine.Compact (it
+// flips the emb_file pointer in the same txn). A non-zero ref absent from remap
+// aborts the transaction (the store is left untouched), guarding against a remap
+// built from a stale snapshot. Mutation is deferred until after each ForEach
+// (mutating a bucket mid-iteration is unsafe). Returns the count of artifact and
+// scope records actually rewritten (ref changed). Cost scales with the TOTAL
+// number of artifact + scope records (each is decoded to inspect its ref), not
+// just the orphan count — acceptable at slice scale, where compaction is rare.
+func (m *Meta) RemapEmbeddings(remap map[core.EmbeddingRef]core.EmbeddingRef, configUpdates map[string]string) (nArtifacts, nScopes int, err error) {
+	type kv struct{ k, v []byte }
+	err = m.db.Update(func(tx *bolt.Tx) error {
+		// Artifacts: remap EmbRef.
+		ab := tx.Bucket(bkArtifacts)
+		var writes []kv
+		if ferr := ab.ForEach(func(k, v []byte) error {
+			dec, derr := m.decodeValue(string(k), v)
+			if derr != nil {
+				return derr
+			}
+			var a core.Artifact
+			if derr := json.Unmarshal(dec, &a); derr != nil {
+				return derr
+			}
+			if a.EmbRef == 0 {
+				return nil
+			}
+			nr, ok := remap[a.EmbRef]
+			if !ok {
+				return fmt.Errorf("meta: remap: artifact %s ref %d not in remap", a.ID, a.EmbRef)
+			}
+			if nr == a.EmbRef {
+				return nil
+			}
+			a.EmbRef = nr
+			data, merr := json.Marshal(a)
+			if merr != nil {
+				return merr
+			}
+			enc, eerr := m.encodeValue(string(k), data)
+			if eerr != nil {
+				return eerr
+			}
+			writes = append(writes, kv{append([]byte(nil), k...), enc})
+			return nil
+		}); ferr != nil {
+			return ferr
+		}
+		for _, w := range writes {
+			if perr := ab.Put(w.k, w.v); perr != nil {
+				return perr
+			}
+		}
+		nArtifacts = len(writes)
+
+		// Scopes: remap RollupEmbRef.
+		sb := tx.Bucket(bkScopes)
+		writes = writes[:0]
+		if ferr := sb.ForEach(func(k, v []byte) error {
+			dec, derr := m.decodeValue(string(k), v)
+			if derr != nil {
+				return derr
+			}
+			var s core.Scope
+			if derr := json.Unmarshal(dec, &s); derr != nil {
+				return derr
+			}
+			if s.RollupEmbRef == 0 {
+				return nil
+			}
+			nr, ok := remap[s.RollupEmbRef]
+			if !ok {
+				return fmt.Errorf("meta: remap: scope %s rollup ref %d not in remap", s.ID, s.RollupEmbRef)
+			}
+			if nr == s.RollupEmbRef {
+				return nil
+			}
+			s.RollupEmbRef = nr
+			data, merr := json.Marshal(s)
+			if merr != nil {
+				return merr
+			}
+			enc, eerr := m.encodeValue(string(k), data)
+			if eerr != nil {
+				return eerr
+			}
+			writes = append(writes, kv{append([]byte(nil), k...), enc})
+			return nil
+		}); ferr != nil {
+			return ferr
+		}
+		for _, w := range writes {
+			if perr := sb.Put(w.k, w.v); perr != nil {
+				return perr
+			}
+		}
+		nScopes = len(writes)
+
+		// Config: flip emb_file / emb_gen (and any other supplied keys) in the
+		// same txn so the pointer and the refs commit together.
+		cb := tx.Bucket(bkConfig)
+		for ck, cv := range configUpdates {
+			data := []byte(cv)
+			if !plaintextConfigKeys[ck] {
+				enc, eerr := m.encodeValue(ck, data)
+				if eerr != nil {
+					return eerr
+				}
+				data = enc
+			}
+			if perr := cb.Put([]byte(ck), data); perr != nil {
+				return perr
+			}
+		}
+		return nil
+	})
+	return nArtifacts, nScopes, err
 }
 
 // --- helpers ---

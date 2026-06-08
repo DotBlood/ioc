@@ -69,6 +69,8 @@ func main() {
 		err = genScenario(args)
 	case "gen-wall":
 		err = genWall(args)
+	case "compact":
+		err = compactCmd(args)
 	case "ingest":
 		err = ingestCmd(args)
 	case "config":
@@ -146,7 +148,8 @@ commands:
   config set <key> <value> | get <key>           persist/read a store config key (e.g. conf.rerank.<model> from calibrate)
   calibrate -probe spec.json [-rerank] [-coverage C] [-apply <live-dir>]  derive a per-embedder confidence floor (cosine or rerank); print abstention FPR/FNR; auto-apply into a live store with -apply
   serve [-dir d] [-embed e]                      run the runtime daemon (single owner of -dir; clients connect via runtime.json)
-  runtime status|stop|rotate|mint-read-token [-dir d]   inspect/stop daemon; rotate token(s); mint a read-only token
+  compact [-dir d] [-embed e]                    reclaim orphaned embeddings (rewrites the embedding file; routes through a running daemon)
+  runtime status|stop|rotate|mint-read-token|health [-dir d]   inspect/stop daemon; rotate token(s); mint a read-only token; health check
   query -scope ID -text T [-detail overview|entry|raw] [-topk N] [-tier t] [-kind k] [-mode m] [-rerank] [-rerank-n N] [-no-auto-rerank] [-graph-boost W] [-include-superseded]
   neighbors -scope ID -text T [-topk N]          similar CURRENT memory (run before push to find supersede candidates)
   drill -artifact ID [-detail raw]

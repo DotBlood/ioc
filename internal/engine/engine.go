@@ -114,6 +114,14 @@ func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option
 		slog.Warn("at-rest encryption enabled (AES-256-GCM); losing the key means losing the data — there is no recovery")
 	}
 
+	// Schema version gate: stamp on first open, migrate forward, or refuse if
+	// the store was written by a newer build. Runs after the encryption sentinel
+	// so GetConfig can decrypt the version value on encrypted stores.
+	if err := e.checkSchemaVersion(); err != nil {
+		_ = e.Close()
+		return nil, err
+	}
+
 	// Refuse to open a store with an incompatible embedder. A store records its
 	// embedding dimension (emb_dims) and, once written, its embedder model
 	// (emb_model). Mixing embedders silently compares vectors across different
@@ -212,12 +220,20 @@ func (e *Engine) Close() error {
 }
 
 func (e *Engine) openEmb(dims int) error {
-	es, err := storage.OpenEmbeddingStore(filepath.Join(e.dir, "emb.dat"), dims, e.box)
+	name := e.currentEmbFile()
+	es, err := storage.OpenEmbeddingStore(filepath.Join(e.dir, name), dims, e.box)
 	if err != nil {
 		return err
 	}
 	e.emb = es
-	return e.meta.PutConfig("emb_dims", strconv.Itoa(dims))
+	if err := e.meta.PutConfig("emb_dims", strconv.Itoa(dims)); err != nil {
+		return err
+	}
+	// Sweep any embedding files a previous (or crashed) compaction left behind;
+	// only the configured live file is kept. Best-effort, safe under the single-
+	// owner bbolt lock.
+	e.gcOrphanEmbFiles(name)
+	return nil
 }
 
 func (e *Engine) ensureEmb(dims int) error {

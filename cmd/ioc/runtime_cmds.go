@@ -9,11 +9,11 @@ import (
 	"github.com/DotBlood/ioc/internal/runtime"
 )
 
-// runtimeCmd manages the runtime daemon: `ioc runtime status` and
-// `ioc runtime stop`. The daemon itself is started with `ioc serve`.
+// runtimeCmd manages the runtime daemon: `ioc runtime status`, `ioc runtime stop`,
+// `ioc runtime health`, etc. The daemon itself is started with `ioc serve`.
 func runtimeCmd(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("runtime: need a subcommand: status|stop|rotate|mint-read-token")
+		return fmt.Errorf("runtime: need a subcommand: status|stop|rotate|mint-read-token|health")
 	}
 	sub, rest := args[0], args[1:]
 	fs := flag.NewFlagSet("runtime "+sub, flag.ExitOnError)
@@ -33,8 +33,10 @@ func runtimeCmd(args []string) error {
 		return runtimeRotate(*dir)
 	case "mint-read-token":
 		return runtimeMintReadToken(*dir)
+	case "health":
+		return runtimeHealth(*dir)
 	default:
-		return fmt.Errorf("runtime: unknown subcommand %q (use status|stop|rotate|mint-read-token)", sub)
+		return fmt.Errorf("runtime: unknown subcommand %q (use status|stop|rotate|mint-read-token|health)", sub)
 	}
 }
 
@@ -106,6 +108,23 @@ func runtimeStatus(dir string) error {
 		}
 	}
 	return printJSON(out)
+}
+
+// runtimeHealth connects to the running daemon and prints its live stats
+// (including schema_version) as JSON. It fails if no daemon is reachable —
+// use `ioc runtime status` for a softer probe that reports running=false
+// instead of an error when no daemon is present.
+func runtimeHealth(dir string) error {
+	c, err := runtime.Dial(dir)
+	if err != nil {
+		return fmt.Errorf("runtime health: no daemon at %s: %w", dir, err)
+	}
+	defer func() { _ = c.Close() }()
+	st, err := c.Stats()
+	if err != nil {
+		return err
+	}
+	return printJSON(st)
 }
 
 func runtimeStop(dir string) error {

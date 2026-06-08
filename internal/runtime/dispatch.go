@@ -61,6 +61,7 @@ func (s *Server) handle(ctx context.Context, req request) (resp response, fullAu
 		raw, _ := marshalRaw(serverStats{
 			ProtoVersion: ProtoVersion, Conns: s.connCount(), Requests: s.reqCount.Load(),
 			StartedAt: s.startedAt, EmbedModel: s.eng.EmbModel(),
+			SchemaVersion: s.eng.SchemaVersion(),
 		})
 		return response{ID: req.ID, Result: raw}, fullAuthed
 	case mRotateToken:
@@ -354,6 +355,12 @@ func (s *Server) call(ctx context.Context, method string, params json.RawMessage
 		return nil, s.eng.SetConfig(p.Key, p.Val)
 	case mEmbModel:
 		return marshalRaw(embModelResult{Model: s.eng.EmbModel()})
+	case mCompact:
+		st, err := s.eng.Compact(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return marshalRaw(st)
 	default:
 		return nil, fmt.Errorf("%w: unknown method %q", core.ErrInvalidInput, method)
 	}

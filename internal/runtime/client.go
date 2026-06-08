@@ -305,3 +305,9 @@ func (c *Client) EmbModel() string {
 	_ = c.call(mEmbModel, nil, &res)
 	return res.Model
 }
+
+func (c *Client) Compact(_ context.Context) (core.CompactStats, error) {
+	var st core.CompactStats
+	err := c.call(mCompact, nil, &st)
+	return st, err
+}

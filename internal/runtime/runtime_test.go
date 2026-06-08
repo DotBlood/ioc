@@ -420,6 +420,66 @@ func TestOpenLiveDaemonHandshakeFailureSurfaces(t *testing.T) {
 	}
 }
 
+// TestRuntimeCompact verifies the compact round-trip through the client: push an
+// artifact (which creates an embedding record), delete it, then call Compact via
+// the client — CompactStats.Reclaimed must be >= 1 (the orphaned embedding is
+// gone). This exercises the full write-lock path in invoke (mCompact ∈ writeMethods).
+func TestRuntimeCompact(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	srv := startDaemon(t, dir)
+	defer srv.Stop()
+
+	cli, err := Dial(dir)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer cli.Close()
+
+	root, err := cli.CreateScope(ctx, core.NilID, core.RoleWorktree, "root")
+	if err != nil {
+		t.Fatalf("create scope: %v", err)
+	}
+	art, err := cli.Push(ctx, core.PushRequest{Scope: root.ID, Summary: "compact probe artifact"})
+	if err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	if err := cli.DeleteArtifact(ctx, art.ID); err != nil {
+		t.Fatalf("delete artifact: %v", err)
+	}
+
+	st, err := cli.Compact(ctx)
+	if err != nil {
+		t.Fatalf("compact: %v", err)
+	}
+	if st.Reclaimed < 1 {
+		t.Fatalf("expected Reclaimed >= 1 after deleting embedded artifact, got %+v", st)
+	}
+}
+
+// TestRuntimeStatsSchemaVersion checks that Stats() carries SchemaVersion ==
+// engine.CurrentSchemaVersion, so health consumers can assert the store is at
+// the expected schema without a separate RPC.
+func TestRuntimeStatsSchemaVersion(t *testing.T) {
+	dir := t.TempDir()
+	srv := startDaemon(t, dir)
+	defer srv.Stop()
+
+	cli, err := Dial(dir)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer cli.Close()
+
+	st, err := cli.Stats()
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if st.SchemaVersion != engine.CurrentSchemaVersion {
+		t.Fatalf("stats.SchemaVersion = %d, want %d", st.SchemaVersion, engine.CurrentSchemaVersion)
+	}
+}
+
 // TestOpenWrongTokenStillReturnsClient: a reachable daemon with a stale/wrong token
 // in runtime.json must yield a CLIENT (connect succeeded); the bad token surfaces as
 // an auth error on the first call — NOT a silent embedded fallback (store-lock error).
