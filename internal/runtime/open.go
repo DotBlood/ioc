@@ -54,6 +54,6 @@ func Shutdown(dir string) error {
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	return c.Shutdown()
 }

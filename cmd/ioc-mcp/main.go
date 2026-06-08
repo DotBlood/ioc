@@ -106,7 +106,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "ioc-mcp: open store:", err)
 		os.Exit(1)
 	}
-	defer svc.Close()
+	defer func() { _ = svc.Close() }()
 	app := &ioc{svc: svc}
 
 	s := server.NewMCPServer("ioc", "0.1.0",

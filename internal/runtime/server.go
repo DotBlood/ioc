@@ -166,7 +166,7 @@ func (s *Server) Serve() error {
 
 	full, err := newToken()
 	if err != nil {
-		ln.Close()
+		_ = ln.Close()
 		return err
 	}
 	s.tokens.Store(&tokenSet{full: full}) // read token is opt-in (mint_read_token)
@@ -183,7 +183,7 @@ func (s *Server) Serve() error {
 	}
 	s.info.Store(&base)
 	if err := writeRuntimeInfo(s.dir, base); err != nil {
-		ln.Close()
+		_ = ln.Close()
 		return fmt.Errorf("runtime: write runtime.json: %w", err)
 	}
 	close(s.ready)
@@ -206,7 +206,7 @@ func (s *Server) Serve() error {
 			// begun wg.Wait). Don't Add — a wg.Add concurrent with wg.Wait is a
 			// data race / WaitGroup misuse. Drop this late connection.
 			s.connsMu.Unlock()
-			conn.Close()
+			_ = conn.Close()
 			continue
 		}
 		// Max-conns (V6): bound concurrent connections so half-open/idle sockets
@@ -214,7 +214,7 @@ func (s *Server) Serve() error {
 		// gates closing, so it composes with the shutdown race fix.
 		if len(s.conns) >= maxConns {
 			s.connsMu.Unlock()
-			conn.Close()
+			_ = conn.Close()
 			continue
 		}
 		s.conns[conn] = struct{}{}
@@ -230,7 +230,7 @@ func (s *Server) serveConn(conn net.Conn) {
 		s.connsMu.Lock()
 		delete(s.conns, conn)
 		s.connsMu.Unlock()
-		conn.Close()
+		_ = conn.Close()
 	}()
 	// An unauthenticated connection may send only a control-size frame; only once a
 	// request authenticates with the FULL (owner) token does it earn data-size
@@ -284,10 +284,10 @@ func (s *Server) Stop() error {
 		s.connsMu.Lock()
 		s.closing = true
 		if s.ln != nil {
-			s.ln.Close()
+			_ = s.ln.Close()
 		}
 		for c := range s.conns {
-			c.Close()
+			_ = c.Close()
 		}
 		s.connsMu.Unlock()
 

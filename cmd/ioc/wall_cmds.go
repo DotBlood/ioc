@@ -45,7 +45,7 @@ func runWall(args []string) int {
 		fmt.Fprintln(os.Stderr, "error: open engine:", err)
 		return 1
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 
 	outDir := *out
 	if outDir == "" {
@@ -62,13 +62,13 @@ func runWall(args []string) int {
 		fmt.Fprintln(os.Stderr, "error: packets file:", err)
 		return 1
 	}
-	defer pf.Close()
+	defer func() { _ = pf.Close() }()
 	gf, err := os.Create(goldPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error: gold file:", err)
 		return 1
 	}
-	defer gf.Close()
+	defer func() { _ = gf.Close() }()
 
 	qm, hier, coll := iocfmt.ParseModeSpec(*mode)
 	rep, err := eval.WallRun(context.Background(), e, spec, pf, gf, qm, hier, coll, *coarseK, *rerank, *graphBoost, *importanceWeight)

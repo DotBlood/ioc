@@ -1,0 +1,14 @@
+version: "2"
+
+# golangci-lint is the ADVISORY layer; the hard CI gates are gofmt + `go vet` + `go test`.
+# The standard linter set runs (staticcheck, govet, ineffassign, unused, errcheck, …). The
+# only exclusion is errcheck inside *_test.go: test teardown (deferred Close/Stop/Unsetenv)
+# whose errors are not actionable and would only add noise. Production-code errors ARE
+# checked or consciously discarded with `_ =` at the call site — errcheck stays ON there.
+linters:
+  default: standard
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck

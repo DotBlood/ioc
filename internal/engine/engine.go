@@ -106,7 +106,7 @@ func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option
 	// Encryption sentinel matrix (fail-closed, no silent mixing). The "enc" config
 	// value is always plaintext so it is readable without the key.
 	if err := e.checkEncryptionSentinel(); err != nil {
-		e.Close()
+		_ = e.Close()
 		return nil, err
 	}
 	if box.Enabled() {
@@ -123,17 +123,17 @@ func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option
 		dims, convErr := strconv.Atoi(v)
 		if convErr == nil {
 			if d := embedder.Dims(); d > 0 && d != dims {
-				e.Close()
+				_ = e.Close()
 				return nil, fmt.Errorf("engine: open %s: %w: store is %d-dim but embedder is %d-dim (one -dir = one embedder)", dir, core.ErrInvalidInput, dims, d)
 			}
 			if err := e.openEmb(dims); err != nil {
-				e.Close()
+				_ = e.Close()
 				return nil, err
 			}
 		}
 	} else if d := embedder.Dims(); d > 0 {
 		if err := e.openEmb(d); err != nil {
-			e.Close()
+			_ = e.Close()
 			return nil, err
 		}
 	}
@@ -143,7 +143,7 @@ func Open(_ context.Context, dir string, embedder embed.Embedder, opts ...Option
 	// embedding-store file handle is released on the refuse path.
 	if m := embedder.Model(); m != "" {
 		if stored, ok := meta.GetConfig("emb_model"); ok && stored != m {
-			e.Close()
+			_ = e.Close()
 			return nil, fmt.Errorf("engine: open %s: %w: store built with embedder %q, got %q (one -dir = one embedder)", dir, core.ErrInvalidInput, stored, m)
 		}
 	}

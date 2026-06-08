@@ -112,7 +112,7 @@ func push(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 
 	a, err := e.Push(context.Background(), core.PushRequest{
 		Scope:      scopeID,
@@ -148,7 +148,7 @@ func supersede(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	if err := e.Supersede(context.Background(), oldID, newID); err != nil {
 		return err
 	}
@@ -175,7 +175,7 @@ func relate(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	if err := e.Relate(context.Background(), fromID, toID, core.RelationKind(*kind)); err != nil {
 		return err
 	}
@@ -199,7 +199,7 @@ func related(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	hits, err := e.Related(context.Background(), id, parseKindList(*kinds), parseEdgeDir(*dirFlag), *depth)
 	if err != nil {
 		return err
@@ -223,7 +223,7 @@ func history(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 
 	arts, err := e.ListArtifacts(context.Background())
 	if err != nil {
@@ -290,7 +290,7 @@ func drill(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 
 	h, err := e.Drill(context.Background(), id, iocfmt.ParseDetail(*detail))
 	if err != nil {
@@ -312,7 +312,7 @@ func publish(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	if err := e.Publish(context.Background(), id); err != nil {
 		return err
 	}

@@ -44,7 +44,7 @@ func runScenario(args []string) int {
 		fmt.Fprintln(os.Stderr, "error: open engine:", err)
 		return 1
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 
 	tracePath := filepath.Join(*dir, "trace.jsonl")
 	tf, err := os.Create(tracePath)
@@ -52,7 +52,7 @@ func runScenario(args []string) int {
 		fmt.Fprintln(os.Stderr, "error: trace file:", err)
 		return 1
 	}
-	defer tf.Close()
+	defer func() { _ = tf.Close() }()
 
 	qm, hier, _ := iocfmt.ParseModeSpec(*mode) // scenario runner has no collapsed mode
 	rep, err := eval.Run(context.Background(), e, sc, tf, qm, hier, *coarseK, *rerank)

@@ -24,7 +24,7 @@ func createScope(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	s, err := e.CreateScope(context.Background(), parentID, iocfmt.ParseRole(*role), *title)
 	if err != nil {
 		return err
@@ -46,7 +46,7 @@ func fork(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	s, err := e.Fork(context.Background(), scopeID, *title)
 	if err != nil {
 		return err
@@ -73,7 +73,7 @@ func consolidate(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	a, err := e.Consolidate(context.Background(), scopeID, *summary, sup)
 	if err != nil {
 		return err
@@ -96,7 +96,7 @@ func crossversion(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	s, err := e.CrossVersion(context.Background(), scopeID, core.Seed{Constraints: *constraints, Lessons: *lessons})
 	if err != nil {
 		return err
@@ -118,7 +118,7 @@ func rollupCmd(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	if err := e.RollupScope(context.Background(), scopeID, *summary); err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func siblings(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	hits, err := e.SiblingOverview(context.Background(), scopeID)
 	if err != nil {
 		return err
@@ -159,7 +159,7 @@ func ancestors(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	scs, err := e.Ancestors(context.Background(), scopeID)
 	if err != nil {
 		return err

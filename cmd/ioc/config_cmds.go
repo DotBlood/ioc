@@ -51,7 +51,7 @@ func configSet(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	if err := e.SetConfig(key, val); err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func configGet(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	v, ok := e.Config(key)
 	return printJSON(map[string]any{"key": key, "value": v, "found": ok})
 }
@@ -99,7 +99,7 @@ func setIngestRoot(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 	if err := e.SetConfig("ingest_root", abs); err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func getIngestRoot(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer e.Close()
+	defer func() { _ = e.Close() }()
 
 	root := ingest.ResolveIngestRoot(e) // runtime.Service has Config(key)(string,bool)
 	source := "cwd"

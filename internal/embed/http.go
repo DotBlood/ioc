@@ -131,7 +131,7 @@ func (e *HTTPEmbedder) Health(ctx context.Context) (model string, dims int, err 
 	if err != nil {
 		return "", 0, fmt.Errorf("http embedder: health: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", 0, fmt.Errorf("http embedder: health: server returned %d", resp.StatusCode)
 	}
@@ -167,7 +167,7 @@ func (e *HTTPEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, 
 	if err != nil {
 		return nil, fmt.Errorf("http embedder: do: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("http embedder: server returned %d", resp.StatusCode)
 	}
