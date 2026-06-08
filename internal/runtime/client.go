@@ -311,3 +311,9 @@ func (c *Client) Compact(_ context.Context) (core.CompactStats, error) {
 	err := c.call(mCompact, nil, &st)
 	return st, err
 }
+
+func (c *Client) ScopeStats(_ context.Context, scope core.ID, tau float64, minArtifacts int) (core.ScopeStats, error) {
+	var st core.ScopeStats
+	err := c.call(mScopeStats, scopeStatsParams{Scope: scope, Tau: tau, MinArtifacts: minArtifacts}, &st)
+	return st, err
+}

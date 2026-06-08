@@ -111,6 +111,8 @@ func main() {
 		err = query(args)
 	case "calibrate":
 		err = calibrate(args)
+	case "scope-advise":
+		err = scopeAdvise(args)
 	case "neighbors":
 		err = neighbors(args)
 	case "traces":
@@ -151,6 +153,7 @@ commands:
   compact [-dir d] [-embed e]                    reclaim orphaned embeddings (rewrites the embedding file; routes through a running daemon)
   runtime status|stop|rotate|mint-read-token|health [-dir d]   inspect/stop daemon; rotate token(s); mint a read-only token; health check
   query -scope ID -text T [-detail overview|entry|raw] [-topk N] [-tier t] [-kind k] [-mode m] [-rerank] [-rerank-n N] [-no-auto-rerank] [-graph-boost W] [-include-superseded]
+  scope-advise -scope ID [-tau f] [-min-artifacts n]   advise whether a scope holds multiple topics (no-LLM, opt-in; suggests fork/consolidate)
   neighbors -scope ID -text T [-topk N]          similar CURRENT memory (run before push to find supersede candidates)
   drill -artifact ID [-detail raw]
   publish -artifact ID

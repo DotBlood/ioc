@@ -510,3 +510,41 @@ func TestOpenWrongTokenStillReturnsClient(t *testing.T) {
 		t.Fatal("expected an auth error from the wrong token, got nil")
 	}
 }
+
+// TestRuntimeScopeStats verifies the ScopeStats read-tier op round-trips through
+// the daemon: push two artifacts then call ScopeStats; ArtifactCount must equal 2
+// and ClusterCount must be >= 1 (at least one component for the embedded vectors).
+func TestRuntimeScopeStats(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	srv := startDaemon(t, dir)
+	defer srv.Stop()
+
+	cli, err := Dial(dir)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer cli.Close()
+
+	root, err := cli.CreateScope(ctx, core.NilID, core.RoleWorktree, "root")
+	if err != nil {
+		t.Fatalf("create scope: %v", err)
+	}
+	if _, err := cli.Push(ctx, core.PushRequest{Scope: root.ID, Summary: "alpha topic one"}); err != nil {
+		t.Fatalf("push 1: %v", err)
+	}
+	if _, err := cli.Push(ctx, core.PushRequest{Scope: root.ID, Summary: "beta topic two"}); err != nil {
+		t.Fatalf("push 2: %v", err)
+	}
+
+	st, err := cli.ScopeStats(ctx, root.ID, 0.5, 1)
+	if err != nil {
+		t.Fatalf("ScopeStats: %v", err)
+	}
+	if st.ArtifactCount != 2 {
+		t.Fatalf("ArtifactCount = %d, want 2", st.ArtifactCount)
+	}
+	if st.ClusterCount < 1 {
+		t.Fatalf("ClusterCount = %d, want >= 1", st.ClusterCount)
+	}
+}

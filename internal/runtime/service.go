@@ -36,6 +36,7 @@ type Service interface {
 	RecentTraces(n int) ([]core.TraceRecord, error)
 	ListScopes(ctx context.Context) ([]core.Scope, error)
 	GetScope(ctx context.Context, id core.ID) (core.Scope, error)
+	ScopeStats(ctx context.Context, scope core.ID, tau float64, minArtifacts int) (core.ScopeStats, error)
 	ListArtifacts(ctx context.Context) ([]core.Artifact, error)
 	DeleteArtifact(ctx context.Context, id core.ID) error
 	DeleteScope(ctx context.Context, id core.ID) error

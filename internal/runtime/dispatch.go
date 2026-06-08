@@ -361,6 +361,16 @@ func (s *Server) call(ctx context.Context, method string, params json.RawMessage
 			return nil, err
 		}
 		return marshalRaw(st)
+	case mScopeStats:
+		var p scopeStatsParams
+		if err := decode(params, &p); err != nil {
+			return nil, err
+		}
+		st, err := s.eng.ScopeStats(ctx, p.Scope, p.Tau, p.MinArtifacts)
+		if err != nil {
+			return nil, err
+		}
+		return marshalRaw(st)
 	default:
 		return nil, fmt.Errorf("%w: unknown method %q", core.ErrInvalidInput, method)
 	}

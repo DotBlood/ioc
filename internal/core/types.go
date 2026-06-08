@@ -129,6 +129,23 @@ type CompactStats struct {
 	Scopes         int   `json:"scopes_rewritten"`
 }
 
+// ScopeStats is the advisory report from engine.ScopeStats (CLI `ioc scope-advise`):
+// a NO-LLM, opt-in signal that a scope may be holding several distinct topics and
+// is a candidate for splitting into sub-scopes (so collapsed/hierarchical retrieval
+// can engage). It changes no behavior — the agent decides whether to fork/consolidate.
+// See docs/SCOPE_POLICY.md.
+type ScopeStats struct {
+	Scope          ID      `json:"scope"`
+	ArtifactCount  int     `json:"artifact_count"`     // artifacts in the scope
+	EmbeddedCount  int     `json:"embedded_count"`     // those with an embedding (the clustered set)
+	Tau            float64 `json:"tau"`                // cosine edge threshold used for clustering
+	Dispersion     float64 `json:"dispersion"`         // 1 − mean pairwise cosine (0 = identical, →1 = diverse)
+	ClusterCount   int     `json:"cluster_count"`      // topic clusters (connected components at Tau)
+	Clusters       [][]ID  `json:"clusters,omitempty"` // artifact IDs grouped by cluster
+	Recommendation string  `json:"recommendation"`     // "split" | "ok" | "too_small"
+	Reason         string  `json:"reason"`             // human-readable explanation
+}
+
 // Artifact is a leaf result/insight. Full content lives in CAS (cold); the
 // working layer holds only a mini-summary + an embedding OF THE SUMMARY.
 type Artifact struct {

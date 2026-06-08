@@ -53,6 +53,7 @@ const (
 	mSetConfig       = "set_config"
 	mEmbModel        = "emb_model"
 	mCompact         = "compact"
+	mScopeStats      = "scope_stats"
 
 	// mShutdown is a control op (not part of Service): it asks the daemon to
 	// stop gracefully. Handled specially, never reaches the engine.
@@ -305,6 +306,12 @@ type rotateTokenResult struct {
 
 type mintReadTokenResult struct {
 	Read string `json:"read_token"`
+}
+
+type scopeStatsParams struct {
+	Scope        core.ID `json:"scope"`
+	Tau          float64 `json:"tau"`
+	MinArtifacts int     `json:"min_artifacts"`
 }
 
 // marshalRaw is a small helper for building result payloads.
