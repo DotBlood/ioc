@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [master, "development/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+
+  race:
+    name: race (linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test -race -count=1 ./...
+        env:
+          CGO_ENABLED: "1"
+      # Repeat-count stress to catch intermittent races (e.g. the runtime
+      # daemon lifecycle) that a single pass can miss.
+      - run: go test -race -count=20 ./internal/runtime/...
+        env:
+          CGO_ENABLED: "1"
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Pinned (not @latest) for reproducible runs. Blocking: a reachable
+      # vulnerability fails the build. If one is ever unfixable, switch this step
+      # to continue-on-error with a tracking issue rather than dropping the gate.
+      - name: install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+      - name: run govulncheck
+        run: govulncheck ./...
+
+  python:
+    name: python (embed server)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: py
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Dev deps only — NOT sentence-transformers/torch. Tests stub the model, so
+      # this stays fast and offline.
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q
+
+  gofmt:
+    name: gofmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+  lint:
+    name: golangci-lint (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest

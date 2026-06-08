@@ -16,3 +16,15 @@ go.work.sum
 .idea/
 .vscode/
 AGENTS.md
+bin/
+dist/
+close/
+# Python embed-service virtualenv + bytecode/cache
+py/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# local IOC data dirs: new stores live under .ioc/; pattern also covers any
+# leftover/temp .ioc-* dirs from older layouts.
+.ioc*/
+.claude/

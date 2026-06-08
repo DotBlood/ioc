@@ -1,0 +1,192 @@
+// Package ingest mechanically splits files into chunks and writes them into IOC
+// as KindDocument artifacts (no LLM in the loop — the raw chunk text is embedded).
+package ingest
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"strings"
+)
+
+// Defaults for chunking, in characters. A chunk is a window of whole lines whose
+// combined length stays under maxChars; consecutive chunks overlap by ~overlap
+// characters (carried as trailing whole lines) so a match near a boundary is not
+// split across two chunks.
+const (
+	DefaultMaxChars = 1500
+	DefaultOverlap  = 200
+)
+
+// Chunk is a contiguous line-aligned window of a file. StartLine/EndLine are
+// 1-based, inclusive.
+type Chunk struct {
+	Text      string
+	StartLine int
+	EndLine   int
+}
+
+// Split breaks text into line-aligned windows. Each window holds as many whole
+// lines as fit under maxChars (a single over-long line becomes its own chunk),
+// and the next window backs up by ~overlap characters of trailing lines so
+// content straddling a boundary stays retrievable from at least one chunk.
+func Split(text string, maxChars, overlap int) []Chunk {
+	if maxChars <= 0 {
+		maxChars = DefaultMaxChars
+	}
+	if overlap < 0 || overlap >= maxChars {
+		overlap = DefaultOverlap
+	}
+	lines := strings.Split(text, "\n")
+	var chunks []Chunk
+	i := 0
+	for i < len(lines) {
+		var b strings.Builder
+		start := i
+		for i < len(lines) {
+			ln := lines[i]
+			// +1 for the newline we re-join with. Always take at least one line
+			// so an over-long line still forms a (single) chunk.
+			if b.Len() > 0 && b.Len()+len(ln)+1 > maxChars {
+				break
+			}
+			if b.Len() > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(ln)
+			i++
+		}
+		txt := strings.TrimRight(b.String(), "\n")
+		if strings.TrimSpace(txt) != "" {
+			chunks = append(chunks, Chunk{Text: txt, StartLine: start + 1, EndLine: i})
+		}
+		if i >= len(lines) {
+			break
+		}
+		// Back up by whole trailing lines worth ~overlap chars for the next window.
+		i = backupForOverlap(lines, start, i, overlap)
+	}
+	return chunks
+}
+
+// backupForOverlap returns the next start index: from end, step back over whole
+// lines until ~overlap characters are covered, without going past start+1 (so we
+// always make forward progress).
+func backupForOverlap(lines []string, start, end, overlap int) int {
+	if overlap <= 0 {
+		return end
+	}
+	acc := 0
+	j := end
+	for j > start+1 {
+		acc += len(lines[j-1]) + 1
+		if acc >= overlap {
+			break
+		}
+		j--
+	}
+	if j <= start {
+		j = start + 1
+	}
+	return j
+}
+
+// SplitLang segments text into chunks at language-aware semantic boundaries
+// (functions, types, headings, paragraphs), packing consecutive units up to
+// maxChars. A single unit larger than maxChars falls back to the line-aligned
+// char-window Split (with overlap). Boundaries are never merged across, so a
+// chunk holds whole semantic units. StartLine/EndLine are 1-based, inclusive.
+func SplitLang(text string, lang Language, maxChars, overlap int) []Chunk {
+	if maxChars <= 0 {
+		maxChars = DefaultMaxChars
+	}
+	if overlap < 0 || overlap >= maxChars {
+		overlap = DefaultOverlap
+	}
+	lines := strings.Split(text, "\n")
+	var bnds []int
+	if lang == Generic {
+		bnds = paragraphBoundaries(lines)
+	} else {
+		bnds = boundaries(lang, lines)
+	}
+	starts := append([]int{0}, bnds...) // ascending, unique, all < len(lines)
+
+	var chunks []Chunk
+	packStart, packLen := -1, 0
+	flush := func(end int) {
+		if packStart < 0 {
+			return
+		}
+		txt := strings.TrimRight(strings.Join(lines[packStart:end], "\n"), "\n")
+		if strings.TrimSpace(txt) != "" {
+			chunks = append(chunks, Chunk{Text: txt, StartLine: packStart + 1, EndLine: end})
+		}
+		packStart, packLen = -1, 0
+	}
+	for u := 0; u < len(starts); u++ {
+		s := starts[u]
+		e := len(lines)
+		if u+1 < len(starts) {
+			e = starts[u+1]
+		}
+		unitLen := joinLen(lines[s:e])
+		if unitLen > maxChars {
+			flush(s)
+			for _, c := range Split(strings.Join(lines[s:e], "\n"), maxChars, overlap) {
+				chunks = append(chunks, Chunk{Text: c.Text, StartLine: c.StartLine + s, EndLine: c.EndLine + s})
+			}
+			continue
+		}
+		switch {
+		case packStart < 0:
+			packStart, packLen = s, unitLen
+		case packLen+1+unitLen <= maxChars:
+			packLen += 1 + unitLen
+		default:
+			flush(s)
+			packStart, packLen = s, unitLen
+		}
+	}
+	flush(len(lines))
+	return chunks
+}
+
+// joinLen is the length of strings.Join(lines, "\n") without building it.
+func joinLen(lines []string) int {
+	n := 0
+	for _, ln := range lines {
+		n += len(ln)
+	}
+	if len(lines) > 1 {
+		n += len(lines) - 1
+	}
+	return n
+}
+
+// Sig is a per-file change signature: the content hash plus the language and
+// chunking parameters. Two ingests produce the same Sig iff the bytes AND the
+// chunk strategy are identical — so an unchanged file (same params/lang) can be
+// skipped, while changing the file, language, or maxChars/overlap forces a
+// re-chunk.
+func Sig(data []byte, lang Language, maxChars, overlap int) string {
+	h := sha256.Sum256(data)
+	return fmt.Sprintf("%s:%s:%d:%d", hex.EncodeToString(h[:]), lang.String(), maxChars, overlap)
+}
+
+// FirstLine returns a trimmed one-line label for a chunk (its first non-empty
+// line), truncated to n runes — used as the display Summary.
+func FirstLine(text string, n int) string {
+	for _, ln := range strings.Split(text, "\n") {
+		s := strings.TrimSpace(ln)
+		if s == "" {
+			continue
+		}
+		r := []rune(s)
+		if len(r) > n {
+			return string(r[:n]) + "…"
+		}
+		return s
+	}
+	return ""
+}

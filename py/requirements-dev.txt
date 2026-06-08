@@ -1,0 +1,9 @@
+# Dev/test deps for the embed server. Deliberately OMITS sentence-transformers
+# and torch — the tests monkeypatch get_model/get_reranker, so CI stays fast and
+# offline (no ~400MB model download). Install with: pip install -r requirements-dev.txt
+pytest>=8,<9
+httpx>=0.27,<1
+fastapi>=0.115.0,<1.0.0
+pydantic>=2,<3
+numpy>=1.26.0,<2.0.0
+uvicorn>=0.32.0,<1.0.0

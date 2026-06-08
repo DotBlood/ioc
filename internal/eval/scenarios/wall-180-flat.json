@@ -1,0 +1,1529 @@
+{
+  "name": "reasoning-wall-180-flat",
+  "topk": 5,
+  "build": [
+    {
+      "op": "create_scope",
+      "id": "wt",
+      "parent": "root",
+      "role": "worktree",
+      "title": "ioc"
+    },
+    {
+      "op": "create_scope",
+      "id": "all",
+      "parent": "wt",
+      "role": "session",
+      "title": "all"
+    },
+    {
+      "op": "push",
+      "as": "R1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Plain cosine vector retrieval is strongest only at small scale; it begins to break down around 180 dense artifacts, where near-duplicate clusters collide and the right hit no longer separates from its neighbours."
+    },
+    {
+      "op": "push",
+      "as": "R2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Adding keyword search to vector search is not a free win: the hybrid of vector and BM25 fused by reciprocal-rank fusion helps at scale but hurts at small N, because naive fusion over short, term-overlapping summaries degrades the ranking."
+    },
+    {
+      "op": "push",
+      "as": "R3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "The best strategy at scale is hierarchical coarse-to-fine: rank scope rollups first, then run hybrid search only inside the top scopes. This reached about 0.94 recall at 180 artifacts on bge-small versus 0.33 for vector alone. Making the hierarchy vector-only does not help; the fine stage must be hybrid."
+    },
+    {
+      "op": "push",
+      "as": "R4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "There are two independent ways to reach perfect recall at scale: bge-small with hierarchical retrieval plus a cross-encoder reranker, or the larger bge-base model with hierarchical retrieval and no reranker. bge-base closes the tail on its own but costs roughly twice the vector storage and a heavier model."
+    },
+    {
+      "op": "push",
+      "as": "R5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "The cutoff that decides a result is 'no specific match' is calibrated per embedder rather than as one universal number; for bge-small it sits near 0.68. The earlier single guess of about 0.45 was too low and never fired, so weak matches were never flagged."
+    },
+    {
+      "op": "push",
+      "as": "R6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "When the cross-encoder reranker or BM25 score a file chunk, they must look at the chunk's actual content, not its short 'path:lines' display label. Scoring the label reorders results on the wrong text and wastes the precision the reranker is there to add."
+    },
+    {
+      "op": "push",
+      "as": "R7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Once results are reordered by the cross-encoder, the confidence signal (the weak-match flag and the top-to-second margin) must be read from the rerank score, not from cosine. Mixing the two lets the margin go negative and reports false confidence in a hit the reranker actually demoted."
+    },
+    {
+      "op": "push",
+      "as": "R8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "The reranker only re-scores the top-N candidates that vector search already surfaced, so a correct artifact the embedding ranks below that window can never be recovered by reranking. Widening N trades more compute for more recall."
+    },
+    {
+      "op": "push",
+      "as": "R9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "A minimum-score cutoff is applied as a cosine pre-gate before reranking, not as a filter afterwards. Otherwise the reranker could lift a low-cosine artifact to the top only for a later cosine filter to silently delete it, which is the same cross-signal incoherence the confidence fix removes."
+    },
+    {
+      "op": "push",
+      "as": "S1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Embeddings are kept in an append-only file. A write becomes visible only after a count header at the front is advanced past the new record, and durability comes from an fsync on flush, so a crash either sees the old count or the fully written record."
+    },
+    {
+      "op": "push",
+      "as": "S2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Recording only the vector dimension is not enough to stop two embedders being confused, because the mock and bge-small are both 384-dimensional. The store must persist the embedder's model identity and refuse to open or query under a different model, or it silently compares vectors from different spaces."
+    },
+    {
+      "op": "push",
+      "as": "S3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "If ingesting a file dies partway through writing its chunks, recovery works by comparing the expected chunk count rather than trusting the signature stored on the first chunk. A mismatch forces a re-chunk on the next run, so a half-indexed file heals itself instead of being treated as up to date forever."
+    },
+    {
+      "op": "push",
+      "as": "S4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "The content store writes each object to a temporary file and atomically renames it into place, so a crash mid-write can never leave a half-written, poisoned object that later reads would trust by its hash name."
+    },
+    {
+      "op": "push",
+      "as": "S5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Decompression in the content store is bounded with an explicit maximum-memory limit, so a crafted or oversized compressed object cannot exhaust memory when an artifact is loaded or drilled into."
+    },
+    {
+      "op": "push",
+      "as": "S6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "When the embedding store is reopened, a record count in the header that exceeds what the file can actually hold is clamped down to the real size, so a truncated or corrupted store fails safe instead of panicking on an out-of-range read."
+    },
+    {
+      "op": "push",
+      "as": "S7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Full content is stored cold, hashed and compressed, while the working layer keeps only a short mini-summary and the embedding of that summary. Retrieval and ranking operate on the cheap layer; the cold bytes are fetched only when an agent drills in."
+    },
+    {
+      "op": "push",
+      "as": "RT1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Many clients share one memory store through a single long-lived daemon that owns the store and answers requests over an internal length-prefixed JSON protocol on the loopback interface, instead of several processes each opening the same embedded database."
+    },
+    {
+      "op": "push",
+      "as": "RT2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Letting multiple processes open the same store at once was deliberately rejected rather than deferred, because making the database, content store, and embedding file all safe across processes is large and fragile work that the single-owner daemon makes unnecessary."
+    },
+    {
+      "op": "push",
+      "as": "RT3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Inside the daemon a read-write lock lets reads run in parallel while writes are serialized. This is safe because the embedding store is opened eagerly at startup, so a read path mutates no shared field and the underlying storage serializes its own write transactions."
+    },
+    {
+      "op": "push",
+      "as": "RT4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "An intermittent shutdown race came from the accept loop registering a connection on the wait group outside the same lock that shutdown takes. The fix moves that registration under the lock, guarded by a closing flag, so a connection accepted during shutdown is dropped instead of racing the drain."
+    },
+    {
+      "op": "push",
+      "as": "RT5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "A client proves it may talk to the daemon with a random per-store token written into the runtime descriptor file on loopback; the daemon shuts down gracefully on a control request or an OS signal, flushing and releasing the store first."
+    },
+    {
+      "op": "push",
+      "as": "Mwrite",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "IOC never calls a language model itself. An external model authors the mini-summary; IOC's job is only to embed that summary and store it. The model owns the words, IOC owns the memory mechanics."
+    },
+    {
+      "op": "push",
+      "as": "Mtiers",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Memory is two tiers seen as one type: workspace artifacts are mutable, short-lived working memory, while worktree artifacts are canonical, finished truths that are meant to last."
+    },
+    {
+      "op": "push",
+      "as": "Mvis",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Visibility runs bottom-up: a line of work sees a sibling's results only through summaries that sibling has published, and it can drill up into ancestor scopes, but its own raw reasoning stays private until it chooses to publish."
+    },
+    {
+      "op": "push",
+      "as": "Mdisclose",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "Disclosure is progressive: a query first returns a cheap overview of summary plus score, and only on demand does the agent drill a chosen result down to its full raw content. The goal is that the overview is usually enough."
+    },
+    {
+      "op": "push",
+      "as": "Mseed",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "At a version boundary the work is not simply copied forward: a cross-version step distills the surviving constraints and lessons into a single seed artifact, and the next version starts from that seed. Consolidation happens at branch transitions."
+    },
+    {
+      "op": "push",
+      "as": "M_OLD",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "In the original v0.1 design, IOC's memory was a knowledge-graph engine: explicit knowledge nodes and typed edges assembled and traversed by a dedicated graph and retrieval subsystem to build context for the model."
+    },
+    {
+      "op": "push",
+      "as": "M_NEW",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "As of the current v0.2 direction, IOC's memory is a thin slice: a short mini-summary plus the embedding of that summary, retrieved by cosine, hybrid, or hierarchical search. There is no knowledge graph; the v0.1 graph engine was removed.",
+      "supersedes": [
+        "M_OLD"
+      ]
+    },
+    {
+      "op": "push",
+      "as": "d0_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "outbound request timeouts — we decided to time out outbound calls after 2 seconds"
+    },
+    {
+      "op": "push",
+      "as": "d0_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "outbound request timeouts — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d0_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "outbound request timeouts — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d0_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "outbound request timeouts — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d0_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "outbound request timeouts — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d0_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "outbound request timeouts — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d0_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "outbound request timeouts — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d0_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "outbound request timeouts — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d0_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "outbound request timeouts — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d0_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "outbound request timeouts — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d0_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "outbound request timeouts — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d1_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "retry and backoff policy — we decided to retry with exponential backoff, max 3 attempts"
+    },
+    {
+      "op": "push",
+      "as": "d1_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "retry and backoff policy — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d1_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "retry and backoff policy — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d1_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "retry and backoff policy — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d1_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "retry and backoff policy — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d1_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "retry and backoff policy — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d1_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "retry and backoff policy — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d1_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "retry and backoff policy — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d1_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "retry and backoff policy — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d1_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "retry and backoff policy — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d1_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "retry and backoff policy — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d2_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "authentication and tokens — we decided to use RS256 JWT access tokens with a 15-minute TTL"
+    },
+    {
+      "op": "push",
+      "as": "d2_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "authentication and tokens — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d2_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "authentication and tokens — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d2_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "authentication and tokens — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d2_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "authentication and tokens — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d2_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "authentication and tokens — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d2_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "authentication and tokens — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d2_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "authentication and tokens — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d2_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "authentication and tokens — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d2_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "authentication and tokens — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d2_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "authentication and tokens — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d3_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "rate limiting — we decided to rate-limit with a token bucket per API key"
+    },
+    {
+      "op": "push",
+      "as": "d3_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "rate limiting — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d3_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "rate limiting — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d3_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "rate limiting — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d3_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "rate limiting — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d3_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "rate limiting — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d3_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "rate limiting — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d3_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "rate limiting — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d3_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "rate limiting — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d3_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "rate limiting — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d3_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "rate limiting — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d4_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "database storage engine — we decided to store data in PostgreSQL 16 using JSONB columns"
+    },
+    {
+      "op": "push",
+      "as": "d4_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "database storage engine — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d4_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "database storage engine — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d4_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "database storage engine — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d4_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "database storage engine — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d4_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "database storage engine — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d4_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "database storage engine — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d4_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "database storage engine — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d4_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "database storage engine — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d4_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "database storage engine — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d4_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "database storage engine — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d5_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "event delivery semantics — we decided to guarantee at-least-once event delivery"
+    },
+    {
+      "op": "push",
+      "as": "d5_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "event delivery semantics — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d5_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "event delivery semantics — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d5_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "event delivery semantics — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d5_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "event delivery semantics — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d5_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "event delivery semantics — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d5_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "event delivery semantics — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d5_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "event delivery semantics — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d5_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "event delivery semantics — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d5_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "event delivery semantics — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d5_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "event delivery semantics — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d6_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "consumer idempotency — we decided to deduplicate events by a stable dedup key"
+    },
+    {
+      "op": "push",
+      "as": "d6_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "consumer idempotency — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d6_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "consumer idempotency — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d6_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "consumer idempotency — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d6_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "consumer idempotency — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d6_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "consumer idempotency — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d6_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "consumer idempotency — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d6_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "consumer idempotency — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d6_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "consumer idempotency — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d6_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "consumer idempotency — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d6_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "consumer idempotency — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d7_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "structured logging — we decided to emit structured JSON logs"
+    },
+    {
+      "op": "push",
+      "as": "d7_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "structured logging — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d7_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "structured logging — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d7_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "structured logging — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d7_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "structured logging — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d7_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "structured logging — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d7_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "structured logging — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d7_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "structured logging — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d7_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "structured logging — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d7_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "structured logging — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d7_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "structured logging — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d8_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "distributed tracing — we decided to propagate the W3C traceparent header for tracing"
+    },
+    {
+      "op": "push",
+      "as": "d8_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "distributed tracing — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d8_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "distributed tracing — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d8_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "distributed tracing — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d8_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "distributed tracing — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d8_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "distributed tracing — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d8_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "distributed tracing — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d8_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "distributed tracing — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d8_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "distributed tracing — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d8_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "distributed tracing — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d8_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "distributed tracing — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d9_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "service metrics — we decided to record RED metrics per endpoint"
+    },
+    {
+      "op": "push",
+      "as": "d9_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "service metrics — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d9_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "service metrics — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d9_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "service metrics — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d9_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "service metrics — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d9_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "service metrics — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d9_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "service metrics — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d9_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "service metrics — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d9_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "service metrics — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d9_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "service metrics — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d9_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "service metrics — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d10_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "deployment rollout strategy — we decided to roll out with a canary then blue-green"
+    },
+    {
+      "op": "push",
+      "as": "d10_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "deployment rollout strategy — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d10_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "deployment rollout strategy — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d10_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "deployment rollout strategy — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d10_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "deployment rollout strategy — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d10_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "deployment rollout strategy — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d10_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "deployment rollout strategy — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d10_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "deployment rollout strategy — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d10_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "deployment rollout strategy — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d10_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "deployment rollout strategy — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d10_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "deployment rollout strategy — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d11_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "caching layer — we decided to cache hot reads in Redis with a 60-second TTL"
+    },
+    {
+      "op": "push",
+      "as": "d11_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "caching layer — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d11_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "caching layer — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d11_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "caching layer — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d11_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "caching layer — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d11_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "caching layer — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d11_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "caching layer — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d11_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "caching layer — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d11_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "caching layer — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d11_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "caching layer — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d11_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "caching layer — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d12_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "API pagination — we decided to paginate with opaque cursors instead of offsets"
+    },
+    {
+      "op": "push",
+      "as": "d12_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "API pagination — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d12_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "API pagination — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d12_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "API pagination — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d12_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "API pagination — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d12_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "API pagination — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d12_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "API pagination — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d12_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "API pagination — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d12_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "API pagination — compatibility considerations, note 8"
+    },
+    {
+      "op": "push",
+      "as": "d12_9",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "API pagination — migration considerations, note 9"
+    },
+    {
+      "op": "push",
+      "as": "d12_10",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "API pagination — latency considerations, note 10"
+    },
+    {
+      "op": "push",
+      "as": "d13_0",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "data encryption at rest — we decided to encrypt data at rest with AES-256"
+    },
+    {
+      "op": "push",
+      "as": "d13_1",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "data encryption at rest — latency considerations, note 1"
+    },
+    {
+      "op": "push",
+      "as": "d13_2",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "data encryption at rest — cost considerations, note 2"
+    },
+    {
+      "op": "push",
+      "as": "d13_3",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "data encryption at rest — security considerations, note 3"
+    },
+    {
+      "op": "push",
+      "as": "d13_4",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "data encryption at rest — testing considerations, note 4"
+    },
+    {
+      "op": "push",
+      "as": "d13_5",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "data encryption at rest — rollback considerations, note 5"
+    },
+    {
+      "op": "push",
+      "as": "d13_6",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "data encryption at rest — monitoring considerations, note 6"
+    },
+    {
+      "op": "push",
+      "as": "d13_7",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "data encryption at rest — capacity considerations, note 7"
+    },
+    {
+      "op": "push",
+      "as": "d13_8",
+      "scope": "all",
+      "kind": "reasoning",
+      "summary": "data encryption at rest — compatibility considerations, note 8"
+    }
+  ],
+  "questions": [
+    {
+      "id": "q-scale-cosine",
+      "scope": "all",
+      "question": "At roughly what corpus size does ordinary similarity search start to fail, and why does it fail there?",
+      "gold": "Around 180 dense artifacts, because near-duplicate clusters collide and the correct hit stops separating from its neighbours; plain cosine is only strong at small scale.",
+      "goldRefs": [
+        "R1"
+      ]
+    },
+    {
+      "id": "q-hybrid-tradeoff",
+      "scope": "all",
+      "question": "Is combining keyword matching with embedding search always an improvement?",
+      "gold": "No. Vector+BM25 hybrid (via reciprocal-rank fusion) helps at scale but hurts at small N, because naive fusion over short overlapping summaries degrades ranking.",
+      "goldRefs": [
+        "R2"
+      ]
+    },
+    {
+      "id": "q-best-at-scale",
+      "scope": "all",
+      "question": "What retrieval approach wins when there are many artifacts, and is it enough to just add a hierarchy on top of vector search?",
+      "gold": "Hierarchical coarse-to-fine (rank scope rollups, then hybrid within the top scopes) wins (~0.94 recall at 180 on bge-small vs 0.33 vector-only). A vector-only hierarchy does not help; the fine stage must be hybrid.",
+      "goldRefs": [
+        "R3"
+      ]
+    },
+    {
+      "id": "q-no-reranker-recall",
+      "scope": "all",
+      "question": "Is there any configuration that hits perfect recall at scale without using a reranker, and what does it cost?",
+      "gold": "Yes — the larger bge-base model with hierarchical retrieval reaches recall 1.0 without a reranker, at the cost of about twice the vector storage and a heavier model. (bge-small needs a reranker to match.)",
+      "goldRefs": [
+        "R4"
+      ]
+    },
+    {
+      "id": "q-weak-floor",
+      "scope": "all",
+      "question": "How is the threshold that marks a result as 'nothing specific matched' chosen?",
+      "gold": "It is calibrated per embedder, not one universal value; for bge-small it is near 0.68. The earlier ~0.45 guess was too low and never triggered.",
+      "goldRefs": [
+        "R5"
+      ]
+    },
+    {
+      "id": "q-rerank-text",
+      "scope": "all",
+      "question": "When re-scoring a file chunk with a cross-encoder, what text must the reranker be given?",
+      "gold": "The chunk's actual content, not its short path:lines label; scoring the label reorders on the wrong text.",
+      "goldRefs": [
+        "R6"
+      ]
+    },
+    {
+      "id": "q-rerank-confidence",
+      "scope": "all",
+      "question": "After the cross-encoder reorders the hits, which score should the confidence and margin be computed from?",
+      "gold": "From the rerank score, not cosine. Using cosine after a rerank reorder makes the margin go negative and reports false confidence.",
+      "goldRefs": [
+        "R7"
+      ]
+    },
+    {
+      "id": "q-rerank-window",
+      "scope": "all",
+      "question": "If the embedding ranks the correct answer low, can the reranker still rescue it?",
+      "gold": "Only if it is within the top-N window the reranker sees; rerank re-scores just the top cosine candidates, so an item below that window is never recovered. Widen N to trade compute for recall.",
+      "goldRefs": [
+        "R8"
+      ]
+    },
+    {
+      "id": "q-minscore-rerank",
+      "scope": "all",
+      "question": "How does a minimum-score cutoff behave together with reranking?",
+      "gold": "MinScore is a cosine pre-gate applied before rerank, so the reranker cannot promote a low-cosine item only for a later cosine filter to drop it.",
+      "goldRefs": [
+        "R9"
+      ]
+    },
+    {
+      "id": "q-emb-durability",
+      "scope": "all",
+      "question": "How is a freshly written embedding made safe against a crash?",
+      "gold": "Embeddings are append-only; the write is committed only by advancing a count header past the record, and fsync on flush makes it durable, so a crash sees either the old count or the complete record.",
+      "goldRefs": [
+        "S1"
+      ]
+    },
+    {
+      "id": "q-model-guard",
+      "scope": "all",
+      "question": "Why is storing the vector size not sufficient to prevent two embedders from being mixed up?",
+      "gold": "Because the mock and bge-small are both 384-dim. The store must persist the embedder's model identity and refuse mismatched opens/queries, or it silently compares vectors from different spaces.",
+      "goldRefs": [
+        "S2"
+      ]
+    },
+    {
+      "id": "q-ingest-heal",
+      "scope": "all",
+      "question": "What happens if a file is only half-chunked because ingestion was interrupted?",
+      "gold": "The next ingest compares the expected chunk count (not the signature on chunk 0), detects the mismatch, and re-chunks the file, so it self-heals instead of being seen as up-to-date.",
+      "goldRefs": [
+        "S3"
+      ]
+    },
+    {
+      "id": "q-cas-atomic",
+      "scope": "all",
+      "question": "How does the content store make sure a crash never leaves a corrupt object behind?",
+      "gold": "It writes to a temp file and atomically renames it into place, so a half-written object is never visible under its hash name.",
+      "goldRefs": [
+        "S4"
+      ]
+    },
+    {
+      "id": "q-decomp-bomb",
+      "scope": "all",
+      "question": "What prevents a maliciously large compressed blob from blowing up memory when read?",
+      "gold": "Decompression is bounded by an explicit max-memory limit, so an oversized or crafted object cannot exhaust memory on load or drill.",
+      "goldRefs": [
+        "S5"
+      ]
+    },
+    {
+      "id": "q-count-clamp",
+      "scope": "all",
+      "question": "If the embedding store header claims more records than the file actually contains, what happens on reopen?",
+      "gold": "The overstated count is clamped to the real file size, so it fails safe instead of panicking on an out-of-range read.",
+      "goldRefs": [
+        "S6"
+      ]
+    },
+    {
+      "id": "q-daemon-share",
+      "scope": "all",
+      "question": "How do several agents use one memory store at the same time without colliding on the database lock?",
+      "gold": "A single long-lived daemon owns the store and serves clients over an internal length-prefixed JSON protocol on loopback, instead of multiple processes opening the same embedded database.",
+      "goldRefs": [
+        "RT1"
+      ]
+    },
+    {
+      "id": "q-multiproc-rejected",
+      "scope": "all",
+      "question": "Is opening the same store from multiple processes supported, and what was the reasoning?",
+      "gold": "It was deliberately rejected in favour of the daemon, because making the database, content store, and embedding file cross-process safe is large fragile work the daemon makes unnecessary.",
+      "goldRefs": [
+        "RT2"
+      ]
+    },
+    {
+      "id": "q-rwlock",
+      "scope": "all",
+      "question": "Can reads run at the same time in the daemon, or does it serialize everything?",
+      "gold": "Reads run in parallel and writes serialize, via a read-write lock; the embedding store is opened eagerly so the read path mutates no shared field.",
+      "goldRefs": [
+        "RT3"
+      ]
+    },
+    {
+      "id": "q-shutdown-race",
+      "scope": "all",
+      "question": "What caused the daemon's occasional shutdown race and how was it resolved?",
+      "gold": "The accept loop registered a connection on the wait group outside the lock shutdown uses; the fix moves that under the lock guarded by a closing flag, dropping connections accepted during shutdown.",
+      "goldRefs": [
+        "RT4"
+      ]
+    },
+    {
+      "id": "q-auth-token",
+      "scope": "all",
+      "question": "How does a client authenticate to the daemon?",
+      "gold": "With a random per-store token written into the runtime descriptor file, over loopback; shutdown is graceful on a control request or signal.",
+      "goldRefs": [
+        "RT5"
+      ]
+    },
+    {
+      "id": "q-no-llm",
+      "scope": "all",
+      "question": "Does IOC itself invoke a language model to write the summaries it stores?",
+      "gold": "No. IOC never calls an LLM; an external model authors the summary and IOC only embeds and stores it.",
+      "goldRefs": [
+        "Mwrite"
+      ]
+    },
+    {
+      "id": "q-two-tiers",
+      "scope": "all",
+      "question": "What distinguishes the two kinds of memory an artifact can belong to?",
+      "gold": "Workspace artifacts are mutable, short-lived working memory; worktree artifacts are canonical, finished truths meant to last.",
+      "goldRefs": [
+        "Mtiers"
+      ]
+    },
+    {
+      "id": "q-visibility",
+      "scope": "all",
+      "question": "Can one branch of reasoning read another branch's private notes?",
+      "gold": "Only through summaries the other branch has published (bottom-up visibility); a scope can drill up to ancestors, but raw reasoning stays private until published.",
+      "goldRefs": [
+        "Mvis"
+      ]
+    },
+    {
+      "id": "q-progressive",
+      "scope": "all",
+      "question": "How does an agent avoid loading full content for every search result?",
+      "gold": "Progressive disclosure: a query returns a cheap overview (summary plus score) first, and the agent drills a chosen result to full raw content only on demand.",
+      "goldRefs": [
+        "Mdisclose"
+      ]
+    },
+    {
+      "id": "q-version-seed",
+      "scope": "all",
+      "question": "What carries the important lessons across from one version of the work to the next?",
+      "gold": "At a version boundary, a cross-version step distills the surviving constraints and lessons into a single seed artifact that the next version starts from.",
+      "goldRefs": [
+        "Mseed"
+      ]
+    },
+    {
+      "id": "q-currency-graph",
+      "scope": "all",
+      "question": "How does IOC represent and retrieve memory in its current design — is it built on a knowledge graph?",
+      "gold": "In the current v0.2 design IOC is a thin slice: a mini-summary plus the embedding of that summary, retrieved by cosine/hybrid/hierarchical search. It does NOT use a knowledge graph; the graph engine was the abandoned v0.1 design.",
+      "goldRefs": [
+        "M_NEW"
+      ],
+      "currency": {
+        "current": "M_NEW",
+        "superseded": "M_OLD"
+      }
+    },
+    {
+      "id": "q-absent-billing",
+      "scope": "all",
+      "question": "Which database does IOC use to bill customers and track their usage charges?",
+      "gold": "INSUFFICIENT — IOC has no billing or customer-charging component in memory; the correct response is to say this information is not available, not to invent one."
+    }
+  ]
+}
