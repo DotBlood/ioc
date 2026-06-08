@@ -102,6 +102,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - uses: golangci/golangci-lint-action@v6
+      # golangci-lint v2 needs action v7+ (v6 is for v1). Pinned for reproducible runs;
+      # config is .golangci.yml (version "2"). Verified locally at this exact version.
+      - uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v2.12.2
