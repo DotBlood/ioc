@@ -709,3 +709,79 @@ Complete rewrite — 123 lines, 22 targets, sectioned with `##` headers:
 - `$(SHA256)` — auto-detects `sha256sum` / `shasum`
 - `cd . &&` prefix on `mkdir`/`rm` recipes — forces shell mode on Windows (GNU Make bypass)
 ```
+
+---
+
+## 2026-06-08 — v0.3 research session (R5 confidence/abstention, R6 mode-selector, doc alignment)
+
+> Context: Phases 0–6 above are the historical **v0.1** "stateful knowledge graph runtime". The repo
+> was reframed in v0.2 to a local-first **memory/context layer** (mini-summary + embedding;
+> collapsed-tree retrieval; author-declared edges) — see `VISION.md` / `CLAUDE.md`. This entry logs the
+> v0.3 research done this session, in commit order on `development/v0.3-research`.
+
+### Doc alignment + closed-doc removal [✔] (`c61851e`, `ec1d592`)
+- `README.md`, `VISION.md`: aligned to the real v0.3 state + the `docs/` standard — collapsed is the
+  default, graph-boost v2, author-declared importance, margin-aware confidence + `ioc calibrate`; spec
+  links point to the now-written FRD/FSD/PAD; rewrote the stale "Next" section.
+- Removed closed research docs `DREAM.md` / `RESEARCH_ROADMAP.md` from `docs/`; scrubbed every reference
+  to them in markdown AND source comments (`core/types.go`, `iocfmt/out.go`).
+- Reconciled `docs/ROADMAP.md` DONE/NEXT/NOW with reality (R2 PPR rejected; R3/R4 shipped; specs written).
+
+### Load-test benchmarks [✔] (`8c7fa6f`)
+No Go benchmarks existed. Added two files; measured on a Ryzen 5 5600X:
+
+| file | what | result |
+|------|------|--------|
+| `internal/search/bench_test.go` | brute-force cosine, N=100..100k, 384d, topK=5 | linear O(N·d): 48µs / 664µs / 9.4ms / 62ms / 130ms; only 4 allocs/query |
+| `internal/engine/bench_test.go` | Push, Query @100/1k/10k, parallel query | Push 1.30ms/op (~770/s); Query 2.3 / 10.9 / 82ms; parallel 2.41ms (~4.5× on 12 cores); `-race` clean |
+
+Finding: engine Query materializes the whole candidate set → ~48 MB/query at 10k (GC pressure); ANN
+index deferred — the scaling ceiling.
+
+### R5: cross-encoder confidence/abstention [✔] (`2d28392`, `15c51c3`, `9a24184`)
+Root cause (50-real + 10-fake MCP wall test): the default path uses bi-encoder cosine for BOTH ranking
+and the abstention decision; cosine measures topical similarity, not answer-relevance, so absent
+("fake") questions cleared the 0.68 floor (8/10) and dense clusters buried answers. The cross-encoder
+separates; it was off by default with an uncalibrated floor.
+
+- `core.Decide` — the weak_match/confidence verdict as ONE pure function, shared by `iocfmt.QueryOut`
+  (production) and the eval harness so they cannot diverge.
+- Abstention metric `eval.Abstention` / `AbstentionReport` (FPR = fakes answered, FNR = reals
+  suppressed) over present/absent probes; printed by `ioc calibrate`.
+- `ioc calibrate -rerank` derives `conf.rerank.<model>` via split-conformal; `-apply <store>`
+  auto-persists it into a live store (guard fix `9a24184`: skip the model check when the live store's
+  model is unknown — a fresh HTTP embedder reports `""` until first call).
+- **Borderline auto-rerank** (`Query.AutoRerank`, ON by default for `ioc query` / MCP `ioc_query`):
+  reranks only weak/near-tied cosine results, gates abstention on the rerank floor; confident queries
+  skip the cross-encoder; pure-cosine fallback when no reranker. RerankN 20→50 (+ `-rerank-n`/`rerank_n`).
+  Added generic `ioc config set/get`.
+- `py/embed_server.py` `/rerank` **double-sigmoid fix**: server returned the bge-reranker default
+  sigmoid; IOC re-sigmoided → scores compressed to ~[0.5,0.73]. Server now returns raw logits → ~5×
+  wider present/absent margin.
+- **Verified** (real bge-small + bge-reranker, 100-question probe): rerank floor → FPR **0.00** /
+  FNR 0.10 with a clean separating floor 0.9859, vs cosine FNR 0.34 (no separation). Blind Sonnet
+  subagent via live MCP `ioc_query`, 100 questions: 94/100 correct, **0/20 fakes answered**, 74/80
+  reals found. `go test ./...`, CGO `-race`, py `pytest` (16) all green.
+
+### R6: auto mode-selector — investigated, NOT built [✔] (`532ce11`)
+Experiment-first probe refuted the ROADMAP premise "hierarchical wins on dense (0.96 vs 0.85)":
+
+| corpus | `collapsed` | `collapsed-hybrid` | `hierarchical` | `hierarchical-vector` |
+|---|---|---|---|---|
+| tree (15 clusters) | 0.85 | 0.96 | 0.74 | — |
+| tree (40, denser) | 0.89 | 0.96 | 0.74 | — |
+| flat / distinctive | 0.85 | 0.96 | 0.96 | **0.85** |
+| real 28-artifact wall | 0.93 | 0.93 | — | — |
+
+Two confounds: (1) `hierarchical` bundles a HYBRID fine stage — the 0.96 was BM25, not coarse routing
+(`hierarchical-vector` = 0.85 = flat; coarse routing HURTS on tree); (2) the hybrid gain is a
+synthetic-gen-wall artifact (lexical overlap) — neutral (0.93) on the hand-authored wall. `collapsed`
+dominates coarse routing in every regime → no regime an auto-selector could improve. Stopped before
+code; corrected `WALL_EXPERIMENT.md` (R6 block), `ROADMAP.md`, `CLAUDE.md`.
+
+### Housekeeping
+- Merged `development/v0.3-confidence-rerank` → `development/v0.3-research` (fast-forward); deleted the
+  merged feature branch.
+- Stopped the test daemon; wiped the test store `.ioc/mcp-data` (~130 test artifacts) and `.bench/`
+  scratch.
+- `go build`/`go vet`/`go test ./...` green on `development/v0.3-research`.
